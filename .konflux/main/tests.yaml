@@ -4,7 +4,7 @@ kind: IntegrationTestScenario
 metadata:
   name: tektoncd-pipeline-enterprise-contract
 spec:
-  application: tektoncd-pipeline
+  application: tektoncd-pipeline-main
   contexts:
     - description: Application testing
       name: application
