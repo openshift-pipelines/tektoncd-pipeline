@@ -1,0 +1,18 @@
+---
+apiVersion: appstudio.redhat.com/v1alpha1
+kind: Component
+metadata:
+  annotations:
+    image.redhat.com/generate: "true"
+    build.appstudio.openshift.io/pipeline: '{"name":"docker-build","bundle":"latest"}'
+    image.redhat.com/generate: '{"visibility": "public"}'
+  name: sidecarlogresults
+spec:
+  componentName: sidecarlogresults
+  application: tektoncd-pipeline-main
+  source:
+    git:
+      url: https://github.com/openshift-pipelines/tektoncd-pipeline
+      dockerfileUrl: openshift/dockerfiles/sidecarlogresults.Dockerfile
+      revision: main
+
