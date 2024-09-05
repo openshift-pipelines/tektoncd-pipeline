@@ -7,7 +7,7 @@ WORKDIR /go/src/github.com/tektoncd/pipeline
 COPY upstream .
 COPY patches patches/
 RUN set -e; for f in patches/*.patch; do echo ${f}; [[ -f ${f} ]] || continue; git apply ${f}; done
-COPY HEAD .
+COPY pipeline.HEAD HEAD
 ENV GODEBUG="http2server=0"
 RUN go build -ldflags="-X 'knative.dev/pkg/changeset.rev=$(cat HEAD)'" -mod=vendor -tags disable_gcp -v -o /tmp/controller \
     ./cmd/controller
@@ -20,7 +20,7 @@ ENV CONTROLLER=/usr/local/bin/controller \
     KO_DATA_PATH=/kodata
 
 COPY --from=builder /tmp/controller /ko-app/controller
-COPY HEAD ${KO_DATA_PATH}/HEAD
+COPY pipeline.HEAD ${KO_DATA_PATH}/HEAD
 
 LABEL \
       com.redhat.component="openshift-pipelines-controller-rhel8-container" \
