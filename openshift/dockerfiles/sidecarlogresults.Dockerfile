@@ -9,30 +9,30 @@ COPY patches patches/
 RUN set -e; for f in patches/*.patch; do echo ${f}; [[ -f ${f} ]] || continue; git apply ${f}; done
 COPY pipeline.HEAD HEAD
 ENV GODEBUG="http2server=0"
-RUN go build -ldflags="-X 'knative.dev/pkg/changeset.rev=$(cat HEAD)'" -mod=vendor -tags disable_gcp -v -o /tmp/sidecarelogresults \
-    ./cmd/sidecarelogresults
+RUN go build -ldflags="-X 'knative.dev/pkg/changeset.rev=$(cat HEAD)'" -mod=vendor -tags disable_gcp -v -o /tmp/sidecarlogresults \
+    ./cmd/sidecarlogresults
 
 FROM $RUNTIME
 ARG VERSION=pipeline-main
 
-ENV SIDECARELOGRESULTS=/usr/local/bin/sidecarelogresults \
+ENV SIDECARLOGRESULTS=/usr/local/bin/sidecarlogresults \
     KO_APP=/ko-app \
     KO_DATA_PATH=/kodata
 
-COPY --from=builder /tmp/sidecarelogresults /ko-app/sidecarelogresults
+COPY --from=builder /tmp/sidecarlogresults /ko-app/sidecarlogresults
 COPY pipeline.HEAD ${KO_DATA_PATH}/HEAD
 
 LABEL \
-      com.redhat.component="openshift-pipelines-sidecarelogresults-rhel8-container" \
-      name="openshift-pipelines/pipelines-sidecarelogresults-rhel8" \
+      com.redhat.component="openshift-pipelines-sidecarlogresults-rhel8-container" \
+      name="openshift-pipelines/pipelines-sidecarlogresults-rhel8" \
       version=$VERSION \
-      summary="Red Hat OpenShift Pipelines Sidecarelogresults" \
+      summary="Red Hat OpenShift Pipelines Sidecarlogresults" \
       maintainer="pipelines-extcomm@redhat.com" \
-      description="Red Hat OpenShift Pipelines Sidecarelogresults" \
-      io.k8s.display-name="Red Hat OpenShift Pipelines Sidecarelogresults"
+      description="Red Hat OpenShift Pipelines Sidecarlogresults" \
+      io.k8s.display-name="Red Hat OpenShift Pipelines Sidecarlogresults"
 
 RUN microdnf install -y shadow-utils
 RUN groupadd -r -g 65532 nonroot && useradd --no-log-init -r -u 65532 -g nonroot nonroot
 USER 65532
 
-ENTRYPOINT ["/ko-app/sidecarelogresults"]
+ENTRYPOINT ["/ko-app/sidecarlogresults"]
