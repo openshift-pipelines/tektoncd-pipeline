@@ -3,42 +3,6 @@ kind: Pipeline
 metadata:
   name: docker-build
 spec:
-  finally:
-  - name: show-sbom
-    params:
-    - name: IMAGE_URL
-      value: $(tasks.build-container.results.IMAGE_URL)
-    taskRef:
-      params:
-      - name: name
-        value: show-sbom
-      - name: bundle
-        value: quay.io/konflux-ci/tekton-catalog/task-show-sbom:0.1@sha256:9bfc6b99ef038800fe131d7b45ff3cd4da3a415dd536f7c657b3527b01c4a13b
-      - name: kind
-        value: task
-      resolver: bundles
-  - name: show-summary
-    params:
-    - name: pipelinerun-name
-      value: $(context.pipelineRun.name)
-    - name: git-url
-      value: $(tasks.clone-repository.results.url)?rev=$(tasks.clone-repository.results.commit)
-    - name: image-url
-      value: $(params.output-image)
-    - name: build-task-status
-      value: $(tasks.build-container.status)
-    taskRef:
-      params:
-      - name: name
-        value: summary
-      - name: bundle
-        value: quay.io/konflux-ci/tekton-catalog/task-summary:0.2@sha256:d97c04ab42f277b1103eb6f3a053b247849f4f5b3237ea302a8ecada3b24e15b
-      - name: kind
-        value: task
-      resolver: bundles
-    workspaces:
-    - name: workspace
-      workspace: workspace
   params:
   - description: Source Repository URL
     name: git-url
@@ -397,6 +361,42 @@ spec:
         value: push-dockerfile
       - name: bundle
         value: quay.io/konflux-ci/tekton-catalog/task-push-dockerfile:0.1@sha256:92d63edd09636f97961ca18fac14b67935179d2c14b4a4d5f8087c614e8c2bd9
+      - name: kind
+        value: task
+      resolver: bundles
+    workspaces:
+    - name: workspace
+      workspace: workspace
+  finally:
+  - name: show-sbom
+    params:
+    - name: IMAGE_URL
+      value: $(tasks.build-container.results.IMAGE_URL)
+    taskRef:
+      params:
+      - name: name
+        value: show-sbom
+      - name: bundle
+        value: quay.io/konflux-ci/tekton-catalog/task-show-sbom:0.1@sha256:9bfc6b99ef038800fe131d7b45ff3cd4da3a415dd536f7c657b3527b01c4a13b
+      - name: kind
+        value: task
+      resolver: bundles
+  - name: show-summary
+    params:
+    - name: pipelinerun-name
+      value: $(context.pipelineRun.name)
+    - name: git-url
+      value: $(tasks.clone-repository.results.url)?rev=$(tasks.clone-repository.results.commit)
+    - name: image-url
+      value: $(params.output-image)
+    - name: build-task-status
+      value: $(tasks.build-container.status)
+    taskRef:
+      params:
+      - name: name
+        value: summary
+      - name: bundle
+        value: quay.io/konflux-ci/tekton-catalog/task-summary:0.2@sha256:d97c04ab42f277b1103eb6f3a053b247849f4f5b3237ea302a8ecada3b24e15b
       - name: kind
         value: task
       resolver: bundles
