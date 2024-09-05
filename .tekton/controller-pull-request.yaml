@@ -39,9 +39,6 @@ spec:
   - name: prefetch-input
     value: |
       {"type": "rpm", "path": "openshift/rpms"}
-  - name: build-args
-    value:
-    - "PIPELINE_UPSTREAM_COMMIT={{revision}}"
   pipelineRef:
     name: docker-build
   workspaces:

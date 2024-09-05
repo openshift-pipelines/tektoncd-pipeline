@@ -33,9 +33,6 @@ spec:
     value: "true"
   - name: hermetic
     value: "true"
-  - name: build-args
-    value:
-    - "PIPELINE_UPSTREAM_COMMIT={{revision}}"
   - name: prefetch-input
     value: |
       {"type": "rpm", "path": "openshift/rpms"}

@@ -3,17 +3,15 @@ ARG RUNTIME=registry.redhat.io/ubi8/ubi-minimal:latest
 
 FROM $GO_BUILDER AS builder
 
-ARG PIPELINE_UPSTREAM_COMMIT
-
 WORKDIR /go/src/github.com/tektoncd/pipeline
 COPY upstream .
 COPY patches patches/
 RUN set -e; for f in patches/*.patch; do echo ${f}; [[ -f ${f} ]] || continue; git apply ${f}; done
+COPY HEAD .
 ENV CHANGESET_REV=$CI_PIPELINE_UPSTREAM_COMMIT
 ENV GODEBUG="http2server=0"
-RUN go build -ldflags="-X 'knative.dev/pkg/changeset.rev=${CHANGESET_REV:0:7}'" -mod=vendor -tags disable_gcp -v -o /tmp/entrypoint \
+RUN go build -ldflags="-X 'knative.dev/pkg/changeset.rev=$(cat HEAD)'" -mod=vendor -tags disable_gcp -v -o /tmp/entrypoint \
     ./cmd/entrypoint
-RUN /bin/sh -c 'echo ${CHANGESET_REV} > /tmp/HEAD'
 
 FROM $RUNTIME
 ARG VERSION=pipeline-main
@@ -23,7 +21,7 @@ ENV ENTRYPOINT=/usr/local/bin/entrypoint \
     KO_DATA_PATH=/kodata
 
 COPY --from=builder /tmp/entrypoint /ko-app/entrypoint
-COPY --from=builder /tmp/HEAD ${KO_DATA_PATH}/HEAD
+COPY HEAD ${KO_DATA_PATH}/HEAD
 
 LABEL \
       com.redhat.component="openshift-pipelines-entrypoint-rhel8-container" \
