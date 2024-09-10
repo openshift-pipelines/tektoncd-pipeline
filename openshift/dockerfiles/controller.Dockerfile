@@ -29,7 +29,9 @@ LABEL \
       summary="Red Hat OpenShift Pipelines Controller" \
       maintainer="pipelines-extcomm@redhat.com" \
       description="Red Hat OpenShift Pipelines Controller" \
-      io.k8s.display-name="Red Hat OpenShift Pipelines Controller"
+      io.k8s.display-name="Red Hat OpenShift Pipelines Controller" \
+      io.k8s.description="Red Hat OpenShift Pipelines Controller" \
+      io.openshift.tags="pipelines,tekton,openshift"
 
 RUN microdnf install -y shadow-utils
 RUN groupadd -r -g 65532 nonroot && useradd --no-log-init -r -u 65532 -g nonroot nonroot
