@@ -17,11 +17,10 @@ jobs:
     - name: Checkout the current repo
       uses: actions/checkout@v4
 
-    - name: Clone openshift-pipelines/tektoncd-pipeline
-      uses: actions/checkout@v4
-      with:
-        repository: tektoncd/pipeline
-        path: upstream
+    - name: Clone tektoncd/pipeline
+      run: |
+        rm -fR upstream
+        git clone https://github.com/tektoncd/pipeline upstream
 
     - name: Commit new changes
       run: |
@@ -29,18 +28,22 @@ jobs:
         git config user.email github-actions@github.com
         git checkout -b actions/update/sources-main
         pushd upstream
-        echo Previous commit: $(cat head)
-        echo New commit: $(git rev-parse HEAD)
-        git fetch -p --all
-        git checkout -t origin/main -B main
+        echo Previous commit: $(cat ../head)
         git show --stat HEAD
-        git show --stat $(cat head) || true
-        git diff --stat HEAD..$(cat head) > /tmp/diff.txt || true
+        echo New commit: $(git rev-parse HEAD)
+        git show --stat $(cat ../head) || true
+        git diff --stat HEAD..$(cat ../head) > /tmp/diff.txt || true
         git rev-parse HEAD > head
         popd
         rm -rf upstream/.git
         git add upstream
-        git commit -m "[${{matrix.branch}}/bot] Update openshift-pipelines/tektoncd-pipeline\n$(cat /tmp/diff.txt)"
+
+        git commit -F- <<EOF
+        [${{matrix.branch}}/bot] Update openshift-pipelines/tektoncd-pipeline
+
+        $(cat /tmp/diff.txt)
+        EOF
+        
         git push -f origin actions/update/sources-main
 
     - name: Create pull request
