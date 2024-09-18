@@ -1,0 +1,17 @@
+---
+apiVersion: appstudio.redhat.com/v1alpha1
+kind: Component
+metadata:
+  annotations:
+    image.redhat.com/generate: "true"
+    build.appstudio.openshift.io/pipeline: '{"name":"docker-build","bundle":"latest"}'
+    image.redhat.com/generate: '{"visibility": "public"}'
+  name: resolvers
+spec:
+  componentName: resolvers
+  application: tektoncd-pipeline-release-v1.16.x
+  source:
+    git:
+      url: https://github.com/openshift-pipelines/tektoncd-pipeline
+      dockerfileUrl: openshift/dockerfiles/resolvers.Dockerfile
+      revision: release-v1.16.x
