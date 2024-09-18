@@ -44,7 +44,7 @@ jobs:
         [bot] Update from tektoncd/pipeline to ${NEW_COMMIT}
 
             $ git diff --stat ${NEW_COMMIT}..${OLD_COMMIT}
-            $(cat /tmp/diff.txt)
+        $(cat /tmp/diff.txt | sed 's/^/    /')
         
         https://github.com/tektoncd/pipeline/compare/${NEW_COMMIT}..${OLD_COMMIT}
         EOF
