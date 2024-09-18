@@ -29,6 +29,8 @@ jobs:
         git config user.email github-actions@github.com
         git checkout -b actions/update/sources-main
         git --git-dir=upstream/.git fetch -p --all
+        git --git-dir=upstream/.git show HEAD
+        git --git-dir=upstream/.git show $(cat head)
         git --git-dir=upstream/.git diff --stat HEAD..$(cat head) > /tmp/diff.txt
         git --git-dir=upstream/.git rev-parse HEAD > head
         rm -rf upstream/.git
