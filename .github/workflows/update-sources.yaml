@@ -20,7 +20,7 @@ jobs:
     - name: Clone openshift-pipelines/tektoncd-pipeline
       uses: actions/checkout@v4
       with:
-        repository: openshift-pipelines/tektoncd-pipeline
+        repository: tektoncd/pipeline
         path: upstream
 
     - name: Commit new changes
