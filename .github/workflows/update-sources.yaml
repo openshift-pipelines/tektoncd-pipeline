@@ -28,10 +28,12 @@ jobs:
         git config user.name github-actions
         git config user.email github-actions@github.com
         git checkout -b actions/update/sources-main
+        echo Previous commit: $(cat head)
+        echo New commit: $(git --git-dir=upstream/.git rev-parse HEAD)
         git --git-dir=upstream/.git fetch -p --all
         git --git-dir=upstream/.git show --stat HEAD
-        git --git-dir=upstream/.git show --stat $(cat head)
-        git --git-dir=upstream/.git diff --stat HEAD..$(cat head) > /tmp/diff.txt
+        git --git-dir=upstream/.git show --stat $(cat head) || true
+        git --git-dir=upstream/.git diff --stat HEAD..$(cat head) > /tmp/diff.txt || true
         git --git-dir=upstream/.git rev-parse HEAD > head
         rm -rf upstream/.git
         git add upstream
