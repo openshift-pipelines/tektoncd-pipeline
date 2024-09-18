@@ -43,10 +43,8 @@ jobs:
         git commit -F- <<EOF
         [bot] Update from tektoncd/pipeline to ${NEW_COMMIT}
 
-        ```bash
-        $ git diff --stat ${NEW_COMMIT}..${OLD_COMMIT}
-        $(cat /tmp/diff.txt)
-        ```
+            $ git diff --stat ${NEW_COMMIT}..${OLD_COMMIT}
+            $(cat /tmp/diff.txt)
         
         https://github.com/tektoncd/pipeline/compare/${NEW_COMMIT}..${OLD_COMMIT}
         EOF
