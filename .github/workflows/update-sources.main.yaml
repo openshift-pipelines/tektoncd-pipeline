@@ -22,7 +22,7 @@ jobs:
         rm -fR upstream
         git clone https://github.com/tektoncd/pipeline upstream
         pushd upstream
-        git checkout -b main origin/main
+        git checkout -B main origin/main
         popd
 
     - name: Commit new changes
