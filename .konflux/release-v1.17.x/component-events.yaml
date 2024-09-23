@@ -6,7 +6,7 @@ metadata:
     image.redhat.com/generate: "true"
     build.appstudio.openshift.io/pipeline: '{"name":"docker-build","bundle":"latest"}'
     image.redhat.com/generate: '{"visibility": "public"}'
-  name: openshift-pipelines-tektoncd-pipeline-release-v1-17-x-events
+  name: tektoncd-pipeline-1-17-events
 spec:
   componentName: events
   application: tektoncd-pipeline-release-v1-17-x

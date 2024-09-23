@@ -6,7 +6,7 @@ metadata:
     image.redhat.com/generate: "true"
     build.appstudio.openshift.io/pipeline: '{"name":"docker-build","bundle":"latest"}'
     image.redhat.com/generate: '{"visibility": "public"}'
-  name: openshift-pipelines-tektoncd-pipeline-main-entrypoint
+  name: tektoncd-pipeline-main-entrypoint
 spec:
   componentName: entrypoint
   application: tektoncd-pipeline-main
