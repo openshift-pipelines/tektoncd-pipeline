@@ -6,7 +6,7 @@ metadata:
     image.redhat.com/generate: "true"
     build.appstudio.openshift.io/pipeline: '{"name":"docker-build","bundle":"latest"}'
     image.redhat.com/generate: '{"visibility": "public"}'
-  name: sidecarlogresults
+  name: openshift-pipelines-tektoncd-pipeline-main-sidecarlogresults
 spec:
   componentName: sidecarlogresults
   application: tektoncd-pipeline-main
