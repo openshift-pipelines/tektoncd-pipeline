@@ -6,7 +6,7 @@ metadata:
     image.redhat.com/generate: "true"
     build.appstudio.openshift.io/pipeline: '{"name":"docker-build","bundle":"latest"}'
     image.redhat.com/generate: '{"visibility": "public"}'
-  name: openshift-pipelines-tektoncd-pipeline-release-v1-17-x-controller
+  name: tektoncd-pipeline-1-17-controller
 spec:
   componentName: controller
   application: tektoncd-pipeline-release-v1-17-x
