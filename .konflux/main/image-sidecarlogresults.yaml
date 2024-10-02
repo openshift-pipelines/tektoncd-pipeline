@@ -1,0 +1,14 @@
+---
+apiVersion: appstudio.redhat.com/v1alpha1
+kind: ImageRepository
+metadata:
+  name: tektoncd-pipeline-main-sidecarlogresults
+  annotations:
+    image-controller.appstudio.redhat.com/update-component-image: "true"
+  labels:
+    appstudio.redhat.com/component: tektoncd-pipeline-main-sidecarlogresults
+    appstudio.redhat.com/application: tektoncd-pipeline-main
+spec:
+  image:
+   name: tektoncd-pipeline-main/sidecarlogresults
+   visibility: public
