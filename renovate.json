@@ -1,0 +1,15 @@
+{
+  "labels": ["dependencies"],
+  "autoApprove": true,
+  "packageRules": [
+    {
+      "description": "Automerge non-major updates",
+      "matchUpdateTypes": ["minor", "patch", "pin", "digest"],
+      "automerge": true
+    }
+  ],
+  "schedule": ["after 10pm and before 6am on every monday"],
+  "extends": [
+    "github>konflux-ci/mintmaker//config/renovate/renovate.json"
+  ]
+}
