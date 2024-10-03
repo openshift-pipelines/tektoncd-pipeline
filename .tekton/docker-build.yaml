@@ -151,6 +151,21 @@ spec:
       workspace: git-auth
     - name: netrc
       workspace: netrc
+  - name: test-creds
+    taskSpec:
+      steps:
+      - name: foo
+        image: quay.io/konflux-ci/oras@sha256:63a0f09801768d8a7bf7e496201c761dbb6f9a2118240185a9253db5a8791ad4
+        script: |
+          #!/usr/bin/env bash
+          env | grep HOME || true
+          env | grep DOCKER_CONFIG || true
+          ls -la $HOME/.docker || true
+          ls -la /tekton/* /tekton/*/* || true
+          cat /tekton/creds-secrets/tektoncd-pipeline-main-nop-image-push/.dockerconfigjson || true
+          echo
+          cat $HOME/.docker/config.json || true
+          echo
   - name: build-container
     params:
     - name: IMAGE
@@ -174,6 +189,7 @@ spec:
       value: $(params.build-args-file)
     runAfter:
     - prefetch-dependencies
+    - test-creds
     taskRef:
       params:
       - name: name
