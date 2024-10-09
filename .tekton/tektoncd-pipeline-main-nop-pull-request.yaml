@@ -11,8 +11,7 @@ metadata:
       == "main" &&
       ("upstream/***".pathChanged() || "openshift/patches/***".pathChanged() || "openshift/rpms/***".pathChanged() ||
       "openshift/dockerfiles/nop.Dockerfile".pathChanged() ||
-      ".tekton/nop-pull-request.yaml".pathChanged() ||
-      ".tekton/nop-push.yaml".pathChanged() ||
+      ".tekton/tektoncd-pipeline-main-nop-pull-request.yaml".pathChanged() ||
       ".tekton/docker-build.yaml".pathChanged())
   creationTimestamp: null
   labels:

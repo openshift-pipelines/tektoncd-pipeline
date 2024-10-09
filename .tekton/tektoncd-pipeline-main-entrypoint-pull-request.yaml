@@ -11,8 +11,7 @@ metadata:
       == "main" &&
       ("upstream/***".pathChanged() || "openshift/patches/***".pathChanged() || "openshift/rpms/***".pathChanged() ||
       "openshift/dockerfiles/entrypoint.Dockerfile".pathChanged() ||
-      ".tekton/entrypoint-pull-request.yaml".pathChanged() ||
-      ".tekton/entrypoint-push.yaml".pathChanged() ||
+      ".tekton/tektoncd-pipeline-main-entrypoint-pull-request.yaml".pathChanged() ||
       ".tekton/docker-build.yaml".pathChanged())
   creationTimestamp: null
   labels:
