@@ -8,7 +8,6 @@
       "automerge": true
     }
   ],
-  "schedule": ["after 10pm and before 6am on every monday"],
   "extends": [
     "github>konflux-ci/mintmaker//config/renovate/renovate.json"
   ]
