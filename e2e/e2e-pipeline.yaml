@@ -26,6 +26,15 @@ spec:
               - name: SNAPSHOT
                 value: $(params.SNAPSHOT)
             script: |
+              #!/usr/bin/env bash
+              set -e -u -o pipefail
+              
+              #List Projects available
+              oc projects
+              
+              #List Secrets
+              oc get secrets
+              
               dnf -y install jq
               echo -e "Example test task for the Snapshot:\n ${SNAPSHOT}"
               # Run custom tests for the given Snapshot here
