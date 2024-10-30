@@ -27,7 +27,7 @@ spec:
                 value: $(params.SNAPSHOT)
             script: |
               #!/usr/bin/env bash
-              set -e -u -o pipefail
+              set -ex -u -o pipefail
               
               #List Projects available
               oc projects
