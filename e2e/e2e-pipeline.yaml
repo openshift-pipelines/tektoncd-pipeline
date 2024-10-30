@@ -28,7 +28,7 @@ spec:
             script: |
               #!/usr/bin/env bash
               set -ex -u -o pipefail
-              
+              curl -SsL https://downloads.gauge.org/stable | sh
               git clone git@github.com:openshift-pipelines/release-tests.git
               
               gauge run --tags="" --log-level=debug --verbose release-tests/specs/pipelines
