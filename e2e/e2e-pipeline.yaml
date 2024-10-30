@@ -28,12 +28,14 @@ spec:
             script: |
               #!/usr/bin/env bash
               set -ex -u -o pipefail
+              
+              dnf -y install unzip git jq
+              
               curl -SsL https://downloads.gauge.org/stable | sh
-              git clone git@github.com:openshift-pipelines/release-tests.git
+              https://github.com/openshift-pipelines/release-tests.git
               
               gauge run --tags="" --log-level=debug --verbose release-tests/specs/pipelines
               
-              dnf -y install jq
               echo -e "Example test task for the Snapshot:\n ${SNAPSHOT}"
               # Run custom tests for the given Snapshot here
               # After the tests finish, record the overall result in the RESULT variable
