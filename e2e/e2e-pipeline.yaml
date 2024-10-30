@@ -29,11 +29,9 @@ spec:
               #!/usr/bin/env bash
               set -ex -u -o pipefail
               
-              #List Projects available
-              oc projects
+              git clone git@github.com:openshift-pipelines/release-tests.git
               
-              #List Secrets
-              oc get secrets
+              gauge run --tags="" --log-level=debug --verbose release-tests/specs/pipelines
               
               dnf -y install jq
               echo -e "Example test task for the Snapshot:\n ${SNAPSHOT}"
