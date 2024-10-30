@@ -4,7 +4,7 @@ apiVersion: appstudio.redhat.com/v1alpha1
 kind: Component
 metadata:
   annotations:
-    build.appstudio.openshift.io/pipeline: '{"name":"docker-build","bundle":"latest"}'
+    build.appstudio.openshift.io/pipeline: '{"name":"docker-build-ta","bundle":"latest"}'
   name: tektoncd-pipeline-1-17-nop
 spec:
   componentName: nop
@@ -14,5 +14,5 @@ spec:
   source:
     git:
       url: https://github.com/openshift-pipelines/tektoncd-pipeline
-      dockerfileUrl: openshift/dockerfiles/nop.Dockerfile
+      dockerfileUrl: .konflux/dockerfiles/nop.Dockerfile
       revision: release-v1.17.x
