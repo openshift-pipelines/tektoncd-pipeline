@@ -8,17 +8,17 @@ metadata:
     build.appstudio.redhat.com/target_branch: '{{target_branch}}'
     pipelinesascode.tekton.dev/max-keep-runs: "3"
     pipelinesascode.tekton.dev/on-cel-expression: event == "push" && target_branch
-      == "main" &&
+      == "next" &&
       ("upstream/***".pathChanged() || ".konflux/patches/***".pathChanged() || ".konflux/rpms/***".pathChanged() ||
       ".konflux/dockerfiles/resolvers.Dockerfile".pathChanged() ||
-      ".tekton/tektoncd-pipeline-main-resolvers-push.yaml".pathChanged() ||
+      ".tekton/tektoncd-pipeline-next-resolvers-push.yaml".pathChanged() ||
       ".tekton/docker-build-ta.yaml".pathChanged())
   creationTimestamp: null
   labels:
-    appstudio.openshift.io/application: tektoncd-pipeline-main
-    appstudio.openshift.io/component: tektoncd-pipeline-main-resolvers
+    appstudio.openshift.io/application: tektoncd-pipeline-next
+    appstudio.openshift.io/component: tektoncd-pipeline-next-resolvers
     pipelines.appstudio.openshift.io/type: build
-  name: tektoncd-pipeline-main-resolvers-on-push
+  name: tektoncd-pipeline-next-resolvers-on-push
   namespace: tekton-ecosystem-tenant
 spec:
   params:
@@ -27,7 +27,7 @@ spec:
   - name: revision
     value: '{{revision}}'
   - name: output-image
-    value: quay.io/redhat-user-workloads/tekton-ecosystem-tenant/tektoncd-pipeline-main/resolvers:{{revision}}
+    value: quay.io/redhat-user-workloads/tekton-ecosystem-tenant/tektoncd-pipeline-next/resolvers:{{revision}}
   - name: dockerfile
     value: .konflux/dockerfiles/resolvers.Dockerfile
   - name: prefetch-input
