@@ -3,7 +3,7 @@
 apiVersion: appstudio.redhat.com/v1beta2
 kind: IntegrationTestScenario
 metadata:
-  name: tektoncd-pipeline-main-enterprise-contract
+  name: tektoncd-pipeline-main-enterprise-contract-group
 spec:
   application: tektoncd-pipeline-main
   contexts:
