@@ -5,21 +5,20 @@ metadata:
   annotations:
     build.appstudio.openshift.io/repo: https://github.com/openshift-pipelines/tektoncd-pipeline?rev={{revision}}
     build.appstudio.redhat.com/commit_sha: '{{revision}}'
-    build.appstudio.redhat.com/pull_request_number: '{{pull_request_number}}'
     build.appstudio.redhat.com/target_branch: '{{target_branch}}'
     pipelinesascode.tekton.dev/max-keep-runs: "3"
-    pipelinesascode.tekton.dev/on-cel-expression: event == "pull_request" && target_branch
+    pipelinesascode.tekton.dev/on-cel-expression: event == "push" && target_branch
       == "main" &&
       ("upstream/***".pathChanged() || ".konflux/patches/***".pathChanged() || ".konflux/rpms/***".pathChanged() ||
-      ".konflux/dockerfiles/controller.Dockerfile".pathChanged() ||
-      ".tekton/tektoncd-pipeline-main-controller-pull-request.yaml".pathChanged() ||
+      ".konflux/dockerfiles/entrypoint.Dockerfile".pathChanged() ||
+      ".tekton/tektoncd-pipeline-next-entrypoint-push.yaml".pathChanged() ||
       ".tekton/docker-build-ta.yaml".pathChanged())
   creationTimestamp: null
   labels:
-    appstudio.openshift.io/application: tektoncd-pipeline-main
-    appstudio.openshift.io/component: tektoncd-pipeline-main-controller
+    appstudio.openshift.io/application: tektoncd-pipeline-next
+    appstudio.openshift.io/component: tektoncd-pipeline-next-entrypoint
     pipelines.appstudio.openshift.io/type: build
-  name: tektoncd-pipeline-main-controller-on-pull-request
+  name: tektoncd-pipeline-next-entrypoint-on-push
   namespace: tekton-ecosystem-tenant
 spec:
   params:
@@ -28,11 +27,9 @@ spec:
   - name: revision
     value: '{{revision}}'
   - name: output-image
-    value: quay.io/redhat-user-workloads/tekton-ecosystem-tenant/tektoncd-pipeline-main/controller:on-pr-{{revision}}
-  - name: image-expires-after
-    value: 5d
+    value: quay.io/redhat-user-workloads/tekton-ecosystem-tenant/tektoncd-pipeline-next/entrypoint:{{revision}}
   - name: dockerfile
-    value: .konflux/dockerfiles/controller.Dockerfile
+    value: .konflux/dockerfiles/entrypoint.Dockerfile
   - name: build-platforms
     value:
     - linux/x86_64
