@@ -3,17 +3,33 @@
 apiVersion: appstudio.redhat.com/v1beta2
 kind: IntegrationTestScenario
 metadata:
-  name: tektoncd-pipeline-main-enterprise-contract-group
+  name: tektoncd-pipeline-main-enterprise-contract
 spec:
   application: tektoncd-pipeline-main
   contexts:
-    - description: Application testing
-      name: group
+    - description: Application testing for tektoncd-pipeline-main-controller
+      name: component_tektoncd-pipeline-main-controller
+    - description: Application testing for tektoncd-pipeline-main-entrypoint
+      name: component_tektoncd-pipeline-main-entrypoint
+    - description: Application testing for tektoncd-pipeline-main-events
+      name: component_tektoncd-pipeline-main-events
+    - description: Application testing for tektoncd-pipeline-main-nop
+      name: component_tektoncd-pipeline-main-nop
+    - description: Application testing for tektoncd-pipeline-main-resolvers
+      name: component_tektoncd-pipeline-main-resolvers
+    - description: Application testing for tektoncd-pipeline-main-sidecarlogresults
+      name: component_tektoncd-pipeline-main-sidecarlogresults
+    - description: Application testing for tektoncd-pipeline-main-webhook
+      name: component_tektoncd-pipeline-main-webhook
+    - description: Application testing for tektoncd-pipeline-main-workingdirinit
+      name: component_tektoncd-pipeline-main-workingdirinit
   params:
     - name: POLICY_CONFIGURATION
       value: tekton-ecosystem-tenant/tekton-ecosystem-tenant-containers
     - name: TIMEOUT
       value: "15m0s"
+    - name: SINGLE_COMPONENT
+      value: "true"
   resolverRef:
     params:
       - name: url
