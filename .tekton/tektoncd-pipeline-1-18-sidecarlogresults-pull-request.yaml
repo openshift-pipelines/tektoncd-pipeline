@@ -17,7 +17,7 @@ metadata:
       ".tekton/tektoncd-pipeline-1-18-sidecarlogresults-pull-request.yaml".pathChanged())
   creationTimestamp: null
   labels:
-    appstudio.openshift.io/application: tektoncd-pipeline-1.18
+    appstudio.openshift.io/application: tektoncd-pipeline-1-18
     appstudio.openshift.io/component: tektoncd-pipeline-1-18-sidecarlogresults
     pipelines.appstudio.openshift.io/type: build
   name: tektoncd-pipeline-1-18-sidecarlogresults-on-pull-request
