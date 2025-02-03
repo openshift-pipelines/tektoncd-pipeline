@@ -16,7 +16,7 @@ metadata:
       ".tekton/tektoncd-pipeline-1-18-resolvers-push.yaml".pathChanged())
   creationTimestamp: null
   labels:
-    appstudio.openshift.io/application: tektoncd-pipeline-1.18
+    appstudio.openshift.io/application: tektoncd-pipeline-1-18
     appstudio.openshift.io/component: tektoncd-pipeline-1-18-resolvers
     pipelines.appstudio.openshift.io/type: build
   name: tektoncd-pipeline-1-18-resolvers-on-push
