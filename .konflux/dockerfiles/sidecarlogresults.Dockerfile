@@ -13,7 +13,7 @@ RUN go build -ldflags="-X 'knative.dev/pkg/changeset.rev=$(cat HEAD)'" -mod=vend
     ./cmd/sidecarlogresults
 
 FROM $RUNTIME
-ARG VERSION=pipeline-main
+ARG VERSION=pipeline-1.18
 
 ENV SIDECARLOGRESULTS=/usr/local/bin/sidecarlogresults \
     KO_APP=/ko-app \
@@ -23,8 +23,8 @@ COPY --from=builder /tmp/sidecarlogresults /ko-app/sidecarlogresults
 COPY head ${KO_DATA_PATH}/HEAD
 
 LABEL \
-      com.redhat.component="openshift-pipelines-sidecarlogresults-rhel8-container" \
-      name="openshift-pipelines/pipelines-sidecarlogresults-rhel8" \
+      com.redhat.component="openshift-pipelines-sidecarlogresults-rhel9-container" \
+      name="openshift-pipelines/pipelines-sidecarlogresults-rhel9" \
       version=$VERSION \
       summary="Red Hat OpenShift Pipelines Sidecarlogresults" \
       maintainer="pipelines-extcomm@redhat.com" \

@@ -13,7 +13,7 @@ RUN go build -ldflags="-X 'knative.dev/pkg/changeset.rev=$(cat HEAD)'" -mod=vend
     ./cmd/resolvers
 
 FROM $RUNTIME
-ARG VERSION=pipeline-main
+ARG VERSION=pipeline-1.18
 
 ENV RESOLVERS=/usr/local/bin/resolvers \
     KO_APP=/ko-app \
@@ -23,8 +23,8 @@ COPY --from=builder /tmp/resolvers /ko-app/resolvers
 COPY head ${KO_DATA_PATH}/HEAD
 
 LABEL \
-      com.redhat.component="openshift-pipelines-resolvers-rhel8-container" \
-      name="openshift-pipelines/pipelines-resolvers-rhel8" \
+      com.redhat.component="openshift-pipelines-resolvers-rhel9-container" \
+      name="openshift-pipelines/pipelines-resolvers-rhel9" \
       version=$VERSION \
       summary="Red Hat OpenShift Pipelines Resolvers" \
       maintainer="pipelines-extcomm@redhat.com" \

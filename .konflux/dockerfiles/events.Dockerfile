@@ -13,7 +13,7 @@ RUN go build -ldflags="-X 'knative.dev/pkg/changeset.rev=$(cat HEAD)'" -mod=vend
     ./cmd/events
 
 FROM $RUNTIME
-ARG VERSION=pipeline-main
+ARG VERSION=pipeline-1.18
 
 ENV EVENTS=/usr/local/bin/events \
     KO_APP=/ko-app \
@@ -23,8 +23,8 @@ COPY --from=builder /tmp/events /ko-app/events
 COPY head ${KO_DATA_PATH}/HEAD
 
 LABEL \
-      com.redhat.component="openshift-pipelines-events-rhel8-container" \
-      name="openshift-pipelines/pipelines-events-rhel8" \
+      com.redhat.component="openshift-pipelines-events-rhel9-container" \
+      name="openshift-pipelines/pipelines-events-rhel9" \
       version=$VERSION \
       summary="Red Hat OpenShift Pipelines Events" \
       maintainer="pipelines-extcomm@redhat.com" \
