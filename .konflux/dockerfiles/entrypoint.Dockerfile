@@ -15,7 +15,7 @@ RUN CGO_ENABLED=0 \
     ./cmd/entrypoint
 
 FROM $RUNTIME
-ARG VERSION=pipeline-main
+ARG VERSION=pipeline-1.18
 
 ENV ENTRYPOINT=/usr/local/bin/entrypoint \
     KO_APP=/ko-app \
@@ -25,8 +25,8 @@ COPY --from=builder /tmp/entrypoint /ko-app/entrypoint
 COPY head ${KO_DATA_PATH}/HEAD
 
 LABEL \
-      com.redhat.component="openshift-pipelines-entrypoint-rhel8-container" \
-      name="openshift-pipelines/pipelines-entrypoint-rhel8" \
+      com.redhat.component="openshift-pipelines-entrypoint-rhel9-container" \
+      name="openshift-pipelines/pipelines-entrypoint-rhel9" \
       version=$VERSION \
       summary="Red Hat OpenShift Pipelines Entrypoint" \
       maintainer="pipelines-extcomm@redhat.com" \
