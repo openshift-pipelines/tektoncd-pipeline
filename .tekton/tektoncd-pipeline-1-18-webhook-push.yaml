@@ -4,22 +4,22 @@ kind: PipelineRun
 metadata:
   annotations:
     pipelinesascode.tekton.dev/cancel-in-progress: "true" # Cancel in-progress pipelines
-    pipelinesascode.tekton.dev/pipeline: "https://raw.githubusercontent.com/openshift-pipelines/operator/refs/heads/next/.tekton/docker-build-ta.yaml"
+    pipelinesascode.tekton.dev/pipeline: "https://raw.githubusercontent.com/openshift-pipelines/operator/refs/heads/main/.tekton/docker-build-ta.yaml"
     build.appstudio.openshift.io/repo: https://github.com/openshift-pipelines/tektoncd-pipeline?rev={{revision}}
     build.appstudio.redhat.com/commit_sha: '{{revision}}'
     build.appstudio.redhat.com/target_branch: '{{target_branch}}'
     pipelinesascode.tekton.dev/max-keep-runs: "3"
     pipelinesascode.tekton.dev/on-cel-expression: event == "push" && target_branch
-      == "next" &&
+      == "release-v1.18.x" &&
       ("upstream/***".pathChanged() || ".konflux/patches/***".pathChanged() || ".konflux/rpms/***".pathChanged() ||
-      ".konflux/dockerfiles/entrypoint.Dockerfile".pathChanged() ||
-      ".tekton/tektoncd-pipeline-next-entrypoint-push.yaml".pathChanged())
+      ".konflux/dockerfiles/webhook.Dockerfile".pathChanged() ||
+      ".tekton/tektoncd-pipeline-1-18-webhook-push.yaml".pathChanged())
   creationTimestamp: null
   labels:
-    appstudio.openshift.io/application: tektoncd-pipeline-next
-    appstudio.openshift.io/component: tektoncd-pipeline-next-entrypoint
+    appstudio.openshift.io/application: tektoncd-pipeline-1.18
+    appstudio.openshift.io/component: tektoncd-pipeline-1-18-webhook
     pipelines.appstudio.openshift.io/type: build
-  name: tektoncd-pipeline-next-entrypoint-on-push
+  name: tektoncd-pipeline-1-18-webhook-on-push
   namespace: tekton-ecosystem-tenant
 spec:
   params:
@@ -28,9 +28,9 @@ spec:
   - name: revision
     value: '{{revision}}'
   - name: output-image
-    value: quay.io/redhat-user-workloads/tekton-ecosystem-tenant/tektoncd-pipeline-next/entrypoint:{{revision}}
+    value: quay.io/redhat-user-workloads/tekton-ecosystem-tenant/tektoncd-pipeline-1-18/webhook:{{revision}}
   - name: dockerfile
-    value: .konflux/dockerfiles/entrypoint.Dockerfile
+    value: .konflux/dockerfiles/webhook.Dockerfile
   - name: build-platforms
     value:
     - linux/x86_64
