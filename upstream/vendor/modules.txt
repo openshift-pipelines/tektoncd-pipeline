@@ -557,7 +557,7 @@ github.com/golang/protobuf/ptypes
 github.com/golang/protobuf/ptypes/any
 github.com/golang/protobuf/ptypes/duration
 github.com/golang/protobuf/ptypes/timestamp
-# github.com/google/cel-go v0.23.1
+# github.com/google/cel-go v0.23.2
 ## explicit; go 1.21.1
 github.com/google/cel-go/cel
 github.com/google/cel-go/checker
@@ -1134,7 +1134,7 @@ golang.org/x/oauth2/google/internal/stsexchange
 golang.org/x/oauth2/internal
 golang.org/x/oauth2/jws
 golang.org/x/oauth2/jwt
-# golang.org/x/sync v0.10.0
+# golang.org/x/sync v0.11.0
 ## explicit; go 1.18
 golang.org/x/sync/errgroup
 golang.org/x/sync/semaphore
@@ -1278,7 +1278,7 @@ google.golang.org/grpc/serviceconfig
 google.golang.org/grpc/stats
 google.golang.org/grpc/status
 google.golang.org/grpc/tap
-# google.golang.org/protobuf v1.36.4
+# google.golang.org/protobuf v1.36.5
 ## explicit; go 1.21
 google.golang.org/protobuf/encoding/protodelim
 google.golang.org/protobuf/encoding/protojson

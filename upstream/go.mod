@@ -43,7 +43,7 @@ require (
 	code.gitea.io/sdk/gitea v0.20.0
 	github.com/go-jose/go-jose/v3 v3.0.3
 	github.com/goccy/kpoward v0.1.0
-	github.com/google/cel-go v0.23.1
+	github.com/google/cel-go v0.23.2
 	github.com/google/go-containerregistry/pkg/authn/k8schain v0.0.0-20240108195214-a0658aa1d0cc
 	github.com/sigstore/sigstore/pkg/signature/kms/aws v1.8.12
 	github.com/sigstore/sigstore/pkg/signature/kms/azure v1.8.12
@@ -232,7 +232,7 @@ require (
 	golang.org/x/crypto v0.32.0 // indirect
 	golang.org/x/mod v0.19.0 // indirect
 	golang.org/x/net v0.34.0 // indirect
-	golang.org/x/sync v0.10.0
+	golang.org/x/sync v0.11.0
 	golang.org/x/sys v0.29.0 // indirect
 	golang.org/x/term v0.28.0 // indirect
 	golang.org/x/text v0.21.0 // indirect
@@ -241,7 +241,7 @@ require (
 	google.golang.org/api v0.214.0 // indirect
 	google.golang.org/genproto v0.0.0-20241118233622-e639e219e697 // indirect
 	google.golang.org/grpc v1.70.0
-	google.golang.org/protobuf v1.36.4
+	google.golang.org/protobuf v1.36.5
 	gopkg.in/inf.v0 v0.9.1 // indirect
 	gopkg.in/yaml.v2 v2.4.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
