@@ -1,4 +1,5 @@
 ARG GO_BUILDER=brew.registry.redhat.io/rh-osbs/openshift-golang-builder:v1.23
+ARG MID_RUNTIME=registry.access.redhat.com/ubi9/ubi-minimal:latest@sha256:66b99214cb9733e77c4a12cc3e3cbbe76769a213f4e2767f170a4f0fdf9db490
 ARG RUNTIME=scratch
 
 FROM $GO_BUILDER AS builder
@@ -9,11 +10,16 @@ COPY .konflux/patches patches/
 RUN set -e; for f in patches/*.patch; do echo ${f}; [[ -f ${f} ]] || continue; git apply ${f}; done
 COPY head HEAD
 ENV GODEBUG="http2server=0"
-RUN go build -ldflags="-X 'knative.dev/pkg/changeset.rev=$(cat HEAD)'" -mod=vendor -tags disable_gcp -v -o /tmp/nop \
+ENV GOEXPERIMENT=strictfipsruntime
+RUN go build -ldflags="-X 'knative.dev/pkg/changeset.rev=$(cat HEAD)'" -mod=vendor -tags disable_gcp -tags strictfipsruntime -v -o /tmp/nop \
     ./cmd/nop
+
+FROM $MID_RUNTIME AS tmp
 
 FROM $RUNTIME
 ARG VERSION=pipeline-1.18
+
+COPY --from=tmp /usr/lib64/libcrypto.so.* /usr/lib64/
 
 ENV NOP=/usr/local/bin/nop \
     KO_APP=/ko-app \
