@@ -3,7 +3,7 @@
 apiVersion: appstudio.redhat.com/v1alpha1
 kind: ImageRepository
 metadata:
-  name: tektoncd-pipeline-next-sidecarlogresults
+  name: next-pipeline-sidecarlogresults-rhel9
   annotations:
     image-controller.appstudio.redhat.com/update-component-image: "true"
   labels:
@@ -11,5 +11,5 @@ metadata:
     appstudio.redhat.com/application: tektoncd-pipeline-next
 spec:
   image:
-   name: tektoncd-pipeline-next/sidecarlogresults
+   name: next/pipeline-sidecarlogresultsrhel9
    visibility: public
