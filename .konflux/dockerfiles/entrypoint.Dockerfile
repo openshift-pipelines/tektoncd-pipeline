@@ -15,7 +15,7 @@ RUN CGO_ENABLED=0 \
     ./cmd/entrypoint
 
 FROM $RUNTIME
-ARG VERSION=pipeline-main
+ARG VERSION=pipeline-next
 
 ENV ENTRYPOINT=/usr/local/bin/entrypoint \
     KO_APP=/ko-app \
@@ -25,8 +25,8 @@ COPY --from=builder /tmp/entrypoint /ko-app/entrypoint
 COPY head ${KO_DATA_PATH}/HEAD
 
 LABEL \
-      com.redhat.component="openshift-pipelines-entrypoint-rhel8-container" \
-      name="openshift-pipelines/pipelines-entrypoint-rhel8" \
+      com.redhat.component="openshift-pipelines-entrypoint-rhel9-container" \
+      name="openshift-pipelines/pipelines-entrypoint-rhel9" \
       version=$VERSION \
       summary="Red Hat OpenShift Pipelines Entrypoint" \
       maintainer="pipelines-extcomm@redhat.com" \
@@ -35,8 +35,7 @@ LABEL \
       io.k8s.description="Red Hat OpenShift Pipelines Entrypoint" \
       io.openshift.tags="pipelines,tekton,openshift"
 
-RUN microdnf install -y shadow-utils && \
-    groupadd -r -g 65532 nonroot && \
+RUN groupadd -r -g 65532 nonroot && \
     useradd --no-log-init -r -u 65532 -g nonroot nonroot
 USER 65532
 
