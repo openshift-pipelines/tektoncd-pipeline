@@ -13,7 +13,7 @@ RUN go build -ldflags="-X 'knative.dev/pkg/changeset.rev=$(cat HEAD)'" -mod=vend
     ./cmd/sidecarlogresults
 
 FROM $RUNTIME
-ARG VERSION=pipeline-main
+ARG VERSION=pipeline-next
 
 ENV SIDECARLOGRESULTS=/usr/local/bin/sidecarlogresults \
     KO_APP=/ko-app \
@@ -23,8 +23,8 @@ COPY --from=builder /tmp/sidecarlogresults /ko-app/sidecarlogresults
 COPY head ${KO_DATA_PATH}/HEAD
 
 LABEL \
-      com.redhat.component="openshift-pipelines-sidecarlogresults-rhel8-container" \
-      name="openshift-pipelines/pipelines-sidecarlogresults-rhel8" \
+      com.redhat.component="openshift-pipelines-sidecarlogresults-rhel9-container" \
+      name="openshift-pipelines/pipelines-sidecarlogresults-rhel9" \
       version=$VERSION \
       summary="Red Hat OpenShift Pipelines Sidecarlogresults" \
       maintainer="pipelines-extcomm@redhat.com" \
@@ -33,8 +33,7 @@ LABEL \
       io.k8s.description="Red Hat OpenShift Pipelines Sidecarlogresults" \
       io.openshift.tags="pipelines,tekton,openshift"
 
-RUN microdnf install -y shadow-utils && \
-    groupadd -r -g 65532 nonroot && \
+RUN groupadd -r -g 65532 nonroot && \
     useradd --no-log-init -r -u 65532 -g nonroot nonroot
 USER 65532
 

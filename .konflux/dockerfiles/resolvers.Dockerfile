@@ -13,7 +13,7 @@ RUN go build -ldflags="-X 'knative.dev/pkg/changeset.rev=$(cat HEAD)'" -mod=vend
     ./cmd/resolvers
 
 FROM $RUNTIME
-ARG VERSION=pipeline-main
+ARG VERSION=pipeline-next
 
 ENV RESOLVERS=/usr/local/bin/resolvers \
     KO_APP=/ko-app \
@@ -23,8 +23,8 @@ COPY --from=builder /tmp/resolvers /ko-app/resolvers
 COPY head ${KO_DATA_PATH}/HEAD
 
 LABEL \
-      com.redhat.component="openshift-pipelines-resolvers-rhel8-container" \
-      name="openshift-pipelines/pipelines-resolvers-rhel8" \
+      com.redhat.component="openshift-pipelines-resolvers-rhel9-container" \
+      name="openshift-pipelines/pipelines-resolvers-rhel9" \
       version=$VERSION \
       summary="Red Hat OpenShift Pipelines Resolvers" \
       maintainer="pipelines-extcomm@redhat.com" \
@@ -33,8 +33,7 @@ LABEL \
       io.k8s.description="Red Hat OpenShift Pipelines Resolvers" \
       io.openshift.tags="pipelines,tekton,openshift"
 
-RUN microdnf install -y shadow-utils && \
-    groupadd -r -g 65532 nonroot && \
+RUN groupadd -r -g 65532 nonroot && \
     useradd --no-log-init -r -u 65532 -g nonroot nonroot
 USER 65532
 

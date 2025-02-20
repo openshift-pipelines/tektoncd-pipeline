@@ -13,7 +13,7 @@ RUN go build -ldflags="-X 'knative.dev/pkg/changeset.rev=$(cat HEAD)'" -mod=vend
     ./cmd/workingdirinit
 
 FROM $RUNTIME
-ARG VERSION=pipeline-main
+ARG VERSION=pipeline-next
 
 ENV WORKINGDIRINIT=/usr/local/bin/workingdirinit \
     KO_APP=/ko-app \
@@ -23,8 +23,8 @@ COPY --from=builder /tmp/workingdirinit /ko-app/workingdirinit
 COPY head ${KO_DATA_PATH}/HEAD
 
 LABEL \
-      com.redhat.component="openshift-pipelines-workingdirinit-rhel8-container" \
-      name="openshift-pipelines/pipelines-workingdirinit-rhel8" \
+      com.redhat.component="openshift-pipelines-workingdirinit-rhel9-container" \
+      name="openshift-pipelines/pipelines-workingdirinit-rhel9" \
       version=$VERSION \
       summary="Red Hat OpenShift Pipelines Workingdirinit" \
       maintainer="pipelines-extcomm@redhat.com" \
@@ -33,8 +33,7 @@ LABEL \
       io.k8s.description="Red Hat OpenShift Pipelines Workingdirinit" \
       io.openshift.tags="pipelines,tekton,openshift"
 
-RUN microdnf install -y shadow-utils && \
-    groupadd -r -g 65532 nonroot && \
+RUN groupadd -r -g 65532 nonroot && \
     useradd --no-log-init -r -u 65532 -g nonroot nonroot
 USER 65532
 

@@ -13,7 +13,7 @@ RUN go build -ldflags="-X 'knative.dev/pkg/changeset.rev=$(cat HEAD)'" -mod=vend
     ./cmd/nop
 
 FROM $RUNTIME
-ARG VERSION=pipeline-main
+ARG VERSION=pipeline-next
 
 ENV NOP=/usr/local/bin/nop \
     KO_APP=/ko-app \
@@ -23,8 +23,8 @@ COPY --from=builder /tmp/nop /ko-app/nop
 COPY head ${KO_DATA_PATH}/HEAD
 
 LABEL \
-      com.redhat.component="openshift-pipelines-nop-rhel8-container" \
-      name="openshift-pipelines/pipelines-nop-rhel8" \
+      com.redhat.component="openshift-pipelines-nop-rhel9-container" \
+      name="openshift-pipelines/pipelines-nop-rhel9" \
       version=$VERSION \
       summary="Red Hat OpenShift Pipelines Nop" \
       maintainer="pipelines-extcomm@redhat.com" \
