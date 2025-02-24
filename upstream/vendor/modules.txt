@@ -940,7 +940,7 @@ github.com/stoewer/go-strcase
 github.com/stretchr/testify/assert
 github.com/stretchr/testify/assert/yaml
 github.com/stretchr/testify/require
-# github.com/tektoncd/plumbing v0.0.0-20250219154456-490be739c4ee
+# github.com/tektoncd/plumbing v0.0.0-20250211171852-a7d93c28926a
 ## explicit; go 1.22
 github.com/tektoncd/plumbing
 github.com/tektoncd/plumbing/cmd/combine
