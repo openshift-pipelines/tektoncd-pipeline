@@ -26,7 +26,7 @@ require (
 	github.com/tektoncd/plumbing v0.0.0-20250211171852-a7d93c28926a
 	go.opencensus.io v0.24.0
 	go.uber.org/zap v1.27.0
-	golang.org/x/exp v0.0.0-20250215185904-eff6e970281f
+	golang.org/x/exp v0.0.0-20250228200357-dead58393ab7
 	golang.org/x/oauth2 v0.25.0 // indirect
 	gomodules.xyz/jsonpatch/v2 v2.4.0
 	k8s.io/api v0.32.0
