@@ -20,7 +20,7 @@
 
 # Default GKE version to be used with Tekton Serving
 readonly SERVING_GKE_VERSION=gke-channel-regular
-readonly SERVING_GKE_IMAGE=cos_containerd
+readonly SERVING_GKE_IMAGE=cos
 
 # Conveniently set GOPATH if unset
 if [[ -z "${GOPATH:-}" ]]; then
