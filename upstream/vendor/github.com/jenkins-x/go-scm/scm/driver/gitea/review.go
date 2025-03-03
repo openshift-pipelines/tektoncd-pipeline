@@ -8,7 +8,6 @@ import (
 	"context"
 
 	"code.gitea.io/sdk/gitea"
-	"fortio.org/safecast"
 	"github.com/jenkins-x/go-scm/scm"
 )
 
@@ -115,7 +114,7 @@ func convertReviewComment(src *gitea.PullReviewComment) *scm.ReviewComment {
 		Body:    src.Body,
 		Path:    src.Path,
 		Sha:     src.CommitID,
-		Line:    safecast.MustConvert[int](src.LineNum),
+		Line:    int(src.LineNum),
 		Link:    src.HTMLURL,
 		Author:  *convertUser(src.Reviewer),
 		Created: src.Created,

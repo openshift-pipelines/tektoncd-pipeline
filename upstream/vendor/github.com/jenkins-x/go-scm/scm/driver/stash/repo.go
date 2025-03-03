@@ -296,17 +296,7 @@ func (s *repositoryService) Find(ctx context.Context, repo string) (*scm.Reposit
 	path := fmt.Sprintf("rest/api/1.0/projects/%s/repos/%s", namespace, name)
 	out := new(repository)
 	res, err := s.client.do(ctx, "GET", path, nil, out)
-	outputRepo := convertRepository(out)
-
-	// default value for repository.Branch is `master` but it may differ for other
-	// repositories as a repository can have `main` or `trunk` as default branch.
-	branch := new(branch)
-	pathBranch := fmt.Sprintf("rest/api/1.0/projects/%s/repos/%s/branches/default", namespace, name)
-	_, errBranch := s.client.do(ctx, "GET", pathBranch, nil, branch)
-	if errBranch == nil {
-		outputRepo.Branch = branch.DisplayID
-	}
-	return outputRepo, res, err
+	return convertRepository(out), res, err
 }
 
 // FindHook returns a repository hook.
@@ -451,15 +441,15 @@ func (s *repositoryService) CreateStatus(ctx context.Context, repo, ref string, 
 		State: convertFromState(input.State),
 		Key:   input.Label,
 		Name:  input.Label,
-		URL:   input.Link,
+		URL:   input.Target,
 		Desc:  input.Desc,
 	}
 	res, err := s.client.do(ctx, "POST", path, in, nil)
 	return &scm.Status{
-		State: input.State,
-		Label: input.Label,
-		Desc:  input.Desc,
-		Link:  input.Link,
+		State:  input.State,
+		Label:  input.Label,
+		Desc:   input.Desc,
+		Target: input.Target,
 	}, res, err
 }
 
