@@ -1,8 +1,7 @@
-//go:build tools
-// +build tools
+//go:build disable_spire
 
 /*
-Copyright 2023 The Tekton Authors
+Copyright 2025 The Tekton Authors
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -17,8 +16,19 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package tools
+package entrypoint
 
 import (
-	_ "github.com/golangci/golangci-lint/cmd/golangci-lint"
+	"context"
+
+	"github.com/tektoncd/pipeline/pkg/result"
 )
+
+// EntrypointerAPIClient defines the interface for SPIRE operations
+type EntrypointerAPIClient interface {
+	Sign(ctx context.Context, results []result.RunResult) ([]result.RunResult, error)
+}
+
+func signResults(ctx context.Context, api EntrypointerAPIClient, results []result.RunResult) ([]result.RunResult, error) {
+	return nil, nil
+}

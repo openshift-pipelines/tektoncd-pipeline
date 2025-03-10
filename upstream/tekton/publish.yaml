@@ -73,7 +73,7 @@ spec:
   steps:
 
   - name: container-registry-auth
-    image: cgr.dev/chainguard/crane:latest-dev@sha256:db936867d678cb6df93fa431f8830b9eb0e3ab3b27eb2f4b7f66197fee235552
+    image: cgr.dev/chainguard/crane:latest-dev@sha256:53f61005b8e894b4c9d7de210f25102cb3999267aa1e57c092889a77d26e3a60
     script: |
       #!/bin/sh
       set -ex
@@ -92,7 +92,7 @@ spec:
       cp ${DOCKER_CONFIG} /workspace/docker-config.json
 
   - name: create-ko-yaml
-    image: cgr.dev/chainguard/go:latest-dev@sha256:2453e92671fb693999e65fde99bbd5744b120b7dd70f3f7c7b220e185ec35050
+    image: cgr.dev/chainguard/go:latest-dev@sha256:698af2b7a386c5da9743e0813c5c0998df1dffe11786539b35270f846ee068ee
     script: |
       #!/bin/sh
       set -ex
@@ -232,7 +232,7 @@ spec:
         ${PRESERVE_IMPORT_PATH} > /workspace/built_images
 
   - name: tag-images
-    image: cgr.dev/chainguard/crane:latest-dev@sha256:db936867d678cb6df93fa431f8830b9eb0e3ab3b27eb2f4b7f66197fee235552
+    image: cgr.dev/chainguard/crane:latest-dev@sha256:53f61005b8e894b4c9d7de210f25102cb3999267aa1e57c092889a77d26e3a60
     script: |
       #!/bin/sh
       set -ex
