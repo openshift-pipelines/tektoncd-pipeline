@@ -23,7 +23,7 @@ require (
 	github.com/sigstore/sigstore v1.8.12
 	github.com/spiffe/go-spiffe/v2 v2.4.0
 	github.com/spiffe/spire-api-sdk v1.11.1
-	github.com/tektoncd/plumbing v0.0.0-20250211171852-a7d93c28926a
+	github.com/tektoncd/plumbing v0.0.0-20250313115811-582146ce551e
 	go.opencensus.io v0.24.0
 	go.uber.org/zap v1.27.0
 	golang.org/x/exp v0.0.0-20250215185904-eff6e970281f
@@ -232,9 +232,9 @@ require (
 	github.com/vbatts/tar-split v0.11.6 // indirect
 	go.uber.org/automaxprocs v1.5.3 // indirect
 	go.uber.org/multierr v1.11.0 // indirect
-	golang.org/x/crypto v0.33.0 // indirect
+	golang.org/x/crypto v0.35.0 // indirect
 	golang.org/x/mod v0.23.0 // indirect
-	golang.org/x/net v0.35.0 // indirect
+	golang.org/x/net v0.36.0 // indirect
 	golang.org/x/sync v0.11.0
 	golang.org/x/sys v0.30.0 // indirect
 	golang.org/x/term v0.29.0 // indirect
