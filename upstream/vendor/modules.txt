@@ -940,8 +940,8 @@ github.com/stoewer/go-strcase
 github.com/stretchr/testify/assert
 github.com/stretchr/testify/assert/yaml
 github.com/stretchr/testify/require
-# github.com/tektoncd/plumbing v0.0.0-20250313115811-582146ce551e
-## explicit; go 1.23
+# github.com/tektoncd/plumbing v0.0.0-20250211171852-a7d93c28926a
+## explicit; go 1.22
 github.com/tektoncd/plumbing
 github.com/tektoncd/plumbing/cmd/combine
 github.com/tektoncd/plumbing/scripts
@@ -1067,8 +1067,8 @@ go.uber.org/zap/internal/stacktrace
 go.uber.org/zap/internal/ztest
 go.uber.org/zap/zapcore
 go.uber.org/zap/zaptest
-# golang.org/x/crypto v0.35.0
-## explicit; go 1.23.0
+# golang.org/x/crypto v0.33.0
+## explicit; go 1.20
 golang.org/x/crypto/argon2
 golang.org/x/crypto/blake2b
 golang.org/x/crypto/blake2s
@@ -1105,8 +1105,8 @@ golang.org/x/exp/slices
 golang.org/x/mod/internal/lazyregexp
 golang.org/x/mod/module
 golang.org/x/mod/semver
-# golang.org/x/net v0.36.0
-## explicit; go 1.23.0
+# golang.org/x/net v0.35.0
+## explicit; go 1.18
 golang.org/x/net/context
 golang.org/x/net/context/ctxhttp
 golang.org/x/net/html
