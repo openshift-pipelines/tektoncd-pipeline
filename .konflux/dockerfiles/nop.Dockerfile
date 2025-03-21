@@ -1,4 +1,4 @@
-ARG GO_BUILDER=brew.registry.redhat.io/rh-osbs/openshift-golang-builder:v1.23
+ARG GO_BUILDER=brew.registry.redhat.io/rh-osbs/openshift-golang-builder:v1.22
 ARG RUNTIME=scratch
 
 FROM $GO_BUILDER AS builder
@@ -23,8 +23,8 @@ COPY --from=builder /tmp/nop /ko-app/nop
 COPY head ${KO_DATA_PATH}/HEAD
 
 LABEL \
-      com.redhat.component="openshift-pipelines-nop-rhel9-container" \
-      name="openshift-pipelines/pipelines-nop-rhel9" \
+      com.redhat.component="openshift-pipelines-nop-rhel8-container" \
+      name="openshift-pipelines/pipelines-nop-rhel8" \
       version=$VERSION \
       summary="Red Hat OpenShift Pipelines Nop" \
       maintainer="pipelines-extcomm@redhat.com" \
