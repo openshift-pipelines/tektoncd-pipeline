@@ -1,4 +1,4 @@
-ARG GO_BUILDER=brew.registry.redhat.io/rh-osbs/openshift-golang-builder:v1.23
+ARG GO_BUILDER=brew.registry.redhat.io/rh-osbs/openshift-golang-builder:v1.22
 ARG RUNTIME=registry.access.redhat.com/ubi8/ubi-minimal@sha256:e4ca1025efad7cc944fb991c716067b12e25ecbe05e6e81715a337179e417aa8
 
 FROM $GO_BUILDER AS builder
@@ -23,8 +23,8 @@ COPY --from=builder /tmp/resolvers /ko-app/resolvers
 COPY head ${KO_DATA_PATH}/HEAD
 
 LABEL \
-      com.redhat.component="openshift-pipelines-resolvers-rhel9-container" \
-      name="openshift-pipelines/pipelines-resolvers-rhel9" \
+      com.redhat.component="openshift-pipelines-resolvers-rhel8-container" \
+      name="openshift-pipelines/pipelines-resolvers-rhel8" \
       version=$VERSION \
       summary="Red Hat OpenShift Pipelines Resolvers" \
       maintainer="pipelines-extcomm@redhat.com" \
