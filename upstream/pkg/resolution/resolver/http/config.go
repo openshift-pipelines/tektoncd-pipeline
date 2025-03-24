@@ -17,7 +17,7 @@ limitations under the License.
 package http
 
 const (
-	// TimeoutKey is the configuration field name for controlling
+	// timeoutKey is the configuration field name for controlling
 	// the maximum duration of a resolution request for a file from http.
-	TimeoutKey = "fetch-timeout"
+	timeoutKey = "fetch-timeout"
 )
