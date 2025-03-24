@@ -1,10 +1,5 @@
 # Documentation: https://golangci-lint.run/usage/configuration/
-
 linters-settings:
-  gosec:
-    excludes:
-      - G601
-    exclude-generated: true
   errcheck:
     exclude-functions:
       - (*github.com/tektoncd/pipeline/vendor/go.uber.org/zap.SugaredLogger).Sync
@@ -85,13 +80,12 @@ linters:
   - gocyclo
   - godot
   - godox
-  - err113
+  - goerr113
   - gofumpt
   - gomnd
   - gomoddirectives
   - ireturn
   - lll
-  - mnd
   - nestif
   - nlreturn
   - nonamedreturns

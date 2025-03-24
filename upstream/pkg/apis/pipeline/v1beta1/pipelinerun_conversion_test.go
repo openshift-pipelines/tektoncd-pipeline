@@ -88,14 +88,13 @@ var (
 						},
 					},
 				},
-				Sidecars: []v1beta1.SidecarState{{
-					ContainerState: corev1.ContainerState{
-						Terminated: &corev1.ContainerStateTerminated{
-							ExitCode: 1,
-							Reason:   "Error",
-							Message:  "Error",
-						},
+				Sidecars: []v1beta1.SidecarState{{ContainerState: corev1.ContainerState{
+					Terminated: &corev1.ContainerStateTerminated{
+						ExitCode: 1,
+						Reason:   "Error",
+						Message:  "Error",
 					},
+				},
 					Name:          "error",
 					ImageID:       "image-id",
 					ContainerName: "sidecar-error",
@@ -269,21 +268,17 @@ func TestPipelineRunConversion(t *testing.T) {
 							},
 							HostNetwork: false,
 						},
-						StepOverrides: []v1beta1.TaskRunStepOverride{
-							{
-								Name: "test-so",
-								Resources: corev1.ResourceRequirements{
-									Requests: corev1.ResourceList{corev1.ResourceMemory: corev1resources.MustParse("1Gi")},
-								},
-							},
+						StepOverrides: []v1beta1.TaskRunStepOverride{{
+							Name: "test-so",
+							Resources: corev1.ResourceRequirements{
+								Requests: corev1.ResourceList{corev1.ResourceMemory: corev1resources.MustParse("1Gi")},
+							}},
 						},
-						SidecarOverrides: []v1beta1.TaskRunSidecarOverride{
-							{
-								Name: "test-so",
-								Resources: corev1.ResourceRequirements{
-									Requests: corev1.ResourceList{corev1.ResourceMemory: corev1resources.MustParse("1Gi")},
-								},
-							},
+						SidecarOverrides: []v1beta1.TaskRunSidecarOverride{{
+							Name: "test-so",
+							Resources: corev1.ResourceRequirements{
+								Requests: corev1.ResourceList{corev1.ResourceMemory: corev1resources.MustParse("1Gi")},
+							}},
 						},
 						Metadata: &v1beta1.PipelineTaskMetadata{
 							Labels: map[string]string{
@@ -320,8 +315,7 @@ func TestPipelineRunConversion(t *testing.T) {
 						Value: *v1beta1.NewObject(map[string]string{
 							"pkey1": "val1",
 							"pkey2": "rae",
-						}),
-					}, {
+						})}, {
 						Name: "pipeline-result-2",
 						Value: *v1beta1.NewObject(map[string]string{
 							"pkey1": "val2",
@@ -463,6 +457,38 @@ func TestPipelineRunConversionFromDeprecated(t *testing.T) {
 			Spec: v1beta1.PipelineRunSpec{
 				Timeouts: &v1beta1.TimeoutFields{
 					Pipeline: &metav1.Duration{Duration: 5 * time.Minute},
+				},
+			},
+		},
+	}, {
+		name: "bundle",
+		in: &v1beta1.PipelineRun{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "foo",
+				Namespace: "bar",
+			},
+			Spec: v1beta1.PipelineRunSpec{
+				PipelineRef: &v1beta1.PipelineRef{
+					Name:   "test-bundle-name",
+					Bundle: "test-bundle",
+				},
+			},
+		},
+		want: &v1beta1.PipelineRun{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "foo",
+				Namespace: "bar",
+			},
+			Spec: v1beta1.PipelineRunSpec{
+				PipelineRef: &v1beta1.PipelineRef{
+					ResolverRef: v1beta1.ResolverRef{
+						Resolver: "bundles",
+						Params: v1beta1.Params{
+							{Name: "bundle", Value: v1beta1.ParamValue{StringVal: "test-bundle", Type: "string"}},
+							{Name: "name", Value: v1beta1.ParamValue{StringVal: "test-bundle-name", Type: "string"}},
+							{Name: "kind", Value: v1beta1.ParamValue{StringVal: "Pipeline", Type: "string"}},
+						},
+					},
 				},
 			},
 		},

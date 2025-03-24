@@ -358,8 +358,6 @@ func (ctx *genericSigner) Options() SignerOptions {
 //   - *rsa.PublicKey
 //   - *JSONWebKey
 //   - JSONWebKey
-//   - *JSONWebKeySet
-//   - JSONWebKeySet
 //   - []byte (an HMAC key)
 //   - Any type that implements the OpaqueVerifier interface.
 //
