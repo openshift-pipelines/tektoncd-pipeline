@@ -31,7 +31,7 @@ func TestConvertScripts_NothingToConvert_EmptySidecars(t *testing.T) {
 		Image: "step-1",
 	}, {
 		Image: "step-2",
-	}}, []v1.Sidecar{}, nil, SecurityContextConfig{SetSecurityContext: false, SetReadOnlyRootFilesystem: false})
+	}}, []v1.Sidecar{}, nil, false)
 	want := []corev1.Container{{
 		Image: "step-1",
 	}, {
@@ -54,7 +54,7 @@ func TestConvertScripts_NothingToConvert_NilSidecars(t *testing.T) {
 		Image: "step-1",
 	}, {
 		Image: "step-2",
-	}}, nil, nil, SecurityContextConfig{SetSecurityContext: false, SetReadOnlyRootFilesystem: false})
+	}}, nil, nil, false)
 	want := []corev1.Container{{
 		Image: "step-1",
 	}, {
@@ -79,7 +79,7 @@ func TestConvertScripts_NothingToConvert_WithSidecar(t *testing.T) {
 		Image: "step-2",
 	}}, []v1.Sidecar{{
 		Image: "sidecar-1",
-	}}, nil, SecurityContextConfig{SetSecurityContext: false, SetReadOnlyRootFilesystem: false})
+	}}, nil, false)
 	want := []corev1.Container{{
 		Image: "step-1",
 	}, {
@@ -134,7 +134,7 @@ script-3`,
 		Image:        "step-3",
 		VolumeMounts: preExistingVolumeMounts,
 		Args:         []string{"my", "args"},
-	}}, []v1.Sidecar{}, nil, SecurityContextConfig{SetSecurityContext: true, SetReadOnlyRootFilesystem: true})
+	}}, []v1.Sidecar{}, nil, true)
 	wantInit := &corev1.Container{
 		Name:    "place-scripts",
 		Image:   images.ShellImage,
@@ -159,7 +159,7 @@ _EOF_
 /tekton/bin/entrypoint decode-script "${scriptfile}"
 `},
 		VolumeMounts:    []corev1.VolumeMount{writeScriptsVolumeMount, binMount},
-		SecurityContext: SecurityContextConfig{SetSecurityContext: true, SetReadOnlyRootFilesystem: true}.GetSecurityContext(false),
+		SecurityContext: LinuxSecurityContext,
 	}
 	want := []corev1.Container{{
 		Image:        "step-1",
@@ -335,7 +335,7 @@ _EOF_
 		}},
 	}} {
 		t.Run(tc.name, func(t *testing.T) {
-			gotInit, gotSteps, gotSidecars := convertScripts(images.ShellImage, images.ShellImageWin, []v1.Step{}, tc.sidecars, nil, SecurityContextConfig{SetSecurityContext: false, SetReadOnlyRootFilesystem: false})
+			gotInit, gotSteps, gotSidecars := convertScripts(images.ShellImage, images.ShellImageWin, []v1.Step{}, tc.sidecars, nil, false)
 			gotInitScripts := ""
 			if gotInit != nil {
 				gotInitScripts = gotInit.Args[1]
@@ -465,7 +465,7 @@ fi
 debug-fail-continue-heredoc-randomly-generated-6nl7g
 `},
 				VolumeMounts:    []corev1.VolumeMount{writeScriptsVolumeMount, binMount, debugScriptsVolumeMount},
-				SecurityContext: SecurityContextConfig{SetSecurityContext: true, SetReadOnlyRootFilesystem: true}.GetSecurityContext(false),
+				SecurityContext: LinuxSecurityContext,
 			},
 			wantSteps: []corev1.Container{{
 				Image:   "step-1",
@@ -608,8 +608,7 @@ fi
 debug-beforestep-fail-continue-heredoc-randomly-generated-6nl7g
 `},
 				VolumeMounts:    []corev1.VolumeMount{writeScriptsVolumeMount, binMount, debugScriptsVolumeMount},
-				SecurityContext: SecurityContextConfig{SetSecurityContext: true, SetReadOnlyRootFilesystem: true}.GetSecurityContext(false),
-			},
+				SecurityContext: LinuxSecurityContext},
 			wantSteps: []corev1.Container{{
 				Name:    "step-1",
 				Image:   "step-1",
@@ -622,7 +621,7 @@ debug-beforestep-fail-continue-heredoc-randomly-generated-6nl7g
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			names.TestingSeed()
-			gotInit, gotSteps, gotSidecars := convertScripts(images.ShellImage, images.ShellImageWin, tc.steps, []v1.Sidecar{}, tc.taskRunDebug, SecurityContextConfig{SetSecurityContext: true, SetReadOnlyRootFilesystem: true})
+			gotInit, gotSteps, gotSidecars := convertScripts(images.ShellImage, images.ShellImageWin, tc.steps, []v1.Sidecar{}, tc.taskRunDebug, true)
 			if d := cmp.Diff(tc.wantInit, gotInit); d != "" {
 				t.Errorf("Init Container Diff %s", diff.PrintWantGot(d))
 			}
@@ -666,7 +665,7 @@ script-3`,
 		Script: `#!/bin/sh
 sidecar-1`,
 		Image: "sidecar-1",
-	}}, nil, SecurityContextConfig{SetSecurityContext: true, SetReadOnlyRootFilesystem: true})
+	}}, nil, true)
 	wantInit := &corev1.Container{
 		Name:    "place-scripts",
 		Image:   images.ShellImage,
@@ -691,7 +690,7 @@ _EOF_
 /tekton/bin/entrypoint decode-script "${scriptfile}"
 `},
 		VolumeMounts:    []corev1.VolumeMount{writeScriptsVolumeMount, binMount},
-		SecurityContext: SecurityContextConfig{SetSecurityContext: true, SetReadOnlyRootFilesystem: true}.GetSecurityContext(false),
+		SecurityContext: LinuxSecurityContext,
 	}
 	want := []corev1.Container{{
 		Image:        "step-1",
@@ -760,7 +759,7 @@ no-shebang`,
 		Image:        "step-3",
 		VolumeMounts: preExistingVolumeMounts,
 		Args:         []string{"my", "args"},
-	}}, []v1.Sidecar{}, nil, SecurityContextConfig{SetSecurityContext: true, SetReadOnlyRootFilesystem: true})
+	}}, []v1.Sidecar{}, nil, true)
 	wantInit := &corev1.Container{
 		Name:    "place-scripts",
 		Image:   images.ShellImageWin,
@@ -842,7 +841,7 @@ script-3`,
 		Script: `#!win pwsh -File
 sidecar-1`,
 		Image: "sidecar-1",
-	}}, nil, SecurityContextConfig{SetSecurityContext: true, SetReadOnlyRootFilesystem: true})
+	}}, nil, true)
 	wantInit := &corev1.Container{
 		Name:    "place-scripts",
 		Image:   images.ShellImageWin,
@@ -912,7 +911,7 @@ func TestConvertScripts_Windows_SidecarOnly(t *testing.T) {
 		Script: `#!win python
 sidecar-1`,
 		Image: "sidecar-1",
-	}}, nil, SecurityContextConfig{SetSecurityContext: true, SetReadOnlyRootFilesystem: true})
+	}}, nil, true)
 	wantInit := &corev1.Container{
 		Name:    "place-scripts",
 		Image:   images.ShellImageWin,

@@ -20,8 +20,8 @@ package v1
 
 import (
 	v1 "github.com/tektoncd/pipeline/pkg/apis/pipeline/v1"
+	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/labels"
-	"k8s.io/client-go/listers"
 	"k8s.io/client-go/tools/cache"
 )
 
@@ -38,17 +38,25 @@ type TaskRunLister interface {
 
 // taskRunLister implements the TaskRunLister interface.
 type taskRunLister struct {
-	listers.ResourceIndexer[*v1.TaskRun]
+	indexer cache.Indexer
 }
 
 // NewTaskRunLister returns a new TaskRunLister.
 func NewTaskRunLister(indexer cache.Indexer) TaskRunLister {
-	return &taskRunLister{listers.New[*v1.TaskRun](indexer, v1.Resource("taskrun"))}
+	return &taskRunLister{indexer: indexer}
+}
+
+// List lists all TaskRuns in the indexer.
+func (s *taskRunLister) List(selector labels.Selector) (ret []*v1.TaskRun, err error) {
+	err = cache.ListAll(s.indexer, selector, func(m interface{}) {
+		ret = append(ret, m.(*v1.TaskRun))
+	})
+	return ret, err
 }
 
 // TaskRuns returns an object that can list and get TaskRuns.
 func (s *taskRunLister) TaskRuns(namespace string) TaskRunNamespaceLister {
-	return taskRunNamespaceLister{listers.NewNamespaced[*v1.TaskRun](s.ResourceIndexer, namespace)}
+	return taskRunNamespaceLister{indexer: s.indexer, namespace: namespace}
 }
 
 // TaskRunNamespaceLister helps list and get TaskRuns.
@@ -66,5 +74,26 @@ type TaskRunNamespaceLister interface {
 // taskRunNamespaceLister implements the TaskRunNamespaceLister
 // interface.
 type taskRunNamespaceLister struct {
-	listers.ResourceIndexer[*v1.TaskRun]
+	indexer   cache.Indexer
+	namespace string
+}
+
+// List lists all TaskRuns in the indexer for a given namespace.
+func (s taskRunNamespaceLister) List(selector labels.Selector) (ret []*v1.TaskRun, err error) {
+	err = cache.ListAllByNamespace(s.indexer, s.namespace, selector, func(m interface{}) {
+		ret = append(ret, m.(*v1.TaskRun))
+	})
+	return ret, err
+}
+
+// Get retrieves the TaskRun from the indexer for a given namespace and name.
+func (s taskRunNamespaceLister) Get(name string) (*v1.TaskRun, error) {
+	obj, exists, err := s.indexer.GetByKey(s.namespace + "/" + name)
+	if err != nil {
+		return nil, err
+	}
+	if !exists {
+		return nil, errors.NewNotFound(v1.Resource("taskrun"), name)
+	}
+	return obj.(*v1.TaskRun), nil
 }

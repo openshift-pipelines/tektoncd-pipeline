@@ -107,7 +107,7 @@ Kubernetes cluster.
 
 You can enable additional alpha and beta features, customize execution
 parameters, configure availability, and many more options. See the
-[additional configuration options](./additional-configs.md) for more information.
+[addition configurations options](./additional-configs.md) for more information.
 
 ## Next steps
 

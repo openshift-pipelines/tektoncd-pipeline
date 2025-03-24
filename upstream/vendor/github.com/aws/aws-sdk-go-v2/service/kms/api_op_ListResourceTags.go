@@ -162,9 +162,6 @@ func (c *Client) addOperationListResourceTagsMiddlewares(stack *middleware.Stack
 	if err = addRecordResponseTiming(stack); err != nil {
 		return err
 	}
-	if err = addSpanRetryLoop(stack, options); err != nil {
-		return err
-	}
 	if err = addClientUserAgent(stack, options); err != nil {
 		return err
 	}
@@ -175,12 +172,6 @@ func (c *Client) addOperationListResourceTagsMiddlewares(stack *middleware.Stack
 		return err
 	}
 	if err = addSetLegacyContextSigningOptionsMiddleware(stack); err != nil {
-		return err
-	}
-	if err = addTimeOffsetBuild(stack, c); err != nil {
-		return err
-	}
-	if err = addUserAgentRetryMode(stack, options); err != nil {
 		return err
 	}
 	if err = addOpListResourceTagsValidationMiddleware(stack); err != nil {
@@ -204,20 +195,16 @@ func (c *Client) addOperationListResourceTagsMiddlewares(stack *middleware.Stack
 	if err = addDisableHTTPSMiddleware(stack, options); err != nil {
 		return err
 	}
-	if err = addSpanInitializeStart(stack); err != nil {
-		return err
-	}
-	if err = addSpanInitializeEnd(stack); err != nil {
-		return err
-	}
-	if err = addSpanBuildRequestStart(stack); err != nil {
-		return err
-	}
-	if err = addSpanBuildRequestEnd(stack); err != nil {
-		return err
-	}
 	return nil
 }
+
+// ListResourceTagsAPIClient is a client that implements the ListResourceTags
+// operation.
+type ListResourceTagsAPIClient interface {
+	ListResourceTags(context.Context, *ListResourceTagsInput, ...func(*Options)) (*ListResourceTagsOutput, error)
+}
+
+var _ ListResourceTagsAPIClient = (*Client)(nil)
 
 // ListResourceTagsPaginatorOptions is the paginator options for ListResourceTags
 type ListResourceTagsPaginatorOptions struct {
@@ -287,9 +274,6 @@ func (p *ListResourceTagsPaginator) NextPage(ctx context.Context, optFns ...func
 	}
 	params.Limit = limit
 
-	optFns = append([]func(*Options){
-		addIsPaginatorUserAgent,
-	}, optFns...)
 	result, err := p.client.ListResourceTags(ctx, &params, optFns...)
 	if err != nil {
 		return nil, err
@@ -308,14 +292,6 @@ func (p *ListResourceTagsPaginator) NextPage(ctx context.Context, optFns ...func
 
 	return result, nil
 }
-
-// ListResourceTagsAPIClient is a client that implements the ListResourceTags
-// operation.
-type ListResourceTagsAPIClient interface {
-	ListResourceTags(context.Context, *ListResourceTagsInput, ...func(*Options)) (*ListResourceTagsOutput, error)
-}
-
-var _ ListResourceTagsAPIClient = (*Client)(nil)
 
 func newServiceMetadataMiddleware_opListResourceTags(region string) *awsmiddleware.RegisterServiceMetadata {
 	return &awsmiddleware.RegisterServiceMetadata{

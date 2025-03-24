@@ -4,7 +4,6 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"strings"
 )
 
 // File describes changes to a single file. It can be either a text file or a
@@ -39,15 +38,6 @@ type File struct {
 	ReverseBinaryFragment *BinaryFragment
 }
 
-// String returns a git diff representation of this file. The value can be
-// parsed by this library to obtain the same File, but may not be the same as
-// the original input.
-func (f *File) String() string {
-	var diff strings.Builder
-	newFormatter(&diff).FormatFile(f)
-	return diff.String()
-}
-
 // TextFragment describes changed lines starting at a specific line in a text file.
 type TextFragment struct {
 	Comment string
@@ -67,20 +57,9 @@ type TextFragment struct {
 	Lines []Line
 }
 
-// String returns a git diff format of this fragment. See [File.String] for
-// more details on this format.
-func (f *TextFragment) String() string {
-	var diff strings.Builder
-	newFormatter(&diff).FormatTextFragment(f)
-	return diff.String()
-}
-
-// Header returns a git diff header of this fragment. See [File.String] for
-// more details on this format.
+// Header returns the canonical header of this fragment.
 func (f *TextFragment) Header() string {
-	var hdr strings.Builder
-	newFormatter(&hdr).FormatTextFragmentHeader(f)
-	return hdr.String()
+	return fmt.Sprintf("@@ -%d,%d +%d,%d @@ %s", f.OldPosition, f.OldLines, f.NewPosition, f.NewLines, f.Comment)
 }
 
 // Validate checks that the fragment is self-consistent and appliable. Validate
@@ -218,13 +197,3 @@ const (
 	// BinaryPatchLiteral indicates the data is the exact file content
 	BinaryPatchLiteral
 )
-
-// String returns a git diff format of this fragment. Due to differences in
-// zlib implementation between Go and Git, encoded binary data in the result
-// will likely differ from what Git produces for the same input. See
-// [File.String] for more details on this format.
-func (f *BinaryFragment) String() string {
-	var diff strings.Builder
-	newFormatter(&diff).FormatBinaryFragment(f)
-	return diff.String()
-}

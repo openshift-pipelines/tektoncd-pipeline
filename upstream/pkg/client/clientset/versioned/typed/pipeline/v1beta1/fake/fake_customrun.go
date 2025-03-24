@@ -41,24 +41,22 @@ var customrunsKind = v1beta1.SchemeGroupVersion.WithKind("CustomRun")
 
 // Get takes name of the customRun, and returns the corresponding customRun object, and an error if there is any.
 func (c *FakeCustomRuns) Get(ctx context.Context, name string, options v1.GetOptions) (result *v1beta1.CustomRun, err error) {
-	emptyResult := &v1beta1.CustomRun{}
 	obj, err := c.Fake.
-		Invokes(testing.NewGetActionWithOptions(customrunsResource, c.ns, name, options), emptyResult)
+		Invokes(testing.NewGetAction(customrunsResource, c.ns, name), &v1beta1.CustomRun{})
 
 	if obj == nil {
-		return emptyResult, err
+		return nil, err
 	}
 	return obj.(*v1beta1.CustomRun), err
 }
 
 // List takes label and field selectors, and returns the list of CustomRuns that match those selectors.
 func (c *FakeCustomRuns) List(ctx context.Context, opts v1.ListOptions) (result *v1beta1.CustomRunList, err error) {
-	emptyResult := &v1beta1.CustomRunList{}
 	obj, err := c.Fake.
-		Invokes(testing.NewListActionWithOptions(customrunsResource, customrunsKind, c.ns, opts), emptyResult)
+		Invokes(testing.NewListAction(customrunsResource, customrunsKind, c.ns, opts), &v1beta1.CustomRunList{})
 
 	if obj == nil {
-		return emptyResult, err
+		return nil, err
 	}
 
 	label, _, _ := testing.ExtractFromListOptions(opts)
@@ -77,43 +75,40 @@ func (c *FakeCustomRuns) List(ctx context.Context, opts v1.ListOptions) (result 
 // Watch returns a watch.Interface that watches the requested customRuns.
 func (c *FakeCustomRuns) Watch(ctx context.Context, opts v1.ListOptions) (watch.Interface, error) {
 	return c.Fake.
-		InvokesWatch(testing.NewWatchActionWithOptions(customrunsResource, c.ns, opts))
+		InvokesWatch(testing.NewWatchAction(customrunsResource, c.ns, opts))
 
 }
 
 // Create takes the representation of a customRun and creates it.  Returns the server's representation of the customRun, and an error, if there is any.
 func (c *FakeCustomRuns) Create(ctx context.Context, customRun *v1beta1.CustomRun, opts v1.CreateOptions) (result *v1beta1.CustomRun, err error) {
-	emptyResult := &v1beta1.CustomRun{}
 	obj, err := c.Fake.
-		Invokes(testing.NewCreateActionWithOptions(customrunsResource, c.ns, customRun, opts), emptyResult)
+		Invokes(testing.NewCreateAction(customrunsResource, c.ns, customRun), &v1beta1.CustomRun{})
 
 	if obj == nil {
-		return emptyResult, err
+		return nil, err
 	}
 	return obj.(*v1beta1.CustomRun), err
 }
 
 // Update takes the representation of a customRun and updates it. Returns the server's representation of the customRun, and an error, if there is any.
 func (c *FakeCustomRuns) Update(ctx context.Context, customRun *v1beta1.CustomRun, opts v1.UpdateOptions) (result *v1beta1.CustomRun, err error) {
-	emptyResult := &v1beta1.CustomRun{}
 	obj, err := c.Fake.
-		Invokes(testing.NewUpdateActionWithOptions(customrunsResource, c.ns, customRun, opts), emptyResult)
+		Invokes(testing.NewUpdateAction(customrunsResource, c.ns, customRun), &v1beta1.CustomRun{})
 
 	if obj == nil {
-		return emptyResult, err
+		return nil, err
 	}
 	return obj.(*v1beta1.CustomRun), err
 }
 
 // UpdateStatus was generated because the type contains a Status member.
 // Add a +genclient:noStatus comment above the type to avoid generating UpdateStatus().
-func (c *FakeCustomRuns) UpdateStatus(ctx context.Context, customRun *v1beta1.CustomRun, opts v1.UpdateOptions) (result *v1beta1.CustomRun, err error) {
-	emptyResult := &v1beta1.CustomRun{}
+func (c *FakeCustomRuns) UpdateStatus(ctx context.Context, customRun *v1beta1.CustomRun, opts v1.UpdateOptions) (*v1beta1.CustomRun, error) {
 	obj, err := c.Fake.
-		Invokes(testing.NewUpdateSubresourceActionWithOptions(customrunsResource, "status", c.ns, customRun, opts), emptyResult)
+		Invokes(testing.NewUpdateSubresourceAction(customrunsResource, "status", c.ns, customRun), &v1beta1.CustomRun{})
 
 	if obj == nil {
-		return emptyResult, err
+		return nil, err
 	}
 	return obj.(*v1beta1.CustomRun), err
 }
@@ -128,7 +123,7 @@ func (c *FakeCustomRuns) Delete(ctx context.Context, name string, opts v1.Delete
 
 // DeleteCollection deletes a collection of objects.
 func (c *FakeCustomRuns) DeleteCollection(ctx context.Context, opts v1.DeleteOptions, listOpts v1.ListOptions) error {
-	action := testing.NewDeleteCollectionActionWithOptions(customrunsResource, c.ns, opts, listOpts)
+	action := testing.NewDeleteCollectionAction(customrunsResource, c.ns, listOpts)
 
 	_, err := c.Fake.Invokes(action, &v1beta1.CustomRunList{})
 	return err
@@ -136,12 +131,11 @@ func (c *FakeCustomRuns) DeleteCollection(ctx context.Context, opts v1.DeleteOpt
 
 // Patch applies the patch and returns the patched customRun.
 func (c *FakeCustomRuns) Patch(ctx context.Context, name string, pt types.PatchType, data []byte, opts v1.PatchOptions, subresources ...string) (result *v1beta1.CustomRun, err error) {
-	emptyResult := &v1beta1.CustomRun{}
 	obj, err := c.Fake.
-		Invokes(testing.NewPatchSubresourceActionWithOptions(customrunsResource, c.ns, name, pt, data, opts, subresources...), emptyResult)
+		Invokes(testing.NewPatchSubresourceAction(customrunsResource, c.ns, name, pt, data, subresources...), &v1beta1.CustomRun{})
 
 	if obj == nil {
-		return emptyResult, err
+		return nil, err
 	}
 	return obj.(*v1beta1.CustomRun), err
 }

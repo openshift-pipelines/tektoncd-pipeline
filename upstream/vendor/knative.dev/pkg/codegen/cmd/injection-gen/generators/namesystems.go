@@ -19,6 +19,7 @@ package generators
 import (
 	"strings"
 
+	codegennamer "k8s.io/code-generator/pkg/namer"
 	"k8s.io/gengo/namer"
 	"k8s.io/gengo/types"
 )
@@ -46,7 +47,7 @@ func NameSystems() namer.NameSystems {
 		"publicPlural":       publicPluralNamer,
 		"allLowercasePlural": namer.NewAllLowercasePluralNamer(pluralExceptions),
 		"lowercaseSingular":  &lowercaseSingularNamer{},
-		"apiGroup":           newTagOverrideNamer("publicPlural", publicPluralNamer),
+		"apiGroup":           codegennamer.NewTagOverrideNamer("publicPlural", publicPluralNamer),
 		"versionedClientset": &versionedClientsetNamer{public: publicNamer},
 	}
 }

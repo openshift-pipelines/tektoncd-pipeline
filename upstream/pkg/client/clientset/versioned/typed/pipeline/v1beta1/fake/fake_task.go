@@ -41,24 +41,22 @@ var tasksKind = v1beta1.SchemeGroupVersion.WithKind("Task")
 
 // Get takes name of the task, and returns the corresponding task object, and an error if there is any.
 func (c *FakeTasks) Get(ctx context.Context, name string, options v1.GetOptions) (result *v1beta1.Task, err error) {
-	emptyResult := &v1beta1.Task{}
 	obj, err := c.Fake.
-		Invokes(testing.NewGetActionWithOptions(tasksResource, c.ns, name, options), emptyResult)
+		Invokes(testing.NewGetAction(tasksResource, c.ns, name), &v1beta1.Task{})
 
 	if obj == nil {
-		return emptyResult, err
+		return nil, err
 	}
 	return obj.(*v1beta1.Task), err
 }
 
 // List takes label and field selectors, and returns the list of Tasks that match those selectors.
 func (c *FakeTasks) List(ctx context.Context, opts v1.ListOptions) (result *v1beta1.TaskList, err error) {
-	emptyResult := &v1beta1.TaskList{}
 	obj, err := c.Fake.
-		Invokes(testing.NewListActionWithOptions(tasksResource, tasksKind, c.ns, opts), emptyResult)
+		Invokes(testing.NewListAction(tasksResource, tasksKind, c.ns, opts), &v1beta1.TaskList{})
 
 	if obj == nil {
-		return emptyResult, err
+		return nil, err
 	}
 
 	label, _, _ := testing.ExtractFromListOptions(opts)
@@ -77,30 +75,28 @@ func (c *FakeTasks) List(ctx context.Context, opts v1.ListOptions) (result *v1be
 // Watch returns a watch.Interface that watches the requested tasks.
 func (c *FakeTasks) Watch(ctx context.Context, opts v1.ListOptions) (watch.Interface, error) {
 	return c.Fake.
-		InvokesWatch(testing.NewWatchActionWithOptions(tasksResource, c.ns, opts))
+		InvokesWatch(testing.NewWatchAction(tasksResource, c.ns, opts))
 
 }
 
 // Create takes the representation of a task and creates it.  Returns the server's representation of the task, and an error, if there is any.
 func (c *FakeTasks) Create(ctx context.Context, task *v1beta1.Task, opts v1.CreateOptions) (result *v1beta1.Task, err error) {
-	emptyResult := &v1beta1.Task{}
 	obj, err := c.Fake.
-		Invokes(testing.NewCreateActionWithOptions(tasksResource, c.ns, task, opts), emptyResult)
+		Invokes(testing.NewCreateAction(tasksResource, c.ns, task), &v1beta1.Task{})
 
 	if obj == nil {
-		return emptyResult, err
+		return nil, err
 	}
 	return obj.(*v1beta1.Task), err
 }
 
 // Update takes the representation of a task and updates it. Returns the server's representation of the task, and an error, if there is any.
 func (c *FakeTasks) Update(ctx context.Context, task *v1beta1.Task, opts v1.UpdateOptions) (result *v1beta1.Task, err error) {
-	emptyResult := &v1beta1.Task{}
 	obj, err := c.Fake.
-		Invokes(testing.NewUpdateActionWithOptions(tasksResource, c.ns, task, opts), emptyResult)
+		Invokes(testing.NewUpdateAction(tasksResource, c.ns, task), &v1beta1.Task{})
 
 	if obj == nil {
-		return emptyResult, err
+		return nil, err
 	}
 	return obj.(*v1beta1.Task), err
 }
@@ -115,7 +111,7 @@ func (c *FakeTasks) Delete(ctx context.Context, name string, opts v1.DeleteOptio
 
 // DeleteCollection deletes a collection of objects.
 func (c *FakeTasks) DeleteCollection(ctx context.Context, opts v1.DeleteOptions, listOpts v1.ListOptions) error {
-	action := testing.NewDeleteCollectionActionWithOptions(tasksResource, c.ns, opts, listOpts)
+	action := testing.NewDeleteCollectionAction(tasksResource, c.ns, listOpts)
 
 	_, err := c.Fake.Invokes(action, &v1beta1.TaskList{})
 	return err
@@ -123,12 +119,11 @@ func (c *FakeTasks) DeleteCollection(ctx context.Context, opts v1.DeleteOptions,
 
 // Patch applies the patch and returns the patched task.
 func (c *FakeTasks) Patch(ctx context.Context, name string, pt types.PatchType, data []byte, opts v1.PatchOptions, subresources ...string) (result *v1beta1.Task, err error) {
-	emptyResult := &v1beta1.Task{}
 	obj, err := c.Fake.
-		Invokes(testing.NewPatchSubresourceActionWithOptions(tasksResource, c.ns, name, pt, data, opts, subresources...), emptyResult)
+		Invokes(testing.NewPatchSubresourceAction(tasksResource, c.ns, name, pt, data, subresources...), &v1beta1.Task{})
 
 	if obj == nil {
-		return emptyResult, err
+		return nil, err
 	}
 	return obj.(*v1beta1.Task), err
 }

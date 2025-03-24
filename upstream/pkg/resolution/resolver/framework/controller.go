@@ -173,9 +173,16 @@ func LeaderAwareFuncs(lister rrlister.ResolutionRequestLister) reconciler.Leader
 	}
 }
 
-// ErrMissingTypeSelector is returned when a resolver does not return
-// a selector with a type label from its GetSelector method.
-var ErrMissingTypeSelector = fmt.Errorf("invalid resolver: minimum selector must include %q", common.LabelKeyResolverType)
+var (
+	// ErrMissingTypeSelector is returned when a resolver does not return
+	// a selector with a type label from its GetSelector method.
+	ErrMissingTypeSelector = fmt.Errorf("invalid resolver: minimum selector must include %q", common.LabelKeyResolverType)
+
+	// ErrorMissingTypeSelector is an alias to ErrMissingTypeSelector
+	//
+	// Deprecated: use ErrMissingTypeSelector instead.
+	ErrorMissingTypeSelector = ErrMissingTypeSelector
+)
 
 func ValidateResolver(ctx context.Context, sel map[string]string) error {
 	if sel == nil {

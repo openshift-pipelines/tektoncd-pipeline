@@ -158,10 +158,6 @@ func (s *pullService) UnrequestReview(ctx context.Context, repo string, number i
 	return res, nil
 }
 
-func (s *pullService) DeletePullRequest(ctx context.Context, repo string, prID int) (*scm.Response, error) {
-	return nil, scm.ErrNotSupported
-}
-
 func prepareReviewersBody(logins []string, org string) (prReviewers, error) {
 	body := prReviewers{}
 	var errors []error

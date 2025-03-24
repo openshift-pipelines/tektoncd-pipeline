@@ -17,8 +17,6 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/tektoncd/pipeline/pkg/pod"
-
 	"github.com/tektoncd/pipeline/pkg/apis/config"
 )
 
@@ -59,6 +57,6 @@ func GetAffinityAssistantBehavior(ctx context.Context) (AffinityAssistantBehavio
 
 // ContainerConfig defines AffinityAssistant container configuration
 type ContainerConfig struct {
-	Image                 string
-	SecurityContextConfig pod.SecurityContextConfig
+	Image              string
+	SetSecurityContext bool
 }

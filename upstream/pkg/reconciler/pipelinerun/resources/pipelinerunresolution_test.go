@@ -1079,7 +1079,8 @@ func TestIsSkipped(t *testing.T) {
 				TaskSpec: &task.Spec,
 			},
 		}, {
-			// not skipped because of parent task mytask22 was skipping because when condition
+			// skipped because of parent task mytask22 was skipping because of missing result from grandparent task
+			// mytask11 which was skipped
 			PipelineTask: &v1.PipelineTask{
 				Name:     "mytask23",
 				TaskRef:  &v1.TaskRef{Name: "task"},
@@ -1098,7 +1099,7 @@ func TestIsSkipped(t *testing.T) {
 			"mytask20": true,
 			"mytask21": true,
 			"mytask22": true,
-			"mytask23": false,
+			"mytask23": true,
 		},
 	}, {
 		name:         "pipeline-tasks-timeout-not-reached",

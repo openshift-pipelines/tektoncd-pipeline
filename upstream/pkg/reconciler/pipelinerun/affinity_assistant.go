@@ -140,18 +140,12 @@ func (c *Reconciler) createOrUpdateAffinityAssistant(ctx context.Context, affini
 		if err != nil {
 			return []error{err}
 		}
-
-		securityContextConfig := pipelinePod.SecurityContextConfig{
-			SetSecurityContext:        cfg.FeatureFlags.SetSecurityContext,
-			SetReadOnlyRootFilesystem: cfg.FeatureFlags.SetSecurityContextReadOnlyRootFilesystem,
+		affinityAssistantContainerConfig := aa.ContainerConfig{
+			Image:              c.Images.NopImage,
+			SetSecurityContext: cfg.FeatureFlags.SetSecurityContext,
 		}
 
-		containerConfig := aa.ContainerConfig{
-			Image:                 c.Images.NopImage,
-			SecurityContextConfig: securityContextConfig,
-		}
-
-		affinityAssistantStatefulSet := affinityAssistantStatefulSet(aaBehavior, affinityAssistantName, pr, claimTemplates, claimNames, containerConfig, cfg.Defaults.DefaultAAPodTemplate)
+		affinityAssistantStatefulSet := affinityAssistantStatefulSet(aaBehavior, affinityAssistantName, pr, claimTemplates, claimNames, affinityAssistantContainerConfig, cfg.Defaults.DefaultAAPodTemplate)
 		_, err = c.KubeClientSet.AppsV1().StatefulSets(pr.Namespace).Create(ctx, affinityAssistantStatefulSet, metav1.CreateOptions{})
 		if err != nil {
 			errs = append(errs, fmt.Errorf("failed to create StatefulSet %s: %w", affinityAssistantName, err))
@@ -309,9 +303,12 @@ func affinityAssistantStatefulSet(aaBehavior aa.AffinityAssistantBehavior, name 
 	}
 
 	securityContext := &corev1.SecurityContext{}
-	if containerConfig.SecurityContextConfig.SetSecurityContext {
-		isWindows := tpl.NodeSelector[pipelinePod.OsSelectorLabel] == "windows"
-		securityContext = containerConfig.SecurityContextConfig.GetSecurityContext(isWindows)
+	if containerConfig.SetSecurityContext {
+		securityContext = pipelinePod.LinuxSecurityContext
+
+		if tpl.NodeSelector[pipelinePod.OsSelectorLabel] == "windows" {
+			securityContext = pipelinePod.WindowsSecurityContext
+		}
 	}
 
 	var priorityClassName string
@@ -337,8 +334,8 @@ func affinityAssistantStatefulSet(aaBehavior aa.AffinityAssistantBehavior, name 
 				"memory": resource.MustParse("100Mi"),
 			},
 		},
-		VolumeMounts:    mounts,
 		SecurityContext: securityContext,
+		VolumeMounts:    mounts,
 	}}
 
 	var volumes []corev1.Volume
