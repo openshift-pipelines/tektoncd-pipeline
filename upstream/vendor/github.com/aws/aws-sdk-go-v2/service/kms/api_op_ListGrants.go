@@ -172,9 +172,6 @@ func (c *Client) addOperationListGrantsMiddlewares(stack *middleware.Stack, opti
 	if err = addRecordResponseTiming(stack); err != nil {
 		return err
 	}
-	if err = addSpanRetryLoop(stack, options); err != nil {
-		return err
-	}
 	if err = addClientUserAgent(stack, options); err != nil {
 		return err
 	}
@@ -185,12 +182,6 @@ func (c *Client) addOperationListGrantsMiddlewares(stack *middleware.Stack, opti
 		return err
 	}
 	if err = addSetLegacyContextSigningOptionsMiddleware(stack); err != nil {
-		return err
-	}
-	if err = addTimeOffsetBuild(stack, c); err != nil {
-		return err
-	}
-	if err = addUserAgentRetryMode(stack, options); err != nil {
 		return err
 	}
 	if err = addOpListGrantsValidationMiddleware(stack); err != nil {
@@ -214,20 +205,15 @@ func (c *Client) addOperationListGrantsMiddlewares(stack *middleware.Stack, opti
 	if err = addDisableHTTPSMiddleware(stack, options); err != nil {
 		return err
 	}
-	if err = addSpanInitializeStart(stack); err != nil {
-		return err
-	}
-	if err = addSpanInitializeEnd(stack); err != nil {
-		return err
-	}
-	if err = addSpanBuildRequestStart(stack); err != nil {
-		return err
-	}
-	if err = addSpanBuildRequestEnd(stack); err != nil {
-		return err
-	}
 	return nil
 }
+
+// ListGrantsAPIClient is a client that implements the ListGrants operation.
+type ListGrantsAPIClient interface {
+	ListGrants(context.Context, *ListGrantsInput, ...func(*Options)) (*ListGrantsOutput, error)
+}
+
+var _ ListGrantsAPIClient = (*Client)(nil)
 
 // ListGrantsPaginatorOptions is the paginator options for ListGrants
 type ListGrantsPaginatorOptions struct {
@@ -297,9 +283,6 @@ func (p *ListGrantsPaginator) NextPage(ctx context.Context, optFns ...func(*Opti
 	}
 	params.Limit = limit
 
-	optFns = append([]func(*Options){
-		addIsPaginatorUserAgent,
-	}, optFns...)
 	result, err := p.client.ListGrants(ctx, &params, optFns...)
 	if err != nil {
 		return nil, err
@@ -318,13 +301,6 @@ func (p *ListGrantsPaginator) NextPage(ctx context.Context, optFns ...func(*Opti
 
 	return result, nil
 }
-
-// ListGrantsAPIClient is a client that implements the ListGrants operation.
-type ListGrantsAPIClient interface {
-	ListGrants(context.Context, *ListGrantsInput, ...func(*Options)) (*ListGrantsOutput, error)
-}
-
-var _ ListGrantsAPIClient = (*Client)(nil)
 
 func newServiceMetadataMiddleware_opListGrants(region string) *awsmiddleware.RegisterServiceMetadata {
 	return &awsmiddleware.RegisterServiceMetadata{

@@ -17,7 +17,7 @@ limitations under the License.
 package args
 
 import (
-	"errors"
+	"fmt"
 
 	"github.com/spf13/pflag"
 	"k8s.io/gengo/args"
@@ -59,13 +59,13 @@ func Validate(genericArgs *args.GeneratorArgs) error {
 	customArgs := genericArgs.CustomArgs.(*CustomArgs)
 
 	if len(genericArgs.OutputPackagePath) == 0 {
-		return errors.New("output package cannot be empty")
+		return fmt.Errorf("output package cannot be empty")
 	}
 	if len(customArgs.VersionedClientSetPackage) == 0 {
-		return errors.New("versioned clientset package cannot be empty")
+		return fmt.Errorf("versioned clientset package cannot be empty")
 	}
 	if len(customArgs.ExternalVersionsInformersPackage) == 0 {
-		return errors.New("external versions informers package cannot be empty")
+		return fmt.Errorf("external versions informers package cannot be empty")
 	}
 
 	return nil

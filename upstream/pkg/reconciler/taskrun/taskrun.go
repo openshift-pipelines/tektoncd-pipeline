@@ -22,6 +22,7 @@ import (
 	"fmt"
 	"reflect"
 	"slices"
+	"strconv"
 	"strings"
 	"time"
 
@@ -152,6 +153,10 @@ func (c *Reconciler) ReconcileKind(ctx context.Context, tr *v1.TaskRun) pkgrecon
 		// and may not have had all of the assumed default specified.
 		tr.SetDefaults(ctx)
 
+		// Check if current k8s version is less than 1.29
+		// Since Kubernetes Major version cannot be 0 and if it's 2 then sidecar will be in
+		// we are only concerned about major version 1 and if the minor is less than 29 then
+		// we need to do the current logic
 		useTektonSidecar := true
 		if config.FromContextOrDefaults(ctx).FeatureFlags.EnableKubernetesSidecar {
 			dc := c.KubeClientSet.Discovery()
@@ -159,7 +164,9 @@ func (c *Reconciler) ReconcileKind(ctx context.Context, tr *v1.TaskRun) pkgrecon
 			if err != nil {
 				return err
 			}
-			if podconvert.IsNativeSidecarSupport(sv) {
+			svMajorInt, _ := strconv.Atoi(sv.Major)
+			svMinorInt, _ := strconv.Atoi(sv.Minor)
+			if svMajorInt >= 1 && svMinorInt >= 29 {
 				useTektonSidecar = false
 				logger.Infof("Using Kubernetes Native Sidecars \n")
 			}

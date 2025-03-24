@@ -19,6 +19,8 @@ weight: 201
   - [Referencing a StepAction](#referencing-a-stepaction)
     - [Specifying Remote StepActions](#specifying-remote-stepactions)
   - [Controlling Step Execution with when Expressions](#controlling-step-execution-with-when-expressions)
+- [Known Limitations](#known-limitations)
+  - [Cannot pass Step Results between Steps](#cannot-pass-step-results-between-steps)
 
 ## Overview
 > :seedling: **`StepActions` is an [beta](additional-configs.md#beta-features) feature.**
@@ -135,22 +137,6 @@ spec:
 ```
 
 **Note:** If a `Step` declares `params` for an `inlined Step`, it will also lead to a validation error. This is because an `inlined Step` gets its `params` from the `TaskRun`.
-
-#### Parameter Substitution Precedence
-
-When applying parameters to a StepAction, the substitutions are applied in the following order:
-
-1. TaskRun parameter values in step parameters
-2. Step-provided parameter values 
-3. Default values that reference other parameters
-4. Simple default values
-5. Step result references
-
-This order ensures that:
-- TaskRun parameters are available for step parameter substitution
-- Step-provided values take precedence over defaults
-- Parameter references in defaults are resolved before simple defaults
-- Step result references are resolved last to allow referencing results from previous steps
 
 ### Emitting Results
 

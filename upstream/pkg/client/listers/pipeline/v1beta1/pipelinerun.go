@@ -20,8 +20,8 @@ package v1beta1
 
 import (
 	v1beta1 "github.com/tektoncd/pipeline/pkg/apis/pipeline/v1beta1"
+	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/labels"
-	"k8s.io/client-go/listers"
 	"k8s.io/client-go/tools/cache"
 )
 
@@ -38,17 +38,25 @@ type PipelineRunLister interface {
 
 // pipelineRunLister implements the PipelineRunLister interface.
 type pipelineRunLister struct {
-	listers.ResourceIndexer[*v1beta1.PipelineRun]
+	indexer cache.Indexer
 }
 
 // NewPipelineRunLister returns a new PipelineRunLister.
 func NewPipelineRunLister(indexer cache.Indexer) PipelineRunLister {
-	return &pipelineRunLister{listers.New[*v1beta1.PipelineRun](indexer, v1beta1.Resource("pipelinerun"))}
+	return &pipelineRunLister{indexer: indexer}
+}
+
+// List lists all PipelineRuns in the indexer.
+func (s *pipelineRunLister) List(selector labels.Selector) (ret []*v1beta1.PipelineRun, err error) {
+	err = cache.ListAll(s.indexer, selector, func(m interface{}) {
+		ret = append(ret, m.(*v1beta1.PipelineRun))
+	})
+	return ret, err
 }
 
 // PipelineRuns returns an object that can list and get PipelineRuns.
 func (s *pipelineRunLister) PipelineRuns(namespace string) PipelineRunNamespaceLister {
-	return pipelineRunNamespaceLister{listers.NewNamespaced[*v1beta1.PipelineRun](s.ResourceIndexer, namespace)}
+	return pipelineRunNamespaceLister{indexer: s.indexer, namespace: namespace}
 }
 
 // PipelineRunNamespaceLister helps list and get PipelineRuns.
@@ -66,5 +74,26 @@ type PipelineRunNamespaceLister interface {
 // pipelineRunNamespaceLister implements the PipelineRunNamespaceLister
 // interface.
 type pipelineRunNamespaceLister struct {
-	listers.ResourceIndexer[*v1beta1.PipelineRun]
+	indexer   cache.Indexer
+	namespace string
+}
+
+// List lists all PipelineRuns in the indexer for a given namespace.
+func (s pipelineRunNamespaceLister) List(selector labels.Selector) (ret []*v1beta1.PipelineRun, err error) {
+	err = cache.ListAllByNamespace(s.indexer, s.namespace, selector, func(m interface{}) {
+		ret = append(ret, m.(*v1beta1.PipelineRun))
+	})
+	return ret, err
+}
+
+// Get retrieves the PipelineRun from the indexer for a given namespace and name.
+func (s pipelineRunNamespaceLister) Get(name string) (*v1beta1.PipelineRun, error) {
+	obj, exists, err := s.indexer.GetByKey(s.namespace + "/" + name)
+	if err != nil {
+		return nil, err
+	}
+	if !exists {
+		return nil, errors.NewNotFound(v1beta1.Resource("pipelinerun"), name)
+	}
+	return obj.(*v1beta1.PipelineRun), nil
 }

@@ -63,6 +63,3 @@ docs/pipeline-api.md.backup
 
 # Ignore .env files
 /.env
-
-# Ignore generated kind.yaml
-kind.yaml

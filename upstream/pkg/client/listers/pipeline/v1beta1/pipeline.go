@@ -20,8 +20,8 @@ package v1beta1
 
 import (
 	v1beta1 "github.com/tektoncd/pipeline/pkg/apis/pipeline/v1beta1"
+	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/labels"
-	"k8s.io/client-go/listers"
 	"k8s.io/client-go/tools/cache"
 )
 
@@ -38,17 +38,25 @@ type PipelineLister interface {
 
 // pipelineLister implements the PipelineLister interface.
 type pipelineLister struct {
-	listers.ResourceIndexer[*v1beta1.Pipeline]
+	indexer cache.Indexer
 }
 
 // NewPipelineLister returns a new PipelineLister.
 func NewPipelineLister(indexer cache.Indexer) PipelineLister {
-	return &pipelineLister{listers.New[*v1beta1.Pipeline](indexer, v1beta1.Resource("pipeline"))}
+	return &pipelineLister{indexer: indexer}
+}
+
+// List lists all Pipelines in the indexer.
+func (s *pipelineLister) List(selector labels.Selector) (ret []*v1beta1.Pipeline, err error) {
+	err = cache.ListAll(s.indexer, selector, func(m interface{}) {
+		ret = append(ret, m.(*v1beta1.Pipeline))
+	})
+	return ret, err
 }
 
 // Pipelines returns an object that can list and get Pipelines.
 func (s *pipelineLister) Pipelines(namespace string) PipelineNamespaceLister {
-	return pipelineNamespaceLister{listers.NewNamespaced[*v1beta1.Pipeline](s.ResourceIndexer, namespace)}
+	return pipelineNamespaceLister{indexer: s.indexer, namespace: namespace}
 }
 
 // PipelineNamespaceLister helps list and get Pipelines.
@@ -66,5 +74,26 @@ type PipelineNamespaceLister interface {
 // pipelineNamespaceLister implements the PipelineNamespaceLister
 // interface.
 type pipelineNamespaceLister struct {
-	listers.ResourceIndexer[*v1beta1.Pipeline]
+	indexer   cache.Indexer
+	namespace string
+}
+
+// List lists all Pipelines in the indexer for a given namespace.
+func (s pipelineNamespaceLister) List(selector labels.Selector) (ret []*v1beta1.Pipeline, err error) {
+	err = cache.ListAllByNamespace(s.indexer, s.namespace, selector, func(m interface{}) {
+		ret = append(ret, m.(*v1beta1.Pipeline))
+	})
+	return ret, err
+}
+
+// Get retrieves the Pipeline from the indexer for a given namespace and name.
+func (s pipelineNamespaceLister) Get(name string) (*v1beta1.Pipeline, error) {
+	obj, exists, err := s.indexer.GetByKey(s.namespace + "/" + name)
+	if err != nil {
+		return nil, err
+	}
+	if !exists {
+		return nil, errors.NewNotFound(v1beta1.Resource("pipeline"), name)
+	}
+	return obj.(*v1beta1.Pipeline), nil
 }

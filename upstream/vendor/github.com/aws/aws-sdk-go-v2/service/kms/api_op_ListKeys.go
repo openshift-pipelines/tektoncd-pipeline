@@ -131,9 +131,6 @@ func (c *Client) addOperationListKeysMiddlewares(stack *middleware.Stack, option
 	if err = addRecordResponseTiming(stack); err != nil {
 		return err
 	}
-	if err = addSpanRetryLoop(stack, options); err != nil {
-		return err
-	}
 	if err = addClientUserAgent(stack, options); err != nil {
 		return err
 	}
@@ -144,12 +141,6 @@ func (c *Client) addOperationListKeysMiddlewares(stack *middleware.Stack, option
 		return err
 	}
 	if err = addSetLegacyContextSigningOptionsMiddleware(stack); err != nil {
-		return err
-	}
-	if err = addTimeOffsetBuild(stack, c); err != nil {
-		return err
-	}
-	if err = addUserAgentRetryMode(stack, options); err != nil {
 		return err
 	}
 	if err = stack.Initialize.Add(newServiceMetadataMiddleware_opListKeys(options.Region), middleware.Before); err != nil {
@@ -170,20 +161,15 @@ func (c *Client) addOperationListKeysMiddlewares(stack *middleware.Stack, option
 	if err = addDisableHTTPSMiddleware(stack, options); err != nil {
 		return err
 	}
-	if err = addSpanInitializeStart(stack); err != nil {
-		return err
-	}
-	if err = addSpanInitializeEnd(stack); err != nil {
-		return err
-	}
-	if err = addSpanBuildRequestStart(stack); err != nil {
-		return err
-	}
-	if err = addSpanBuildRequestEnd(stack); err != nil {
-		return err
-	}
 	return nil
 }
+
+// ListKeysAPIClient is a client that implements the ListKeys operation.
+type ListKeysAPIClient interface {
+	ListKeys(context.Context, *ListKeysInput, ...func(*Options)) (*ListKeysOutput, error)
+}
+
+var _ ListKeysAPIClient = (*Client)(nil)
 
 // ListKeysPaginatorOptions is the paginator options for ListKeys
 type ListKeysPaginatorOptions struct {
@@ -253,9 +239,6 @@ func (p *ListKeysPaginator) NextPage(ctx context.Context, optFns ...func(*Option
 	}
 	params.Limit = limit
 
-	optFns = append([]func(*Options){
-		addIsPaginatorUserAgent,
-	}, optFns...)
 	result, err := p.client.ListKeys(ctx, &params, optFns...)
 	if err != nil {
 		return nil, err
@@ -274,13 +257,6 @@ func (p *ListKeysPaginator) NextPage(ctx context.Context, optFns ...func(*Option
 
 	return result, nil
 }
-
-// ListKeysAPIClient is a client that implements the ListKeys operation.
-type ListKeysAPIClient interface {
-	ListKeys(context.Context, *ListKeysInput, ...func(*Options)) (*ListKeysOutput, error)
-}
-
-var _ ListKeysAPIClient = (*Client)(nil)
 
 func newServiceMetadataMiddleware_opListKeys(region string) *awsmiddleware.RegisterServiceMetadata {
 	return &awsmiddleware.RegisterServiceMetadata{

@@ -41,24 +41,22 @@ var stepactionsKind = v1alpha1.SchemeGroupVersion.WithKind("StepAction")
 
 // Get takes name of the stepAction, and returns the corresponding stepAction object, and an error if there is any.
 func (c *FakeStepActions) Get(ctx context.Context, name string, options v1.GetOptions) (result *v1alpha1.StepAction, err error) {
-	emptyResult := &v1alpha1.StepAction{}
 	obj, err := c.Fake.
-		Invokes(testing.NewGetActionWithOptions(stepactionsResource, c.ns, name, options), emptyResult)
+		Invokes(testing.NewGetAction(stepactionsResource, c.ns, name), &v1alpha1.StepAction{})
 
 	if obj == nil {
-		return emptyResult, err
+		return nil, err
 	}
 	return obj.(*v1alpha1.StepAction), err
 }
 
 // List takes label and field selectors, and returns the list of StepActions that match those selectors.
 func (c *FakeStepActions) List(ctx context.Context, opts v1.ListOptions) (result *v1alpha1.StepActionList, err error) {
-	emptyResult := &v1alpha1.StepActionList{}
 	obj, err := c.Fake.
-		Invokes(testing.NewListActionWithOptions(stepactionsResource, stepactionsKind, c.ns, opts), emptyResult)
+		Invokes(testing.NewListAction(stepactionsResource, stepactionsKind, c.ns, opts), &v1alpha1.StepActionList{})
 
 	if obj == nil {
-		return emptyResult, err
+		return nil, err
 	}
 
 	label, _, _ := testing.ExtractFromListOptions(opts)
@@ -77,30 +75,28 @@ func (c *FakeStepActions) List(ctx context.Context, opts v1.ListOptions) (result
 // Watch returns a watch.Interface that watches the requested stepActions.
 func (c *FakeStepActions) Watch(ctx context.Context, opts v1.ListOptions) (watch.Interface, error) {
 	return c.Fake.
-		InvokesWatch(testing.NewWatchActionWithOptions(stepactionsResource, c.ns, opts))
+		InvokesWatch(testing.NewWatchAction(stepactionsResource, c.ns, opts))
 
 }
 
 // Create takes the representation of a stepAction and creates it.  Returns the server's representation of the stepAction, and an error, if there is any.
 func (c *FakeStepActions) Create(ctx context.Context, stepAction *v1alpha1.StepAction, opts v1.CreateOptions) (result *v1alpha1.StepAction, err error) {
-	emptyResult := &v1alpha1.StepAction{}
 	obj, err := c.Fake.
-		Invokes(testing.NewCreateActionWithOptions(stepactionsResource, c.ns, stepAction, opts), emptyResult)
+		Invokes(testing.NewCreateAction(stepactionsResource, c.ns, stepAction), &v1alpha1.StepAction{})
 
 	if obj == nil {
-		return emptyResult, err
+		return nil, err
 	}
 	return obj.(*v1alpha1.StepAction), err
 }
 
 // Update takes the representation of a stepAction and updates it. Returns the server's representation of the stepAction, and an error, if there is any.
 func (c *FakeStepActions) Update(ctx context.Context, stepAction *v1alpha1.StepAction, opts v1.UpdateOptions) (result *v1alpha1.StepAction, err error) {
-	emptyResult := &v1alpha1.StepAction{}
 	obj, err := c.Fake.
-		Invokes(testing.NewUpdateActionWithOptions(stepactionsResource, c.ns, stepAction, opts), emptyResult)
+		Invokes(testing.NewUpdateAction(stepactionsResource, c.ns, stepAction), &v1alpha1.StepAction{})
 
 	if obj == nil {
-		return emptyResult, err
+		return nil, err
 	}
 	return obj.(*v1alpha1.StepAction), err
 }
@@ -115,7 +111,7 @@ func (c *FakeStepActions) Delete(ctx context.Context, name string, opts v1.Delet
 
 // DeleteCollection deletes a collection of objects.
 func (c *FakeStepActions) DeleteCollection(ctx context.Context, opts v1.DeleteOptions, listOpts v1.ListOptions) error {
-	action := testing.NewDeleteCollectionActionWithOptions(stepactionsResource, c.ns, opts, listOpts)
+	action := testing.NewDeleteCollectionAction(stepactionsResource, c.ns, listOpts)
 
 	_, err := c.Fake.Invokes(action, &v1alpha1.StepActionList{})
 	return err
@@ -123,12 +119,11 @@ func (c *FakeStepActions) DeleteCollection(ctx context.Context, opts v1.DeleteOp
 
 // Patch applies the patch and returns the patched stepAction.
 func (c *FakeStepActions) Patch(ctx context.Context, name string, pt types.PatchType, data []byte, opts v1.PatchOptions, subresources ...string) (result *v1alpha1.StepAction, err error) {
-	emptyResult := &v1alpha1.StepAction{}
 	obj, err := c.Fake.
-		Invokes(testing.NewPatchSubresourceActionWithOptions(stepactionsResource, c.ns, name, pt, data, opts, subresources...), emptyResult)
+		Invokes(testing.NewPatchSubresourceAction(stepactionsResource, c.ns, name, pt, data, subresources...), &v1alpha1.StepAction{})
 
 	if obj == nil {
-		return emptyResult, err
+		return nil, err
 	}
 	return obj.(*v1alpha1.StepAction), err
 }

@@ -40,16 +40,8 @@ func (l *fsLoader) Load(ep *transport.Endpoint) (storer.Storer, error) {
 		return nil, err
 	}
 
-	var bare bool
-	if _, err := fs.Stat("config"); err == nil {
-		bare = true
-	}
-
-	if !bare {
-		// do not use git.GitDirName due to import cycle
-		if _, err := fs.Stat(".git"); err != nil {
-			return nil, transport.ErrRepositoryNotFound
-		}
+	if _, err := fs.Stat("config"); err != nil {
+		return nil, transport.ErrRepositoryNotFound
 	}
 
 	return filesystem.NewStorage(fs, cache.NewObjectLRUDefault()), nil

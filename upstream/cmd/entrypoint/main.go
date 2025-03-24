@@ -28,14 +28,17 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/containerd/containerd/platforms"
 	"github.com/tektoncd/pipeline/cmd/entrypoint/subcommands"
+	featureFlags "github.com/tektoncd/pipeline/pkg/apis/config"
 	"github.com/tektoncd/pipeline/pkg/apis/pipeline"
 	v1 "github.com/tektoncd/pipeline/pkg/apis/pipeline/v1"
 	"github.com/tektoncd/pipeline/pkg/credentials"
 	"github.com/tektoncd/pipeline/pkg/credentials/dockercreds"
 	"github.com/tektoncd/pipeline/pkg/credentials/gitcreds"
 	"github.com/tektoncd/pipeline/pkg/entrypoint"
-	"github.com/tektoncd/pipeline/pkg/platforms"
+	"github.com/tektoncd/pipeline/pkg/spire"
+	"github.com/tektoncd/pipeline/pkg/spire/config"
 	"github.com/tektoncd/pipeline/pkg/termination"
 )
 
@@ -56,12 +59,13 @@ var (
 	onError             = flag.String("on_error", "", "Set to \"continue\" to ignore an error and continue when a container terminates with a non-zero exit code."+
 		" Set to \"stopAndFail\" to declare a failure with a step error and stop executing the rest of the steps.")
 	stepMetadataDir        = flag.String("step_metadata_dir", "", "If specified, create directory to store the step metadata e.g. /tekton/steps/<step-name>/")
-	resultExtractionMethod = flag.String("result_from", entrypoint.ResultExtractionMethodTerminationMessage, "The method using which to extract results from tasks. Default is using the termination message.")
+	enableSpire            = flag.Bool("enable_spire", false, "If specified by configmap, this enables spire signing and verification")
+	socketPath             = flag.String("spire_socket_path", "unix:///spiffe-workload-api/spire-agent.sock", "Experimental: The SPIRE agent socket for SPIFFE workload API.")
+	resultExtractionMethod = flag.String("result_from", featureFlags.ResultExtractionMethodTerminationMessage, "The method using which to extract results from tasks. Default is using the termination message.")
 )
 
 const (
 	defaultWaitPollingInterval = time.Second
-	TektonPlatformCommandsEnv  = "TEKTON_PLATFORM_COMMANDS"
 )
 
 func main() {
@@ -103,7 +107,7 @@ func main() {
 	if *ep != "" {
 		cmd = []string{*ep}
 	} else {
-		env := os.Getenv(TektonPlatformCommandsEnv)
+		env := os.Getenv("TEKTON_PLATFORM_COMMANDS")
 		var cmds map[string][]string
 		if err := json.Unmarshal([]byte(env), &cmds); err != nil {
 			log.Fatal(err)
@@ -112,7 +116,7 @@ func main() {
 		// It doesn't include osversion, which is necessary to
 		// disambiguate two images both for e.g., Windows, that only
 		// differ by osversion.
-		plat := platforms.NewPlatform().Format()
+		plat := platforms.DefaultString()
 		var err error
 		cmd, err = selectCommandForPlatform(cmds, plat)
 		if err != nil {
@@ -126,7 +130,13 @@ func main() {
 		}
 	}
 
-	spireWorkloadAPI := initializeSpireAPI()
+	var spireWorkloadAPI spire.EntrypointerAPIClient
+	if enableSpire != nil && *enableSpire && socketPath != nil && *socketPath != "" {
+		spireConfig := config.SpireConfig{
+			SocketPath: *socketPath,
+		}
+		spireWorkloadAPI = spire.NewEntrypointerAPIClient(&spireConfig)
+	}
 
 	e := entrypoint.Entrypointer{
 		Command:         append(cmd, commandArgs...),
