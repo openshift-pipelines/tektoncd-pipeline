@@ -16,7 +16,7 @@ spec:
     optional: true
   - name: launch
   steps:
-  - image: mirror.gcr.io/node:lts-alpine3.20
+  - image: node:lts-alpine3.11
     script: |
       #!/usr/bin/env sh
       if [ $(workspaces.prelaunch.bound) == "true" ] ; then
@@ -40,7 +40,7 @@ spec:
   - name: values
     type: array
   steps:
-  - image: mirror.gcr.io/alpine
+  - image: alpine
     command: ["echo"]
     args: ["$(params.values[*])"]
 ---

@@ -369,45 +369,6 @@ any resolved `param` value against the `enum` specified in each `PipelineTask` b
 
 See usage in this [example](../examples/v1/pipelineruns/alpha/param-enum.yaml)
 
-#### Propagated Params
-
-Like with embedded [pipelineruns](pipelineruns.md#propagated-parameters), you can propagate `params` declared in the `pipeline` down to the inlined `pipelineTasks` and its inlined `Steps`. Wherever a resource (e.g. a `pipelineTask`) or a `StepAction` is referenced, the parameters need to be passed explicitly. 
-
-For example, the following is a valid yaml.
-
-```yaml
-apiVersion: tekton.dev/v1 # or tekton.dev/v1beta1
-kind: Pipeline
-metadata:
-  name: pipelien-propagated-params
-spec:
-  params:
-    - name: HELLO
-      default: "Hello World!"
-    - name: BYE
-      default: "Bye World!"
-  tasks:
-    - name: echo-hello
-      taskSpec:
-        steps:
-          - name: echo
-            image: ubuntu
-            script: |
-              #!/usr/bin/env bash
-              echo "$(params.HELLO)"
-    - name: echo-bye
-      taskSpec:
-        steps:
-          - name: echo-action
-            ref:
-              name: step-action-echo
-            params:
-              - name: msg
-                value: "$(params.BYE)" 
-```
-The same rules defined in [pipelineruns](pipelineruns.md#propagated-parameters) apply here.
-
-
 ## Adding `Tasks` to the `Pipeline`
 
  Your `Pipeline` definition must reference at least one [`Task`](tasks.md).
@@ -624,24 +585,45 @@ There is currently a hard limit of 20 objects in a bundle.
 
 You can reference a `Tekton bundle` in a `TaskRef` in both `v1` and `v1beta1` using [remote resolution](./bundle-resolver.md#pipeline-resolution). The example syntax shown below for `v1` uses remote resolution and requires enabling [beta features](./additional-configs.md#beta-features).
 
+In `v1beta1`, you can also reference a `Tekton bundle` using OCI bundle syntax, which has been deprecated in favor of remote resolution. The example shown below for `v1beta1` uses OCI bundle syntax, and requires enabling `enable-tekton-oci-bundles: "true"` feature flag.
+
+
+{{< tabs >}}
+{{% tab "v1 & v1beta1" %}}
+```yaml
+spec:
+  taskRef:
+    resolver: bundles
+    params:
+    - name: bundle
+      value: docker.io/myrepo/mycatalog
+    - name: name
+      value: echo-task
+    - name: kind
+      value: Task
+```
+{{% /tab %}}
+
+{{% tab "v1beta1" %}}
 ```yaml
 spec:
   tasks:
     - name: hello-world
       taskRef:
-        resolver: bundles
-        params:
-        - name: bundle
-          value: docker.io/myrepo/mycatalog
-        - name: name
-          value: echo-task
-        - name: kind
-          value: Task
+        name: echo-task
+        bundle: docker.com/myrepo/mycatalog
 ```
+{{% /tab %}}
+{{< /tabs >}}
+
+Here, the `bundle` field is the full reference url to the artifact. The name is the
+`metadata.name` field of the `Task`.
 
 You may also specify a `tag` as you would with a Docker image which will give you a fixed,
 repeatable reference to a `Task`.
 
+{{< tabs >}}
+{{% tab "v1 & v1beta1" %}}
 ```yaml
 spec:
   taskRef:
@@ -654,9 +636,24 @@ spec:
     - name: kind
       value: Task
 ```
+{{% /tab %}}
+
+{{% tab "v1beta1" %}}
+```yaml
+spec:
+  tasks:
+    - name: hello-world
+      taskRef:
+        name: echo-task
+        bundle: docker.com/myrepo/mycatalog:v1.0.1
+```
+{{% /tab %}}
+{{< /tabs >}}
 
 You may also specify a fixed digest instead of a tag.
 
+{{< tabs >}}
+{{% tab "v1 & v1beta1" %}}
 ```yaml
 spec:
   taskRef:
@@ -669,6 +666,19 @@ spec:
     - name: kind
       value: Task
 ```
+{{% /tab %}}
+
+{{% tab "v1beta1" %}}
+```yaml
+spec:
+  tasks:
+    - name: hello-world
+      taskRef:
+        name: echo-task
+        bundle: docker.io/myrepo/mycatalog@sha256:abc123
+```
+{{% /tab %}}
+{{< /tabs >}}
 
 Any of the above options will fetch the image using the `ImagePullSecrets` attached to the
 `ServiceAccount` specified in the `PipelineRun`.
@@ -740,6 +750,8 @@ tasks:
 ```
 
 ### Using the `onError` field
+
+> :seedling: **Specifying `onError` in `PipelineTasks` is an [alpha](additional-configs.md#alpha-features) feature.** The `enable-api-fields` feature flag must be set to `"alpha"` to specify `onError`  in a `PipelineTask`.
 
 When a `PipelineTask` fails, the rest of the `PipelineTasks` are skipped and the `PipelineRun` is declared a failure. If you would like to
 ignore such `PipelineTask` failure and continue executing the rest of the `PipelineTasks`, you can specify `onError` for such a `PipelineTask`.
@@ -1264,10 +1276,6 @@ Tasks can emit [`Results`](tasks.md#emitting-results) when they execute. A Pipel
 
 1. A Pipeline can pass the `Result` of a `Task` into the `Parameters` or `when` expressions of another.
 2. A Pipeline can itself emit `Results` and include data from the `Results` of its Tasks.
-
-> **Note** Tekton does not enforce that results are produced at Task level. If a pipeline attempts to
-> consume a result that was declared by a Task, but not produced, it will fail. [TEP-0048](https://github.com/tektoncd/community/blob/main/teps/0048-task-results-without-results.md)
-> propopses introducing default values for results to help Pipeline authors manage this case.
 
 ### Passing one Task's `Results` into the `Parameters` or `when` expressions of another
 

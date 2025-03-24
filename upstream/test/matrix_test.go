@@ -70,7 +70,7 @@ spec:
       default: ""
   steps:
     - name: echo
-      image: mirror.gcr.io/alpine
+      image: alpine
       script: |
         echo "$(params.GOARCH) and $(params.version)"
 `, namespace))
@@ -85,7 +85,7 @@ spec:
       type: array
   steps:
     - name: produce-a-list-of-results
-      image: mirror.gcr.io/bash
+      image: bash:latest
       script: |
         #!/usr/bin/env bash
         echo -n "[\"linux/amd64\",\"linux/ppc64le\"]" | tee $(results.GOARCHs.path)
@@ -101,7 +101,7 @@ spec:
       type: array
   steps:
     - name: produce-a-list-of-versions
-      image: mirror.gcr.io/bash
+      image: bash:latest
       script: |
         #!/usr/bin/env bash
         echo -n "[\"go1.17\",\"go1.18.1\"]" | tee $(results.versions.path)
@@ -206,9 +206,6 @@ spec:
 				Reason:  "Succeeded",
 				Message: "All Steps have completed executing",
 			}}},
-			TaskRunStatusFields: v1.TaskRunStatusFields{
-				Artifacts: &v1.Artifacts{},
-			},
 		},
 	}, {
 		ObjectMeta: metav1.ObjectMeta{
@@ -238,9 +235,6 @@ spec:
 				Reason:  "Succeeded",
 				Message: "All Steps have completed executing",
 			}}},
-			TaskRunStatusFields: v1.TaskRunStatusFields{
-				Artifacts: &v1.Artifacts{},
-			},
 		},
 	}, {
 		ObjectMeta: metav1.ObjectMeta{
@@ -267,9 +261,6 @@ spec:
 				Reason:  "Succeeded",
 				Message: "All Steps have completed executing",
 			}}},
-			TaskRunStatusFields: v1.TaskRunStatusFields{
-				Artifacts: &v1.Artifacts{},
-			},
 		},
 	}, {
 		ObjectMeta: metav1.ObjectMeta{
@@ -296,9 +287,6 @@ spec:
 				Reason:  "Succeeded",
 				Message: "All Steps have completed executing",
 			}}},
-			TaskRunStatusFields: v1.TaskRunStatusFields{
-				Artifacts: &v1.Artifacts{},
-			},
 		},
 	}, {
 		ObjectMeta: metav1.ObjectMeta{
@@ -319,9 +307,6 @@ spec:
 				Reason:  "Succeeded",
 				Message: "All Steps have completed executing",
 			}}},
-			TaskRunStatusFields: v1.TaskRunStatusFields{
-				Artifacts: &v1.Artifacts{},
-			},
 		},
 	}, {
 		ObjectMeta: metav1.ObjectMeta{
@@ -338,7 +323,6 @@ spec:
 					Type:  "array",
 					Value: v1.ParamValue{Type: v1.ParamTypeArray, ArrayVal: []string{"linux/amd64", "linux/ppc64le"}},
 				}},
-				Artifacts: &v1.Artifacts{},
 			},
 			Status: duckv1.Status{Conditions: []apis.Condition{{
 				Type:    apis.ConditionSucceeded,
@@ -362,7 +346,6 @@ spec:
 					Type:  "array",
 					Value: v1.ParamValue{Type: v1.ParamTypeArray, ArrayVal: []string{"go1.17", "go1.18.1"}},
 				}},
-				Artifacts: &v1.Artifacts{},
 			},
 			Status: duckv1.Status{Conditions: []apis.Condition{{
 				Type:    apis.ConditionSucceeded,
@@ -420,7 +403,7 @@ spec:
     - name: exit-code
   steps:
     - name: echo
-      image: mirror.gcr.io/alpine
+      image: alpine
       script: |
         exit "$(params.exit-code)"
 `, namespace))

@@ -31,7 +31,6 @@ func ApplyStepReplacements(step *v1.Step, stringReplacements map[string]string, 
 	if step.StderrConfig != nil {
 		step.StderrConfig.Path = substitution.ApplyReplacements(step.StderrConfig.Path, stringReplacements)
 	}
-	step.When = step.When.ReplaceVariables(stringReplacements, arrayReplacements)
 	applyStepReplacements(step, stringReplacements, arrayReplacements)
 }
 

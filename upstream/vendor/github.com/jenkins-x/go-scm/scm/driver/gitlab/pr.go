@@ -307,7 +307,6 @@ type pr struct {
 	Labels          []*string `json:"labels"`
 	Link            string    `json:"web_url"`
 	WIP             bool      `json:"work_in_progress"`
-	Draft           bool      `json:"draft"`
 	Author          user      `json:"author"`
 	MergeStatus     string    `json:"merge_status"`
 	SourceBranch    string    `json:"source_branch"`
@@ -412,7 +411,7 @@ func (s *pullService) convertPullRequest(ctx context.Context, from *pr) (*scm.Pu
 		Source:         from.SourceBranch,
 		Target:         from.TargetBranch,
 		Link:           from.Link,
-		Draft:          from.WIP || from.Draft,
+		Draft:          from.WIP,
 		Closed:         from.State != "opened",
 		Merged:         from.State == "merged",
 		Mergeable:      scm.ToMergeableState(from.MergeStatus) == scm.MergeableStateMergeable,

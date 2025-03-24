@@ -1,7 +1,3 @@
-# Release (2024-03-29)
-
-* No change notes available for this release.
-
 # Release (2024-02-21)
 
 ## Module Highlights
