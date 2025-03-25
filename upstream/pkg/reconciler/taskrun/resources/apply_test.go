@@ -551,14 +551,12 @@ var (
 
 	arrayTaskRun0Elements = &v1.TaskRun{
 		Spec: v1.TaskRunSpec{
-			Params: []v1.Param{
-				{
-					Name: "array-param",
-					Value: v1.ParamValue{
-						Type:     v1.ParamTypeArray,
-						ArrayVal: []string{},
-					},
-				},
+			Params: []v1.Param{{
+				Name: "array-param",
+				Value: v1.ParamValue{
+					Type:     v1.ParamTypeArray,
+					ArrayVal: []string{},
+				}},
 			},
 		},
 	}
@@ -1103,15 +1101,13 @@ func TestApplyWorkspaces(t *testing.T) {
 						Name: "$(workspaces.myws.volume)",
 					},
 				},
-			},
-		}, {
+			}}, {
 			Name: "some-secret",
 			VolumeSource: corev1.VolumeSource{
 				Secret: &corev1.SecretVolumeSource{
 					SecretName: "$(workspaces.myws.volume)",
 				},
-			},
-		}, {
+			}}, {
 			Name: "some-pvc",
 			VolumeSource: corev1.VolumeSource{
 				PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{
@@ -1145,29 +1141,29 @@ func TestApplyWorkspaces(t *testing.T) {
 			EmptyDir: &corev1.EmptyDirVolumeSource{},
 		}},
 		want: applyMutation(ts, func(spec *v1.TaskSpec) {
-			spec.StepTemplate.Env[0].Value = "ws-b31db"
+			spec.StepTemplate.Env[0].Value = "ws-9l9zj"
 			spec.StepTemplate.Env[1].Value = "foo"
 			spec.StepTemplate.Env[2].Value = ""
 
-			spec.Steps[0].Name = "ws-b31db"
-			spec.Steps[0].Image = "ws-a6f34"
-			spec.Steps[0].WorkingDir = "ws-a6f34"
+			spec.Steps[0].Name = "ws-9l9zj"
+			spec.Steps[0].Image = "ws-mz4c7"
+			spec.Steps[0].WorkingDir = "ws-mz4c7"
 			spec.Steps[0].Args = []string{"/workspace/myws"}
 
-			spec.Steps[1].VolumeMounts[0].Name = "ws-b31db"
+			spec.Steps[1].VolumeMounts[0].Name = "ws-9l9zj"
 			spec.Steps[1].VolumeMounts[0].MountPath = "path/to//foo"
-			spec.Steps[1].VolumeMounts[0].SubPath = "ws-b31db"
+			spec.Steps[1].VolumeMounts[0].SubPath = "ws-9l9zj"
 
-			spec.Steps[2].Env[0].Value = "ws-b31db"
-			spec.Steps[2].Env[1].ValueFrom.SecretKeyRef.LocalObjectReference.Name = "ws-b31db"
-			spec.Steps[2].Env[1].ValueFrom.SecretKeyRef.Key = "ws-b31db"
-			spec.Steps[2].EnvFrom[0].Prefix = "ws-b31db"
-			spec.Steps[2].EnvFrom[0].ConfigMapRef.LocalObjectReference.Name = "ws-b31db"
+			spec.Steps[2].Env[0].Value = "ws-9l9zj"
+			spec.Steps[2].Env[1].ValueFrom.SecretKeyRef.LocalObjectReference.Name = "ws-9l9zj"
+			spec.Steps[2].Env[1].ValueFrom.SecretKeyRef.Key = "ws-9l9zj"
+			spec.Steps[2].EnvFrom[0].Prefix = "ws-9l9zj"
+			spec.Steps[2].EnvFrom[0].ConfigMapRef.LocalObjectReference.Name = "ws-9l9zj"
 
-			spec.Volumes[0].Name = "ws-b31db"
-			spec.Volumes[0].VolumeSource.ConfigMap.LocalObjectReference.Name = "ws-b31db"
-			spec.Volumes[1].VolumeSource.Secret.SecretName = "ws-b31db"
-			spec.Volumes[2].VolumeSource.PersistentVolumeClaim.ClaimName = "ws-b31db"
+			spec.Volumes[0].Name = "ws-9l9zj"
+			spec.Volumes[0].VolumeSource.ConfigMap.LocalObjectReference.Name = "ws-9l9zj"
+			spec.Volumes[1].VolumeSource.Secret.SecretName = "ws-9l9zj"
+			spec.Volumes[2].VolumeSource.PersistentVolumeClaim.ClaimName = "ws-9l9zj"
 		}),
 	}, {
 		name: "optional-workspace-provided-variable-replacement",
@@ -1483,7 +1479,7 @@ func TestContext(t *testing.T) {
 		t.Run(tc.description, func(t *testing.T) {
 			got := resources.ApplyContexts(&tc.spec, tc.taskName, &tc.tr)
 			if d := cmp.Diff(&tc.want, got); d != "" {
-				t.Error(diff.PrintWantGot(d))
+				t.Errorf(diff.PrintWantGot(d))
 			}
 		})
 	}
@@ -1492,14 +1488,12 @@ func TestContext(t *testing.T) {
 func TestTaskResults(t *testing.T) {
 	names.TestingSeed()
 	ts := &v1.TaskSpec{
-		Results: []v1.TaskResult{
-			{
-				Name:        "current.date.unix.timestamp",
-				Description: "The current date in unix timestamp format",
-			}, {
-				Name:        "current-date-human-readable",
-				Description: "The current date in humand readable format",
-			},
+		Results: []v1.TaskResult{{
+			Name:        "current.date.unix.timestamp",
+			Description: "The current date in unix timestamp format",
+		}, {
+			Name:        "current-date-human-readable",
+			Description: "The current date in humand readable format"},
 		},
 		Steps: []v1.Step{{
 			Name:   "print-date-unix-timestamp",
@@ -1636,7 +1630,7 @@ func TestApplyCredentialsPath(t *testing.T) {
 		t.Run(tc.description, func(t *testing.T) {
 			got := resources.ApplyCredentialsPath(&tc.spec, tc.path)
 			if d := cmp.Diff(&tc.want, got); d != "" {
-				t.Error(diff.PrintWantGot(d))
+				t.Errorf(diff.PrintWantGot(d))
 			}
 		})
 	}
@@ -1794,11 +1788,10 @@ func TestApplyParametersToWorkspaceBindings(t *testing.T) {
 							},
 						},
 					},
-					Params: v1.Params{
-						{Name: "secret-name", Value: v1.ParamValue{
-							Type:      v1.ParamTypeString,
-							StringVal: "secret-value",
-						}},
+					Params: v1.Params{{Name: "secret-name", Value: v1.ParamValue{
+						Type:      v1.ParamTypeString,
+						StringVal: "secret-value",
+					}},
 					},
 				},
 			},
@@ -2023,29 +2016,5 @@ func TestApplyParametersToWorkspaceBindings(t *testing.T) {
 				t.Errorf("ApplyParametersToWorkspaceBindings() %v, diff %v", tt.name, d)
 			}
 		})
-	}
-}
-
-func TestArtifacts(t *testing.T) {
-	ts := &v1.TaskSpec{
-		Steps: []v1.Step{
-			{
-				Name:  "name1",
-				Image: "bash:latest",
-				Args: []string{
-					"$(step.artifacts.path)",
-				},
-				Script: "#!/usr/bin/env bash\n echo -n $(step.artifacts.path)",
-			},
-		},
-	}
-
-	want := applyMutation(ts, func(spec *v1.TaskSpec) {
-		spec.Steps[0].Args[0] = "/tekton/steps/step-name1/artifacts/provenance.json"
-		spec.Steps[0].Script = "#!/usr/bin/env bash\n echo -n /tekton/steps/step-name1/artifacts/provenance.json"
-	})
-	got := resources.ApplyArtifacts(ts)
-	if d := cmp.Diff(want, got); d != "" {
-		t.Errorf("ApplyArtifacts() got diff %s", diff.PrintWantGot(d))
 	}
 }

@@ -23,9 +23,6 @@ import (
 	"testing"
 	"time"
 
-	"go.opencensus.io/metric/metricproducer"
-	"go.opencensus.io/stats/view"
-
 	"github.com/tektoncd/pipeline/pkg/apis/pipeline"
 
 	"github.com/tektoncd/pipeline/pkg/apis/config"
@@ -53,25 +50,9 @@ func getConfigContext(countWithReason bool) context.Context {
 		Metrics: &config.Metrics{
 			TaskrunLevel:            config.TaskrunLevelAtTaskrun,
 			PipelinerunLevel:        config.PipelinerunLevelAtPipelinerun,
-			RunningPipelinerunLevel: config.DefaultRunningPipelinerunLevel,
 			DurationTaskrunType:     config.DefaultDurationTaskrunType,
 			DurationPipelinerunType: config.DefaultDurationPipelinerunType,
 			CountWithReason:         countWithReason,
-		},
-	}
-	return config.ToContext(ctx, cfg)
-}
-
-func getConfigContextRunningPRLevel(runningPipelinerunLevel string) context.Context {
-	ctx := context.Background()
-	cfg := &config.Config{
-		Metrics: &config.Metrics{
-			TaskrunLevel:            config.TaskrunLevelAtTaskrun,
-			PipelinerunLevel:        config.PipelinerunLevelAtPipelinerun,
-			DurationTaskrunType:     config.DefaultDurationTaskrunType,
-			DurationPipelinerunType: config.DefaultDurationPipelinerunType,
-			CountWithReason:         false,
-			RunningPipelinerunLevel: runningPipelinerunLevel,
 		},
 	}
 	return config.ToContext(ctx, cfg)
@@ -88,7 +69,7 @@ func TestUninitializedMetrics(t *testing.T) {
 	}
 }
 
-func TestOnStore(t *testing.T) {
+func TestMetricsOnStore(t *testing.T) {
 	log := zap.NewExample()
 	defer log.Sync()
 	logger := log.Sugar()
@@ -100,7 +81,7 @@ func TestOnStore(t *testing.T) {
 	}
 
 	// We check that there's no change when incorrect config is passed
-	OnStore(logger, metrics)(config.GetMetricsConfigName(), &config.Store{})
+	MetricsOnStore(logger)(config.GetMetricsConfigName(), &config.Store{})
 	// Comparing function assign to struct with the one which should yield same value
 	if reflect.ValueOf(metrics.insertTag).Pointer() != reflect.ValueOf(pipelinerunInsertTag).Pointer() {
 		t.Fatal("metrics recorder shouldn't change during this OnStore call")
@@ -113,7 +94,7 @@ func TestOnStore(t *testing.T) {
 		DurationTaskrunType:     config.DurationTaskrunTypeHistogram,
 		DurationPipelinerunType: config.DurationPipelinerunTypeLastValue,
 	}
-	OnStore(logger, metrics)(config.GetMetricsConfigName(), cfg)
+	MetricsOnStore(logger)(config.GetMetricsConfigName(), cfg)
 	if reflect.ValueOf(metrics.insertTag).Pointer() != reflect.ValueOf(pipelinerunInsertTag).Pointer() {
 		t.Fatal("metrics recorder shouldn't change during this OnStore call")
 	}
@@ -124,7 +105,7 @@ func TestOnStore(t *testing.T) {
 		DurationTaskrunType:     config.DurationTaskrunTypeHistogram,
 		DurationPipelinerunType: config.DurationPipelinerunTypeLastValue,
 	}
-	OnStore(logger, metrics)(config.GetMetricsConfigName(), cfg)
+	MetricsOnStore(logger)(config.GetMetricsConfigName(), cfg)
 	if reflect.ValueOf(metrics.insertTag).Pointer() != reflect.ValueOf(nilInsertTag).Pointer() {
 		t.Fatal("metrics recorder didn't change during OnStore call")
 	}
@@ -360,7 +341,6 @@ func TestRecordPipelineRunDurationCount(t *testing.T) {
 			"pipeline":    "pipeline-1",
 			"pipelinerun": "pipelinerun-1",
 			"namespace":   "ns",
-			"reason":      "Failed",
 			"status":      "failed",
 		},
 		expectedCountTags: map[string]string{
@@ -397,7 +377,6 @@ func TestRecordPipelineRunDurationCount(t *testing.T) {
 			"pipelinerun": "pipelinerun-1",
 			"namespace":   "ns",
 			"status":      "cancelled",
-			"reason":      ReasonCancelled.String(),
 		},
 		expectedCountTags: map[string]string{
 			"status": "cancelled",
@@ -470,11 +449,8 @@ func TestRecordPipelineRunDurationCount(t *testing.T) {
 			}
 			if test.expectedCountTags != nil {
 				metricstest.CheckCountData(t, "pipelinerun_count", test.expectedCountTags, test.expectedCount)
-				delete(test.expectedCountTags, "reason")
-				metricstest.CheckCountData(t, "pipelinerun_total", test.expectedCountTags, test.expectedCount)
 			} else {
 				metricstest.CheckStatsNotReported(t, "pipelinerun_count")
-				metricstest.CheckStatsNotReported(t, "pipelinerun_total")
 			}
 		})
 	}
@@ -520,205 +496,6 @@ func TestRecordRunningPipelineRunsCount(t *testing.T) {
 		t.Errorf("RunningPipelineRuns: %v", err)
 	}
 	metricstest.CheckLastValueData(t, "running_pipelineruns_count", map[string]string{}, 1)
-	metricstest.CheckLastValueData(t, "running_pipelineruns", map[string]string{}, 1)
-}
-
-func TestRecordRunningPipelineRunsCountAtPipelineRunLevel(t *testing.T) {
-	unregisterMetrics()
-
-	newPipelineRun := func(status corev1.ConditionStatus, pipelineRun, namespace string) *v1.PipelineRun {
-		return &v1.PipelineRun{
-			ObjectMeta: metav1.ObjectMeta{Name: pipelineRun, Namespace: namespace},
-			Status: v1.PipelineRunStatus{
-				Status: duckv1.Status{
-					Conditions: duckv1.Conditions{{
-						Type:   apis.ConditionSucceeded,
-						Status: status,
-					}},
-				},
-			},
-		}
-	}
-
-	ctx, _ := ttesting.SetupFakeContext(t)
-	informer := fakepipelineruninformer.Get(ctx)
-	// Add N randomly-named PipelineRuns with differently-succeeded statuses.
-	for _, pipelineRun := range []*v1.PipelineRun{
-		newPipelineRun(corev1.ConditionUnknown, "testpr1", "testns1"),
-		newPipelineRun(corev1.ConditionUnknown, "testpr1", "testns2"),
-		newPipelineRun(corev1.ConditionUnknown, "testpr2", "testns2"),
-		newPipelineRun(corev1.ConditionUnknown, "testpr1", "testns3"),
-		newPipelineRun(corev1.ConditionUnknown, "testpr2", "testns3"),
-		newPipelineRun(corev1.ConditionUnknown, "testpr3", "testns3"),
-		newPipelineRun(corev1.ConditionUnknown, "testpr4", "testns3"),
-	} {
-		if err := informer.Informer().GetIndexer().Add(pipelineRun); err != nil {
-			t.Fatalf("Adding TaskRun to informer: %v", err)
-		}
-	}
-
-	ctx = getConfigContextRunningPRLevel("pipelinerun")
-	recorder, err := NewRecorder(ctx)
-	if err != nil {
-		t.Fatalf("NewRecorder: %v", err)
-	}
-
-	if err := recorder.RunningPipelineRuns(informer.Lister()); err != nil {
-		t.Errorf("RunningPipelineRuns: %v", err)
-	}
-
-	checkLastValueDataForTags(t, "running_pipelineruns", map[string]string{"namespace": "testns1", "pipeline": "anonymous", "pipelinerun": "testpr1"}, 1)
-	checkLastValueDataForTags(t, "running_pipelineruns", map[string]string{"namespace": "testns2", "pipeline": "anonymous", "pipelinerun": "testpr1"}, 1)
-	checkLastValueDataForTags(t, "running_pipelineruns", map[string]string{"namespace": "testns2", "pipeline": "anonymous", "pipelinerun": "testpr2"}, 1)
-	checkLastValueDataForTags(t, "running_pipelineruns", map[string]string{"namespace": "testns3", "pipeline": "anonymous", "pipelinerun": "testpr1"}, 1)
-	checkLastValueDataForTags(t, "running_pipelineruns", map[string]string{"namespace": "testns3", "pipeline": "anonymous", "pipelinerun": "testpr2"}, 1)
-	checkLastValueDataForTags(t, "running_pipelineruns", map[string]string{"namespace": "testns3", "pipeline": "anonymous", "pipelinerun": "testpr3"}, 1)
-	checkLastValueDataForTags(t, "running_pipelineruns", map[string]string{"namespace": "testns3", "pipeline": "anonymous", "pipelinerun": "testpr4"}, 1)
-}
-
-func TestRecordRunningPipelineRunsCountAtPipelineLevel(t *testing.T) {
-	unregisterMetrics()
-
-	newPipelineRun := func(status corev1.ConditionStatus, namespace string) *v1.PipelineRun {
-		return &v1.PipelineRun{
-			ObjectMeta: metav1.ObjectMeta{Name: names.SimpleNameGenerator.RestrictLengthWithRandomSuffix("pipelinerun-"), Namespace: namespace},
-			Status: v1.PipelineRunStatus{
-				Status: duckv1.Status{
-					Conditions: duckv1.Conditions{{
-						Type:   apis.ConditionSucceeded,
-						Status: status,
-					}},
-				},
-			},
-		}
-	}
-
-	ctx, _ := ttesting.SetupFakeContext(t)
-	informer := fakepipelineruninformer.Get(ctx)
-	// Add N randomly-named PipelineRuns with differently-succeeded statuses.
-	for _, pipelineRun := range []*v1.PipelineRun{
-		newPipelineRun(corev1.ConditionUnknown, "testns1"),
-		newPipelineRun(corev1.ConditionUnknown, "testns2"),
-		newPipelineRun(corev1.ConditionUnknown, "testns2"),
-		newPipelineRun(corev1.ConditionUnknown, "testns3"),
-		newPipelineRun(corev1.ConditionUnknown, "testns3"),
-		newPipelineRun(corev1.ConditionUnknown, "testns3"),
-		newPipelineRun(corev1.ConditionUnknown, "testns3"),
-	} {
-		if err := informer.Informer().GetIndexer().Add(pipelineRun); err != nil {
-			t.Fatalf("Adding TaskRun to informer: %v", err)
-		}
-	}
-
-	ctx = getConfigContextRunningPRLevel("pipeline")
-	recorder, err := NewRecorder(ctx)
-	if err != nil {
-		t.Fatalf("NewRecorder: %v", err)
-	}
-
-	if err := recorder.RunningPipelineRuns(informer.Lister()); err != nil {
-		t.Errorf("RunningPipelineRuns: %v", err)
-	}
-
-	checkLastValueDataForTags(t, "running_pipelineruns", map[string]string{"namespace": "testns1", "pipeline": "anonymous"}, 1)
-	checkLastValueDataForTags(t, "running_pipelineruns", map[string]string{"namespace": "testns2", "pipeline": "anonymous"}, 2)
-	checkLastValueDataForTags(t, "running_pipelineruns", map[string]string{"namespace": "testns3", "pipeline": "anonymous"}, 4)
-}
-
-func TestRecordRunningPipelineRunsCountAtNamespaceLevel(t *testing.T) {
-	unregisterMetrics()
-
-	newPipelineRun := func(status corev1.ConditionStatus, namespace string) *v1.PipelineRun {
-		return &v1.PipelineRun{
-			ObjectMeta: metav1.ObjectMeta{Name: names.SimpleNameGenerator.RestrictLengthWithRandomSuffix("pipelinerun-"), Namespace: namespace},
-			Status: v1.PipelineRunStatus{
-				Status: duckv1.Status{
-					Conditions: duckv1.Conditions{{
-						Type:   apis.ConditionSucceeded,
-						Status: status,
-					}},
-				},
-			},
-		}
-	}
-
-	ctx, _ := ttesting.SetupFakeContext(t)
-	informer := fakepipelineruninformer.Get(ctx)
-	// Add N randomly-named PipelineRuns with differently-succeeded statuses.
-	for _, pipelineRun := range []*v1.PipelineRun{
-		newPipelineRun(corev1.ConditionUnknown, "testns1"),
-		newPipelineRun(corev1.ConditionUnknown, "testns2"),
-		newPipelineRun(corev1.ConditionUnknown, "testns2"),
-		newPipelineRun(corev1.ConditionUnknown, "testns3"),
-		newPipelineRun(corev1.ConditionUnknown, "testns3"),
-		newPipelineRun(corev1.ConditionUnknown, "testns3"),
-		newPipelineRun(corev1.ConditionUnknown, "testns3"),
-	} {
-		if err := informer.Informer().GetIndexer().Add(pipelineRun); err != nil {
-			t.Fatalf("Adding TaskRun to informer: %v", err)
-		}
-	}
-
-	ctx = getConfigContextRunningPRLevel("namespace")
-	recorder, err := NewRecorder(ctx)
-	if err != nil {
-		t.Fatalf("NewRecorder: %v", err)
-	}
-
-	if err := recorder.RunningPipelineRuns(informer.Lister()); err != nil {
-		t.Errorf("RunningPipelineRuns: %v", err)
-	}
-
-	checkLastValueDataForTags(t, "running_pipelineruns", map[string]string{"namespace": "testns1"}, 1)
-	checkLastValueDataForTags(t, "running_pipelineruns", map[string]string{"namespace": "testns2"}, 2)
-	checkLastValueDataForTags(t, "running_pipelineruns", map[string]string{"namespace": "testns3"}, 4)
-}
-
-func TestRecordRunningPipelineRunsCountAtClusterLevel(t *testing.T) {
-	unregisterMetrics()
-
-	newPipelineRun := func(status corev1.ConditionStatus, namespace string) *v1.PipelineRun {
-		return &v1.PipelineRun{
-			ObjectMeta: metav1.ObjectMeta{Name: names.SimpleNameGenerator.RestrictLengthWithRandomSuffix("pipelinerun-"), Namespace: namespace},
-			Status: v1.PipelineRunStatus{
-				Status: duckv1.Status{
-					Conditions: duckv1.Conditions{{
-						Type:   apis.ConditionSucceeded,
-						Status: status,
-					}},
-				},
-			},
-		}
-	}
-
-	ctx, _ := ttesting.SetupFakeContext(t)
-	informer := fakepipelineruninformer.Get(ctx)
-	// Add N randomly-named PipelineRuns with differently-succeeded statuses.
-	for _, pipelineRun := range []*v1.PipelineRun{
-		newPipelineRun(corev1.ConditionUnknown, "testns1"),
-		newPipelineRun(corev1.ConditionUnknown, "testns2"),
-		newPipelineRun(corev1.ConditionUnknown, "testns2"),
-		newPipelineRun(corev1.ConditionUnknown, "testns3"),
-		newPipelineRun(corev1.ConditionUnknown, "testns3"),
-		newPipelineRun(corev1.ConditionUnknown, "testns3"),
-		newPipelineRun(corev1.ConditionUnknown, "testns3"),
-	} {
-		if err := informer.Informer().GetIndexer().Add(pipelineRun); err != nil {
-			t.Fatalf("Adding TaskRun to informer: %v", err)
-		}
-	}
-
-	ctx = getConfigContextRunningPRLevel("")
-	recorder, err := NewRecorder(ctx)
-	if err != nil {
-		t.Fatalf("NewRecorder: %v", err)
-	}
-
-	if err := recorder.RunningPipelineRuns(informer.Lister()); err != nil {
-		t.Errorf("RunningPipelineRuns: %v", err)
-	}
-
-	checkLastValueDataForTags(t, "running_pipelineruns", map[string]string{}, 7)
 }
 
 func TestRecordRunningPipelineRunsResolutionWaitCounts(t *testing.T) {
@@ -771,7 +548,7 @@ func TestRecordRunningPipelineRunsResolutionWaitCounts(t *testing.T) {
 		unregisterMetrics()
 		ctx, _ := ttesting.SetupFakeContext(t)
 		informer := fakepipelineruninformer.Get(ctx)
-		for range multiplier {
+		for i := 0; i < multiplier; i++ {
 			pr := &v1.PipelineRun{
 				ObjectMeta: metav1.ObjectMeta{Name: names.SimpleNameGenerator.RestrictLengthWithRandomSuffix("pipelinerun-")},
 				Status: v1.PipelineRunStatus{
@@ -800,53 +577,14 @@ func TestRecordRunningPipelineRunsResolutionWaitCounts(t *testing.T) {
 		}
 		metricstest.CheckLastValueData(t, "running_pipelineruns_waiting_on_pipeline_resolution_count", map[string]string{}, tc.prWaitCount)
 		metricstest.CheckLastValueData(t, "running_pipelineruns_waiting_on_task_resolution_count", map[string]string{}, tc.trWaitCount)
-		metricstest.CheckLastValueData(t, "running_pipelineruns_waiting_on_pipeline_resolution", map[string]string{}, tc.prWaitCount)
-		metricstest.CheckLastValueData(t, "running_pipelineruns_waiting_on_task_resolution", map[string]string{}, tc.trWaitCount)
 	}
 }
 
 func unregisterMetrics() {
-	metricstest.Unregister("pipelinerun_duration_seconds", "pipelinerun_count", "pipelinerun_total", "running_pipelineruns_waiting_on_pipeline_resolution_count", "running_pipelineruns_waiting_on_pipeline_resolution", "running_pipelineruns_waiting_on_task_resolution_count", "running_pipelineruns_waiting_on_task_resolution", "running_pipelineruns_count", "running_pipelineruns")
+	metricstest.Unregister("pipelinerun_duration_seconds", "pipelinerun_count", "running_pipelineruns_waiting_on_pipeline_resolution_count", "running_pipelineruns_waiting_on_task_resolution_count", "running_pipelineruns_count")
 
 	// Allow the recorder singleton to be recreated.
 	once = sync.Once{}
 	r = nil
 	errRegistering = nil
-}
-
-// We have to write this function as knative package does not provide the feature to validate multiple records for same metric.
-func checkLastValueDataForTags(t *testing.T, name string, wantTags map[string]string, expected float64) {
-	t.Helper()
-	for _, producer := range metricproducer.GlobalManager().GetAll() {
-		meter := producer.(view.Meter)
-		data, err := meter.RetrieveData(name)
-		if err != nil || len(data) == 0 {
-			continue
-		}
-		val := getLastValueData(data, wantTags)
-		if expected != val.Value {
-			t.Error("Value did not match for ", name, wantTags, ", expected", expected, "got", val.Value)
-		}
-	}
-}
-
-// Returns the LastValueData from the matching row. If no row is matched then returns nil
-func getLastValueData(rows []*view.Row, wantTags map[string]string) *view.LastValueData {
-	for _, row := range rows {
-		if len(wantTags) != len(row.Tags) {
-			continue
-		}
-		matched := true
-		for _, got := range row.Tags {
-			n := got.Key.Name()
-			if wantTags[n] != got.Value {
-				matched = false
-				break
-			}
-		}
-		if matched {
-			return row.Data.(*view.LastValueData)
-		}
-	}
-	return nil
 }

@@ -13,8 +13,6 @@ limitations under the License.
 
 package hub
 
-import "github.com/tektoncd/pipeline/pkg/resolution/resource"
-
 // DefaultArtifactHubURL is the default url for the Artifact hub api
 const DefaultArtifactHubURL = "https://artifacthub.io"
 
@@ -32,7 +30,7 @@ const ArtifactHubListTasksEndpoint = "api/v1/packages/tekton-%s/%s/%s"
 
 // ParamName is the parameter defining what the layer name in the bundle
 // image is.
-const ParamName = resource.ParamName
+const ParamName = "name"
 
 // ParamKind is the parameter defining what the layer kind in the bundle
 // image is.

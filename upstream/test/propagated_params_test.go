@@ -28,13 +28,26 @@ import (
 	"github.com/google/go-cmp/cmp/cmpopts"
 	v1 "github.com/tektoncd/pipeline/pkg/apis/pipeline/v1"
 	"github.com/tektoncd/pipeline/test/parse"
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"knative.dev/pkg/apis"
+	duckv1 "knative.dev/pkg/apis/duck/v1"
 	knativetest "knative.dev/pkg/test"
 )
 
 var (
+	ignoreTypeMeta          = cmpopts.IgnoreFields(metav1.TypeMeta{}, "Kind", "APIVersion")
+	ignoreObjectMeta        = cmpopts.IgnoreFields(metav1.ObjectMeta{}, "ResourceVersion", "UID", "CreationTimestamp", "Generation", "ManagedFields", "Labels", "Annotations", "OwnerReferences")
+	ignoreCondition         = cmpopts.IgnoreFields(apis.Condition{}, "LastTransitionTime.Inner.Time", "Message")
 	ignorePipelineRunStatus = cmpopts.IgnoreFields(v1.PipelineRunStatusFields{}, "StartTime", "CompletionTime", "FinallyStartTime", "ChildReferences")
 	ignoreTaskRunStatus     = cmpopts.IgnoreFields(v1.TaskRunStatusFields{}, "StartTime", "CompletionTime")
+	ignoreConditions        = cmpopts.IgnoreFields(duckv1.Status{}, "Conditions")
+	ignoreContainerStates   = cmpopts.IgnoreFields(corev1.ContainerState{}, "Terminated")
+	ignoreStepState         = cmpopts.IgnoreFields(v1.StepState{}, "ImageID")
+	// ignoreSATaskRunSpec ignores the service account in the TaskRunSpec as it may differ across platforms
+	ignoreSATaskRunSpec = cmpopts.IgnoreFields(v1.TaskRunSpec{}, "ServiceAccountName")
+	// ignoreSAPipelineRunSpec ignores the service account in the PipelineRunSpec as it may differ across platforms
+	ignoreSAPipelineRunSpec = cmpopts.IgnoreFields(v1.PipelineTaskRunTemplate{}, "ServiceAccountName")
 )
 
 func TestPropagatedParams(t *testing.T) {
@@ -66,6 +79,7 @@ func TestPropagatedParams(t *testing.T) {
 	}}
 
 	for _, td := range tds {
+		td := td
 		t.Run(td.name, func(t *testing.T) {
 			t.Parallel()
 			ctx := context.Background()
@@ -150,14 +164,14 @@ spec:
         taskSpec:
           steps:
             - name: echo
-              image: mirror.gcr.io/ubuntu
+              image: ubuntu
               script: echo $(params.HELLO)
     finally:
       - name: echo-hello-finally
         taskSpec:
           steps:
             - name: echo
-              image: mirror.gcr.io/ubuntu
+              image: ubuntu
               script: echo $(params.HELLO)
 `, namespace))
 	expectedPipelineRun := parse.MustParseV1PipelineRun(t, fmt.Sprintf(`
@@ -176,14 +190,14 @@ spec:
         taskSpec:
           steps:
             - name: echo
-              image: mirror.gcr.io/ubuntu
+              image: ubuntu
               script: echo $(params.HELLO)
     finally:
       - name: echo-hello-finally
         taskSpec:
           steps:
             - name: echo
-              image: mirror.gcr.io/ubuntu
+              image: ubuntu
               script: echo $(params.HELLO)
 status:
   pipelineSpec:
@@ -192,14 +206,14 @@ status:
         taskSpec:
           steps:
             - name: echo
-              image: mirror.gcr.io/ubuntu
+              image: ubuntu
               script: echo Hello World!
     finally:
       - name: echo-hello-finally
         taskSpec:
           steps:
             - name: echo
-              image: mirror.gcr.io/ubuntu
+              image: ubuntu
               script: echo Hello World!
 `, namespace))
 	taskRun := parse.MustParseV1TaskRun(t, fmt.Sprintf(`
@@ -211,18 +225,17 @@ spec:
   taskSpec:
     steps:
       - name: echo
-        image: mirror.gcr.io/ubuntu
+        image: ubuntu
         script: echo Hello World!
 status:
    podName: propagated-parameters-fully-echo-hello-pod
-   artifacts: {}
    steps:
      - name: echo
        container: step-echo
    taskSpec:
      steps:
        - name: echo
-         image: mirror.gcr.io/ubuntu
+         image: ubuntu
          script: echo Hello World!
 `, namespace))
 	finallyTaskRun := parse.MustParseV1TaskRun(t, fmt.Sprintf(`
@@ -234,10 +247,9 @@ spec:
   taskSpec:
     steps:
       - name: echo
-        image: mirror.gcr.io/ubuntu
+        image: ubuntu
         script: echo Hello World!
 status:
-   artifacts: {}
    podName: propagated-parameters-fully-echo-hello-finally-pod
    steps:
      - name: echo
@@ -245,7 +257,7 @@ status:
    taskSpec:
      steps:
        - name: echo
-         image: mirror.gcr.io/ubuntu
+         image: ubuntu
          script: echo Hello World!
 `, namespace))
 	return pipelineRun, expectedPipelineRun, []*v1.TaskRun{taskRun, finallyTaskRun}
@@ -270,7 +282,7 @@ spec:
         taskSpec:
           steps:
             - name: echo
-              image: mirror.gcr.io/ubuntu
+              image: ubuntu
               script: echo $(params.HELLO)
 `, namespace))
 	expectedPipelineRun := parse.MustParseV1PipelineRun(t, fmt.Sprintf(`
@@ -292,7 +304,7 @@ spec:
         taskSpec:
           steps:
             - name: echo
-              image: mirror.gcr.io/ubuntu
+              image: ubuntu
               script: echo $(params.HELLO)
 status:
   pipelineSpec:
@@ -304,7 +316,7 @@ status:
         taskSpec:
           steps:
             - name: echo
-              image: mirror.gcr.io/ubuntu
+              image: ubuntu
               script: echo Hello World!
 `, namespace))
 	taskRun := parse.MustParseV1TaskRun(t, fmt.Sprintf(`
@@ -319,10 +331,9 @@ spec:
   taskSpec:
     steps:
       - name: echo
-        image: mirror.gcr.io/ubuntu
+        image: ubuntu
         script: echo Hello World!
 status:
-  artifacts: {}
   podName: propagated-parameters-task-level-echo-hello-pod
   steps:
     - name: echo
@@ -330,7 +341,7 @@ status:
   taskSpec:
     steps:
       - name: echo
-        image: mirror.gcr.io/ubuntu
+        image: ubuntu
         script: echo Hello World!
 `, namespace))
 	return pipelineRun, expectedPipelineRun, []*v1.TaskRun{taskRun}
@@ -356,7 +367,7 @@ spec:
               default: "Default Hello World"
           steps:
             - name: echo
-              image: mirror.gcr.io/ubuntu
+              image: ubuntu
               script: echo $(params.HELLO)
 `, namespace))
 	expectedPipelineRun := parse.MustParseV1PipelineRun(t, fmt.Sprintf(`
@@ -379,7 +390,7 @@ spec:
               default: "Default Hello World"
           steps:
             - name: echo
-              image: mirror.gcr.io/ubuntu
+              image: ubuntu
               script: echo $(params.HELLO)
 status:
   pipelineSpec:
@@ -392,7 +403,7 @@ status:
               default: "Default Hello World"
           steps:
             - name: echo
-              image: mirror.gcr.io/ubuntu
+              image: ubuntu
               script: echo Hello World!
 `, namespace))
 	taskRun := parse.MustParseV1TaskRun(t, fmt.Sprintf(`
@@ -408,10 +419,9 @@ spec:
         default: "Default Hello World"
     steps:
       - name: echo
-        image: mirror.gcr.io/ubuntu
+        image: ubuntu
         script: echo Hello World!
 status:
-  artifacts: {}
   podName: propagated-parameters-default-task-level-echo-hello-pod
   steps:
     - name: echo
@@ -423,7 +433,7 @@ status:
        default: "Default Hello World"
     steps:
       - name: echo
-        image: mirror.gcr.io/ubuntu
+        image: ubuntu
         script: echo Hello World!
 `, namespace))
 	return pipelineRun, expectedPipelineRun, []*v1.TaskRun{taskRun}

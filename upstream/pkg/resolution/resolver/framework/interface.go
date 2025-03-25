@@ -26,24 +26,22 @@ import (
 // Resolver is the interface to implement for type-specific resource
 // resolution. It fetches resources from a given type of remote location
 // and returns their content along with any associated annotations.
-//
-// Deprecated: Use [github.com/tektoncd/pipeline/pkg/remoteresolution/resolver/framework.Resolver] instead.
 type Resolver interface {
 	// Initialize is called at the moment the resolver controller is
 	// instantiated and is a good place to setup things like
 	// resource listers.
-	Initialize(ctx context.Context) error
+	Initialize(context.Context) error
 
 	// GetName should give back the name of the resolver. E.g. "Git"
-	GetName(ctx context.Context) string
+	GetName(context.Context) string
 
 	// GetSelector returns the labels that are used to direct resolution
 	// requests to this resolver.
-	GetSelector(ctx context.Context) map[string]string
+	GetSelector(context.Context) map[string]string
 
 	// ValidateParams is given the parameters from a resource
 	// request and should return an error if any are missing or invalid.
-	ValidateParams(ctx context.Context, params []pipelinev1.Param) error
+	ValidateParams(context.Context, []pipelinev1.Param) error
 
 	// Resolve receives the parameters passed via a resource request
 	// and returns the resolved data along with any annotations
@@ -51,7 +49,7 @@ type Resolver interface {
 	// should be returned instead. If a resolution.Error
 	// is returned then its Reason and Message are used as part of the
 	// response to the request.
-	Resolve(ctx context.Context, params []pipelinev1.Param) (ResolvedResource, error)
+	Resolve(context.Context, []pipelinev1.Param) (ResolvedResource, error)
 }
 
 // ConfigWatcher is the interface to implement if your resolver accepts
@@ -68,7 +66,7 @@ type ConfigWatcher interface {
 	// GetConfigName should return a string name for its
 	// configuration to be referenced by. This will map to the name
 	// of a ConfigMap in the same namespace as the resolver.
-	GetConfigName(ctx context.Context) string
+	GetConfigName(context.Context) string
 }
 
 // TimedResolution is an optional interface that a resolver can
@@ -90,7 +88,7 @@ type TimedResolution interface {
 	// object, which includes any request-scoped data like
 	// resolver config and the request's originating namespace,
 	// along with a default.
-	GetResolutionTimeout(ctx context.Context, timeout time.Duration, params map[string]string) (time.Duration, error)
+	GetResolutionTimeout(context.Context, time.Duration) time.Duration
 }
 
 // ResolvedResource returns the data and annotations of a successful

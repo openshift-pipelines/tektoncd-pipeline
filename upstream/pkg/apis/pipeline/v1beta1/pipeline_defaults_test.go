@@ -207,6 +207,7 @@ func TestPipelineTask_SetDefaults(t *testing.T) {
 		want: &v1beta1.PipelineTask{
 			Name: "foo",
 			TaskRef: &v1beta1.TaskRef{
+				Kind: v1beta1.NamespacedTaskKind,
 				ResolverRef: v1beta1.ResolverRef{
 					Resolver: "git",
 				},
@@ -228,6 +229,7 @@ func TestPipelineTask_SetDefaults(t *testing.T) {
 		want: &v1beta1.PipelineTask{
 			Name: "foo",
 			TaskRef: &v1beta1.TaskRef{
+				Kind: v1beta1.NamespacedTaskKind,
 				ResolverRef: v1beta1.ResolverRef{
 					Resolver: "custom resolver",
 				},

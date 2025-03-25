@@ -53,7 +53,7 @@ func main() {
 			return spec.MustCreateRef("#/definitions/" + common.EscapeJsonPointer(swaggify(name)))
 		})
 	default:
-		panic("Unsupported API version: " + *apiVersion)
+		panic(fmt.Sprintf("Unsupported API version: %s", *apiVersion))
 	}
 	defs := spec.Definitions{}
 	for defName, val := range oAPIDefs {

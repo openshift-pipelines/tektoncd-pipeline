@@ -95,7 +95,7 @@ func Process(args []string) error {
 			if err := decodeScript(src); err != nil {
 				return SubcommandError{subcommand: DecodeScriptCommand, message: err.Error()}
 			}
-			return OK{message: "Decoded script " + src}
+			return OK{message: fmt.Sprintf("Decoded script %s", src)}
 		}
 	case StepInitCommand:
 		if err := stepInit(args[1:]); err != nil {

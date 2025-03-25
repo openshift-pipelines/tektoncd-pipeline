@@ -21,7 +21,6 @@ import (
 	"errors"
 	"fmt"
 	"sort"
-	"strings"
 
 	"github.com/google/cel-go/cel"
 	"github.com/tektoncd/pipeline/pkg/apis/config"
@@ -31,7 +30,6 @@ import (
 	"github.com/tektoncd/pipeline/pkg/apis/pipeline/v1beta1"
 	"github.com/tektoncd/pipeline/pkg/reconciler/taskrun/resources"
 	"github.com/tektoncd/pipeline/pkg/remote"
-	"github.com/tektoncd/pipeline/pkg/resolution/resource"
 	"github.com/tektoncd/pipeline/pkg/substitution"
 	kerrors "k8s.io/apimachinery/pkg/api/errors"
 	"knative.dev/pkg/apis"
@@ -136,37 +134,6 @@ func (t ResolvedPipelineTask) IsRunning() bool {
 // IsCustomTask returns true if the PipelineTask references a Custom Task.
 func (t ResolvedPipelineTask) IsCustomTask() bool {
 	return t.CustomTask
-}
-
-// getReason returns the latest reason if the run has completed successfully
-// If the PipelineTask has a Matrix, getReason returns the failure reason for any failure
-// otherwise, it returns an empty string
-func (t ResolvedPipelineTask) getReason() string {
-	if t.IsCustomTask() {
-		if len(t.CustomRuns) == 0 {
-			return ""
-		}
-		for _, run := range t.CustomRuns {
-			if !run.IsSuccessful() && len(run.Status.Conditions) >= 1 {
-				return run.Status.Conditions[0].Reason
-			}
-		}
-		if len(t.CustomRuns) >= 1 && len(t.CustomRuns[0].Status.Conditions) >= 1 {
-			return t.CustomRuns[0].Status.Conditions[0].Reason
-		}
-	}
-	if len(t.TaskRuns) == 0 {
-		return ""
-	}
-	for _, taskRun := range t.TaskRuns {
-		if !taskRun.IsSuccessful() && len(taskRun.Status.Conditions) >= 1 {
-			return taskRun.Status.Conditions[0].Reason
-		}
-	}
-	if len(t.TaskRuns) >= 1 && len(t.TaskRuns[0].Status.Conditions) >= 1 {
-		return t.TaskRuns[0].Status.Conditions[0].Reason
-	}
-	return ""
 }
 
 // isSuccessful returns true only if the run has completed successfully
@@ -687,14 +654,8 @@ func resolveTask(
 			case errors.Is(err, remote.ErrRequestInProgress):
 				return rt, err
 			case err != nil:
-				// some of the resolvers obtain the name from the parameters instead of from the TaskRef.Name field,
-				// so we account for both locations when constructing the error
-				name := pipelineTask.TaskRef.Name
-				if len(strings.TrimSpace(name)) == 0 {
-					name = resource.GenerateErrorLogString(string(pipelineTask.TaskRef.Resolver), pipelineTask.TaskRef.Params)
-				}
 				return rt, &TaskNotFoundError{
-					Name: name,
+					Name: pipelineTask.TaskRef.Name,
 					Msg:  err.Error(),
 				}
 			default:
@@ -724,7 +685,7 @@ func GetTaskRunName(childRefs []v1.ChildStatusReference, ptName, prName string) 
 			return cr.Name
 		}
 	}
-	return kmeta.ChildName(prName, "-"+ptName)
+	return kmeta.ChildName(prName, fmt.Sprintf("-%s", ptName))
 }
 
 // GetNamesOfTaskRuns should return unique names for `TaskRuns` if one has not already been defined, and the existing one otherwise.
@@ -750,21 +711,12 @@ func getNewRunNames(ptName, prName string, numberOfRuns int) []string {
 	var taskRunNames []string
 	// If it is a singular TaskRun/CustomRun, we only append the ptName
 	if numberOfRuns == 1 {
-		taskRunName := kmeta.ChildName(prName, "-"+ptName)
+		taskRunName := kmeta.ChildName(prName, fmt.Sprintf("-%s", ptName))
 		return append(taskRunNames, taskRunName)
 	}
 	// For a matrix we append i to then end of the fanned out TaskRuns "matrixed-pr-taskrun-0"
-	for i := range numberOfRuns {
+	for i := 0; i < numberOfRuns; i++ {
 		taskRunName := kmeta.ChildName(prName, fmt.Sprintf("-%s-%d", ptName, i))
-		// check if the taskRun name ends with a matrix instance count
-		if !strings.HasSuffix(taskRunName, fmt.Sprintf("-%d", i)) {
-			taskRunName = kmeta.ChildName(prName, "-"+ptName)
-			// kmeta.ChildName limits the size of a name to max of 63 characters based on k8s guidelines
-			// truncate the name such that "-<matrix-id>" can be appended to the taskRun name
-			longest := 63 - len(fmt.Sprintf("-%d", numberOfRuns))
-			taskRunName = taskRunName[0:longest]
-			taskRunName = fmt.Sprintf("%s-%d", taskRunName, i)
-		}
 		taskRunNames = append(taskRunNames, taskRunName)
 	}
 	return taskRunNames
@@ -781,7 +733,7 @@ func getCustomRunName(childRefs []v1.ChildStatusReference, ptName, prName string
 		}
 	}
 
-	return kmeta.ChildName(prName, "-"+ptName)
+	return kmeta.ChildName(prName, fmt.Sprintf("-%s", ptName))
 }
 
 // getNamesOfCustomRuns should return a unique names for `CustomRuns` if they have not already been defined,
@@ -886,10 +838,6 @@ func createResultsCacheMatrixedTaskRuns(rpt *ResolvedPipelineTask) (resultsCache
 // ValidateParamEnumSubset finds the referenced pipeline-level params in the resolved pipelineTask.
 // It then validates if the referenced pipeline-level param enums are subsets of the resolved pipelineTask-level param enums
 func ValidateParamEnumSubset(pipelineTaskParams []v1.Param, pipelineParamSpecs []v1.ParamSpec, rt *resources.ResolvedTask) error {
-	// When the matrix Task has no TaskRun, the rt will be nil, we should skip the validation.
-	if rt == nil {
-		return nil
-	}
 	for _, p := range pipelineTaskParams {
 		// calculate referenced param enums
 		res, present, errString := substitution.ExtractVariablesFromString(p.Value.StringVal, "params")

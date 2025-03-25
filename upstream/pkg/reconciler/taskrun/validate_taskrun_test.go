@@ -18,7 +18,7 @@ package taskrun
 
 import (
 	"context"
-	"errors"
+	"fmt"
 	"testing"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -128,7 +128,6 @@ func TestValidateResolvedTask_ValidParams(t *testing.T) {
 		t.Errorf("Did not expect to see error when validating TaskRun with correct params but saw %v", err)
 	}
 }
-
 func TestValidateResolvedTask_ExtraValidParams(t *testing.T) {
 	ctx := context.Background()
 	tcs := []struct {
@@ -306,8 +305,7 @@ func TestValidateResolvedTask_InvalidParams(t *testing.T) {
 		}},
 		matrix:  &v1.Matrix{},
 		wantErr: "invalid input params for task : param types don't match the user-specified type: [foo]",
-	}, {
-		name: "missing-param-in-matrix",
+	}, {name: "missing-param-in-matrix",
 		task: v1.Task{
 			ObjectMeta: metav1.ObjectMeta{Name: "foo"},
 			Spec: v1.TaskSpec{
@@ -322,8 +320,7 @@ func TestValidateResolvedTask_InvalidParams(t *testing.T) {
 			Params: v1.Params{{
 				Name:  "missing",
 				Value: *v1.NewStructuredValues("foo"),
-			}},
-		},
+			}}},
 		wantErr: "invalid input params for task : missing values for these params which have no default values: [bar]",
 	}, {
 		name: "missing-param-in-matrix-include",
@@ -362,8 +359,7 @@ func TestValidateResolvedTask_InvalidParams(t *testing.T) {
 			Params: v1.Params{{
 				Name:  "bar",
 				Value: *v1.NewStructuredValues("foo"),
-			}},
-		},
+			}}},
 		wantErr: "invalid input params for task : param types don't match the user-specified type: [bar]",
 	}, {
 		name: "invalid-str-in-matrix-include-param",
@@ -777,8 +773,7 @@ func TestValidateResult(t *testing.T) {
 						{
 							Name: "array-result-1",
 							Type: v1.ResultsTypeArray,
-						},
-						{
+						}, {
 							Name: "array-result-2",
 							Type: v1.ResultsTypeArray,
 						},
@@ -802,8 +797,7 @@ func TestValidateResult(t *testing.T) {
 							Name:  "array-result-1",
 							Type:  v1.ResultsTypeObject,
 							Value: *v1.NewObject(map[string]string{"hello": "world"}),
-						},
-						{
+						}, {
 							Name:  "array-result-2",
 							Type:  v1.ResultsTypeString,
 							Value: *v1.NewStructuredValues(""),
@@ -948,7 +942,7 @@ func TestEnumValidation_Failure(t *testing.T) {
 				Enum: []string{"v1", "v2", "v3"},
 			},
 		},
-		expectedErr: errors.New("param `p1` value: v4 is not in the enum list"),
+		expectedErr: fmt.Errorf("param `p1` value: v4 is not in the enum list"),
 	}}
 
 	for _, tc := range tcs {

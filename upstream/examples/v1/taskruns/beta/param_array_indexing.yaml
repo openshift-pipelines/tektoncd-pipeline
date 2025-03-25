@@ -15,14 +15,14 @@ spec:
     steps:
       # this step should echo "foo"
       - name: echo-params-1
-        image: mirror.gcr.io/bash
+        image: bash:3.2
         args: [
           "echo",
           "$(params.array-to-echo[0])",
         ]
       # this step should echo "bar"
       - name: echo-params-2
-        image: mirror.gcr.io/ubuntu
+        image: ubuntu
         script: |
           #!/bin/bash
           VALUE=$(params.array-to-echo[1])

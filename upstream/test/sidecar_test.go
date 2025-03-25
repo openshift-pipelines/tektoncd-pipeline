@@ -61,13 +61,8 @@ func TestSidecarTaskSupport(t *testing.T) {
 	t.Parallel()
 
 	for _, test := range tests {
+		test := test
 		t.Run(test.desc, func(t *testing.T) {
-			// If Kubernetes Sidecar support is enabled the Pod will terminate and it gets caught as an error though it's expected
-			ff := getFeatureFlagsBaseOnAPIFlag(t)
-
-			if ff.EnableKubernetesSidecar {
-				t.SkipNow()
-			}
 			t.Parallel()
 
 			ctx, cancel := context.WithCancel(ctx)
@@ -85,11 +80,11 @@ metadata:
 spec:
   steps:
   - name: %s
-    image: mirror.gcr.io/busybox
+    image: busybox
     command: [%s]
   sidecars:
   - name: %s
-    image: mirror.gcr.io/busybox
+    image: busybox
     command: [%s]
 `, sidecarTaskName, namespace, primaryContainerName, stringSliceToYAMLArray(test.stepCommand), sidecarContainerName, stringSliceToYAMLArray(test.sidecarCommand)))
 
@@ -144,14 +139,14 @@ spec:
 			sidecarTerminated := false
 
 			for _, c := range pod.Status.ContainerStatuses {
-				if c.Name == "step-"+primaryContainerName {
+				if c.Name == fmt.Sprintf("step-%s", primaryContainerName) {
 					if c.State.Terminated == nil || c.State.Terminated.Reason != "Completed" {
 						t.Errorf("Primary container has nil Terminated state or did not complete successfully. Actual Terminated state: %v", c.State.Terminated)
 					} else {
 						primaryTerminated = true
 					}
 				}
-				if c.Name == "sidecar-"+sidecarContainerName {
+				if c.Name == fmt.Sprintf("sidecar-%s", sidecarContainerName) {
 					if c.State.Terminated == nil {
 						t.Errorf("Sidecar container has a nil Terminated status but non-nil is expected.")
 					} else {
@@ -172,7 +167,7 @@ spec:
 			sidecarFromStatus := trCheckSidecarStatus.Status.Sidecars[0]
 
 			// Check if Sidecar ContainerName is present for SidecarStatus
-			if sidecarFromStatus.Container != "sidecar-"+sidecarContainerName {
+			if sidecarFromStatus.Container != fmt.Sprintf("sidecar-%s", sidecarContainerName) {
 				t.Errorf("Sidecar ContainerName should be: %s", sidecarContainerName)
 			}
 

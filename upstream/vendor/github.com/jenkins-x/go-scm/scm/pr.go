@@ -215,7 +215,7 @@ func ToMergeableState(text string) MergeableState {
 	switch strings.ToLower(text) {
 	case "clean", "mergeable", "can_be_merged":
 		return MergeableStateMergeable
-	case "dirty", "conflict", "conflicting", "cannot_be_merged":
+	case "conflict", "conflicting", "cannot_be_merged":
 		return MergeableStateConflicting
 	default:
 		return MergeableStateUnknown
