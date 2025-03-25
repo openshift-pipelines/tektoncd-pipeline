@@ -38,9 +38,6 @@ import (
 
 type conditionFn func(name string) ConditionAccessorFn
 
-// TestTaskRun examines the conformance of Tekton pipeline @HEAD. It does not
-// searve as part of the OSS conformance test suite but aims to keep the
-// devel conformant and to prevent regressions.
 func TestTaskRun(t *testing.T) {
 	ctx := context.Background()
 	ctx, cancel := context.WithCancel(ctx)
@@ -79,7 +76,6 @@ spec:
 					Reason:   "Completed",
 				},
 			},
-			TerminationReason: "Completed",
 		}},
 	}, {
 		name: "failed-task-run",
@@ -109,7 +105,6 @@ spec:
 					Reason:   "Completed",
 				},
 			},
-			TerminationReason: "Completed",
 		}, {
 			ContainerState: corev1.ContainerState{
 				Terminated: &corev1.ContainerStateTerminated{
@@ -117,7 +112,6 @@ spec:
 					Reason:   "Error",
 				},
 			},
-			TerminationReason: "Error",
 		}, {
 			ContainerState: corev1.ContainerState{
 				Terminated: &corev1.ContainerStateTerminated{
@@ -125,7 +119,6 @@ spec:
 					Reason:   "Error",
 				},
 			},
-			TerminationReason: "Skipped",
 		}},
 	}} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -189,11 +182,11 @@ spec:
 			}
 
 			ignoreTerminatedFields := cmpopts.IgnoreFields(corev1.ContainerStateTerminated{}, "StartedAt", "FinishedAt", "ContainerID")
-			ignoreStepFields := cmpopts.IgnoreFields(v1.StepState{}, "ImageID", "Name", "Container")
+			ignoreStepFields := cmpopts.IgnoreFields(v1.StepState{}, "ImageID", "Name", "ContainerName")
 			if d := cmp.Diff(tr.Status.Steps, tc.expectedStepState, ignoreTerminatedFields, ignoreStepFields); d != "" {
 				t.Fatalf("-got, +want: %v", d)
 			}
-			// Note(chmouel): Sometime we have docker-pullable:// or mirror.gcr.io as prefix, so let only compare the suffix
+			// Note(chmouel): Sometime we have docker-pullable:// or docker.io/library as prefix, so let only compare the suffix
 			if !strings.HasSuffix(tr.Status.Steps[0].ImageID, fqImageName) {
 				t.Fatalf("`ImageID: %s` does not end with `%s`", tr.Status.Steps[0].ImageID, fqImageName)
 			}

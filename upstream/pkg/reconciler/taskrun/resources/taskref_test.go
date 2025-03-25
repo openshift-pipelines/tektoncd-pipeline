@@ -34,16 +34,13 @@ import (
 	v1 "github.com/tektoncd/pipeline/pkg/apis/pipeline/v1"
 	"github.com/tektoncd/pipeline/pkg/apis/pipeline/v1alpha1"
 	"github.com/tektoncd/pipeline/pkg/apis/pipeline/v1beta1"
-	resolutionV1beta1 "github.com/tektoncd/pipeline/pkg/apis/resolution/v1beta1"
 	"github.com/tektoncd/pipeline/pkg/client/clientset/versioned/fake"
 	"github.com/tektoncd/pipeline/pkg/reconciler/apiserver"
 	"github.com/tektoncd/pipeline/pkg/reconciler/taskrun/resources"
-	"github.com/tektoncd/pipeline/pkg/remoteresolution/resource"
 	"github.com/tektoncd/pipeline/pkg/trustedresources"
 	"github.com/tektoncd/pipeline/test"
 	"github.com/tektoncd/pipeline/test/diff"
 	"github.com/tektoncd/pipeline/test/parse"
-	resolution "github.com/tektoncd/pipeline/test/remoteresolution"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -54,16 +51,16 @@ import (
 )
 
 var (
-	simpleNamespacedStepAction = &v1beta1.StepAction{
+	simpleNamespacedStepAction = &v1alpha1.StepAction{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "simple",
 			Namespace: "default",
 		},
 		TypeMeta: metav1.TypeMeta{
-			APIVersion: "tekton.dev/v1beta1",
+			APIVersion: "tekton.dev/v1alpha1",
 			Kind:       "StepAction",
 		},
-		Spec: v1beta1.StepActionSpec{
+		Spec: v1alpha1.StepActionSpec{
 			Image: "something",
 		},
 	}
@@ -301,7 +298,7 @@ func TestLocalTaskRef(t *testing.T) {
 			ref: &v1.TaskRef{
 				Name: "simple",
 			},
-			wantErr: errors.New("must specify namespace to resolve reference to task simple"),
+			wantErr: fmt.Errorf("must specify namespace to resolve reference to task simple"),
 		},
 	}
 
@@ -342,304 +339,6 @@ func TestLocalTaskRef(t *testing.T) {
 	}
 }
 
-func TestStepActionResolverParamReplacements(t *testing.T) {
-	testcases := []struct {
-		name      string
-		namespace string
-		taskrun   *v1.TaskRun
-		taskSpec  *v1.TaskSpec
-		want      *v1.Step
-	}{{
-		name:      "default taskspec parms",
-		namespace: "default",
-		taskrun: &v1.TaskRun{
-			ObjectMeta: metav1.ObjectMeta{Name: "some-tr"},
-			Spec: v1.TaskRunSpec{
-				TaskSpec: &v1.TaskSpec{
-					Params: []v1.ParamSpec{{
-						Name:    "resolver-param",
-						Default: v1.NewStructuredValues("foo/bar"),
-					}},
-					Steps: []v1.Step{{
-						Ref: &v1.Ref{
-							ResolverRef: v1.ResolverRef{
-								Resolver: "git",
-								Params: []v1.Param{{
-									Name:  "pathInRepo",
-									Value: *v1.NewStructuredValues("$(params.resolver-param)"),
-								}},
-							},
-						},
-					}},
-				},
-			},
-		},
-		want: &v1.Step{
-			Ref: &v1.Ref{
-				ResolverRef: v1.ResolverRef{
-					Resolver: "git",
-					Params: []v1.Param{{
-						Name:  "pathInRepo",
-						Value: *v1.NewStructuredValues("foo/bar"),
-					}},
-				},
-			},
-		},
-	}, {
-		name:      "default taskspec array parms",
-		namespace: "default",
-		taskrun: &v1.TaskRun{
-			ObjectMeta: metav1.ObjectMeta{Name: "some-tr"},
-			Spec: v1.TaskRunSpec{
-				TaskSpec: &v1.TaskSpec{
-					Params: []v1.ParamSpec{{
-						Name:    "resolver-param",
-						Type:    v1.ParamTypeArray,
-						Default: v1.NewStructuredValues("foo/bar", "bar/baz"),
-					}},
-					Steps: []v1.Step{{
-						Ref: &v1.Ref{
-							ResolverRef: v1.ResolverRef{
-								Resolver: "git",
-								Params: []v1.Param{{
-									Name:  "pathInRepo",
-									Value: *v1.NewStructuredValues("$(params.resolver-param[0])"),
-								}},
-							},
-						},
-					}},
-				},
-			},
-		},
-		want: &v1.Step{
-			Ref: &v1.Ref{
-				ResolverRef: v1.ResolverRef{
-					Resolver: "git",
-					Params: []v1.Param{{
-						Name:  "pathInRepo",
-						Value: *v1.NewStructuredValues("foo/bar"),
-					}},
-				},
-			},
-		},
-	}, {
-		name:      "default taskspec object parms",
-		namespace: "default",
-		taskrun: &v1.TaskRun{
-			ObjectMeta: metav1.ObjectMeta{Name: "some-tr"},
-			Spec: v1.TaskRunSpec{
-				TaskSpec: &v1.TaskSpec{
-					Params: []v1.ParamSpec{{
-						Name: "resolver-param",
-						Type: v1.ParamTypeObject,
-						Properties: map[string]v1.PropertySpec{
-							"key1": {},
-						},
-						Default: v1.NewObject(map[string]string{
-							"key1": "foo/bar",
-						}),
-					}},
-					Steps: []v1.Step{{
-						Ref: &v1.Ref{
-							ResolverRef: v1.ResolverRef{
-								Resolver: "git",
-								Params: []v1.Param{{
-									Name:  "pathInRepo",
-									Value: *v1.NewStructuredValues("$(params.resolver-param.key1)"),
-								}},
-							},
-						},
-					}},
-				},
-			},
-		},
-		want: &v1.Step{
-			Ref: &v1.Ref{
-				ResolverRef: v1.ResolverRef{
-					Resolver: "git",
-					Params: []v1.Param{{
-						Name:  "pathInRepo",
-						Value: *v1.NewStructuredValues("foo/bar"),
-					}},
-				},
-			},
-		},
-	}, {
-		name:      "default and taskrun params",
-		namespace: "default",
-		taskrun: &v1.TaskRun{
-			ObjectMeta: metav1.ObjectMeta{Name: "some-tr"},
-			Spec: v1.TaskRunSpec{
-				Params: []v1.Param{{
-					Name:  "resolver-param",
-					Value: *v1.NewStructuredValues("foo/bar/baz"),
-				}},
-				TaskSpec: &v1.TaskSpec{
-					Params: []v1.ParamSpec{{
-						Name:    "resolver-param",
-						Default: v1.NewStructuredValues("foo/bar"),
-					}},
-					Steps: []v1.Step{{
-						Ref: &v1.Ref{
-							ResolverRef: v1.ResolverRef{
-								Resolver: "git",
-								Params: []v1.Param{{
-									Name:  "pathInRepo",
-									Value: *v1.NewStructuredValues("$(params.resolver-param)"),
-								}},
-							},
-						},
-					}},
-				},
-			},
-		},
-		want: &v1.Step{
-			Ref: &v1.Ref{
-				ResolverRef: v1.ResolverRef{
-					Resolver: "git",
-					Params: []v1.Param{{
-						Name:  "pathInRepo",
-						Value: *v1.NewStructuredValues("foo/bar/baz"),
-					}},
-				},
-			},
-		},
-	}, {
-		name:      "default and taskrun object parms",
-		namespace: "default",
-		taskrun: &v1.TaskRun{
-			ObjectMeta: metav1.ObjectMeta{Name: "some-tr"},
-			Spec: v1.TaskRunSpec{
-				Params: v1.Params{{
-					Name:  "resolver-param",
-					Value: *v1.NewObject(map[string]string{"key1": "foo/bar/baz"}),
-				}},
-				TaskSpec: &v1.TaskSpec{
-					Params: []v1.ParamSpec{{
-						Name: "resolver-param",
-						Type: v1.ParamTypeObject,
-						Properties: map[string]v1.PropertySpec{
-							"key1": {},
-						},
-						Default: v1.NewObject(map[string]string{
-							"key1": "foo/bar",
-						}),
-					}},
-					Steps: []v1.Step{{
-						Ref: &v1.Ref{
-							ResolverRef: v1.ResolverRef{
-								Resolver: "git",
-								Params: []v1.Param{{
-									Name:  "pathInRepo",
-									Value: *v1.NewStructuredValues("$(params.resolver-param.key1)"),
-								}},
-							},
-						},
-					}},
-				},
-			},
-		},
-		want: &v1.Step{
-			Ref: &v1.Ref{
-				ResolverRef: v1.ResolverRef{
-					Resolver: "git",
-					Params: []v1.Param{{
-						Name:  "pathInRepo",
-						Value: *v1.NewStructuredValues("foo/bar/baz"),
-					}},
-				},
-			},
-		},
-	}, {
-		name:      "taskrun params",
-		namespace: "default",
-		taskrun: &v1.TaskRun{
-			ObjectMeta: metav1.ObjectMeta{Name: "some-tr"},
-			Spec: v1.TaskRunSpec{
-				Params: []v1.Param{{
-					Name:  "resolver-param",
-					Value: *v1.NewStructuredValues("foo/bar/baz"),
-				}},
-				TaskSpec: &v1.TaskSpec{
-					Steps: []v1.Step{{
-						Ref: &v1.Ref{
-							ResolverRef: v1.ResolverRef{
-								Resolver: "git",
-								Params: []v1.Param{{
-									Name:  "pathInRepo",
-									Value: *v1.NewStructuredValues("$(params.resolver-param)"),
-								}},
-							},
-						},
-					}},
-				},
-			},
-		},
-		want: &v1.Step{
-			Ref: &v1.Ref{
-				ResolverRef: v1.ResolverRef{
-					Resolver: "git",
-					Params: []v1.Param{{
-						Name:  "pathInRepo",
-						Value: *v1.NewStructuredValues("foo/bar/baz"),
-					}},
-				},
-			},
-		},
-	}, {
-		name:      "defaults from remote task",
-		namespace: "default",
-		taskrun: &v1.TaskRun{
-			ObjectMeta: metav1.ObjectMeta{Name: "some-tr"},
-			Spec: v1.TaskRunSpec{
-				TaskRef: &v1.TaskRef{
-					Name: "resolved-task-name",
-				},
-			},
-		},
-		taskSpec: &v1.TaskSpec{
-			Params: []v1.ParamSpec{{
-				Name:    "resolver-param",
-				Default: v1.NewStructuredValues("foo/bar"),
-			}},
-			Steps: []v1.Step{{
-				Ref: &v1.Ref{
-					ResolverRef: v1.ResolverRef{
-						Resolver: "git",
-						Params: []v1.Param{{
-							Name:  "pathInRepo",
-							Value: *v1.NewStructuredValues("$(params.resolver-param)"),
-						}},
-					},
-				},
-			}},
-		},
-		want: &v1.Step{
-			Ref: &v1.Ref{
-				ResolverRef: v1.ResolverRef{
-					Resolver: "git",
-					Params: []v1.Param{{
-						Name:  "pathInRepo",
-						Value: *v1.NewStructuredValues("foo/bar"),
-					}},
-				},
-			},
-		},
-	}}
-	for _, tc := range testcases {
-		t.Run(tc.name, func(t *testing.T) {
-			if tc.taskSpec == nil {
-				tc.taskSpec = tc.taskrun.Spec.TaskSpec
-			}
-			step := &tc.taskSpec.Steps[0]
-			resources.ApplyParameterSubstitutionInResolverParams(tc.taskrun, *tc.taskSpec, step)
-			if d := cmp.Diff(tc.want, step); tc.want != nil && d != "" {
-				t.Error(diff.PrintWantGot(d))
-			}
-		})
-	}
-}
-
 func TestStepActionRef(t *testing.T) {
 	testcases := []struct {
 		name        string
@@ -651,13 +350,13 @@ func TestStepActionRef(t *testing.T) {
 		name:      "local-step-action",
 		namespace: "default",
 		stepactions: []runtime.Object{
-			&v1beta1.StepAction{
+			&v1alpha1.StepAction{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "simple",
 					Namespace: "default",
 				},
 			},
-			&v1beta1.StepAction{
+			&v1alpha1.StepAction{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "sample",
 					Namespace: "default",
@@ -667,7 +366,7 @@ func TestStepActionRef(t *testing.T) {
 		ref: &v1.Ref{
 			Name: "simple",
 		},
-		expected: &v1beta1.StepAction{
+		expected: &v1alpha1.StepAction{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      "simple",
 				Namespace: "default",
@@ -724,7 +423,7 @@ func TestStepActionRef_Error(t *testing.T) {
 			name:      "local-step-action-missing-namespace",
 			namespace: "",
 			stepactions: []runtime.Object{
-				&v1beta1.StepAction{
+				&v1alpha1.StepAction{
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      "simple",
 						Namespace: "default",
@@ -734,7 +433,7 @@ func TestStepActionRef_Error(t *testing.T) {
 			ref: &v1.Ref{
 				Name: "simple",
 			},
-			wantErr: errors.New("must specify namespace to resolve reference to step action simple"),
+			wantErr: fmt.Errorf("must specify namespace to resolve reference to step action simple"),
 		},
 	}
 
@@ -904,7 +603,7 @@ func TestGetStepActionFunc_Local(t *testing.T) {
 	for _, tc := range testcases {
 		t.Run(tc.name, func(t *testing.T) {
 			tektonclient := fake.NewSimpleClientset(tc.localStepActions...)
-			fn := resources.GetStepActionFunc(tektonclient, nil, nil, tc.taskRun, *tc.taskRun.Spec.TaskSpec, &tc.taskRun.Spec.TaskSpec.Steps[0])
+			fn := resources.GetStepActionFunc(tektonclient, nil, nil, tc.taskRun, &tc.taskRun.Spec.TaskSpec.Steps[0])
 
 			stepAction, refSource, err := fn(ctx, tc.taskRun.Spec.TaskSpec.Steps[0].Ref.Name)
 			if err != nil {
@@ -930,29 +629,21 @@ func TestGetStepActionFunc_RemoteResolution_Success(t *testing.T) {
 	testcases := []struct {
 		name           string
 		stepActionYAML string
-		wantStepAction *v1beta1.StepAction
+		wantStepAction *v1alpha1.StepAction
 		wantErr        bool
 	}{{
-		name: "remote StepAction v1alpha1",
+		name: "remote StepAction",
 		stepActionYAML: strings.Join([]string{
 			"kind: StepAction",
 			"apiVersion: tekton.dev/v1alpha1",
 			stepActionYAMLString,
 		}, "\n"),
-		wantStepAction: parse.MustParseV1beta1StepAction(t, stepActionYAMLString),
-	}, {
-		name: "remote StepAction v1beta1",
-		stepActionYAML: strings.Join([]string{
-			"kind: StepAction",
-			"apiVersion: tekton.dev/v1beta1",
-			stepActionYAMLString,
-		}, "\n"),
-		wantStepAction: parse.MustParseV1beta1StepAction(t, stepActionYAMLString),
+		wantStepAction: parse.MustParseV1alpha1StepAction(t, stepActionYAMLString),
 	}}
 	for _, tc := range testcases {
 		t.Run(tc.name, func(t *testing.T) {
-			resolved := resolution.NewResolvedResource([]byte(tc.stepActionYAML), nil /* annotations */, sampleRefSource.DeepCopy(), nil /* data error */)
-			requester := resolution.NewRequester(resolved, nil, resource.ResolverPayload{})
+			resolved := test.NewResolvedResource([]byte(tc.stepActionYAML), nil /* annotations */, sampleRefSource.DeepCopy(), nil /* data error */)
+			requester := test.NewRequester(resolved, nil)
 			tr := &v1.TaskRun{
 				ObjectMeta: metav1.ObjectMeta{Namespace: "default"},
 				Spec: v1.TaskRunSpec{
@@ -965,7 +656,7 @@ func TestGetStepActionFunc_RemoteResolution_Success(t *testing.T) {
 				},
 			}
 			tektonclient := fake.NewSimpleClientset()
-			fn := resources.GetStepActionFunc(tektonclient, nil, requester, tr, *tr.Spec.TaskSpec, &tr.Spec.TaskSpec.Steps[0])
+			fn := resources.GetStepActionFunc(tektonclient, nil, requester, tr, &tr.Spec.TaskSpec.Steps[0])
 
 			resolvedStepAction, resolvedRefSource, err := fn(ctx, tr.Spec.TaskSpec.Steps[0].Ref.Name)
 			if tc.wantErr {
@@ -1012,8 +703,8 @@ func TestGetStepActionFunc_RemoteResolution_Error(t *testing.T) {
 
 	for _, tc := range testcases {
 		t.Run(tc.name, func(t *testing.T) {
-			res := resolution.NewResolvedResource(tc.resolvesTo, nil, nil, nil)
-			requester := resolution.NewRequester(res, nil, resource.ResolverPayload{})
+			resource := test.NewResolvedResource(tc.resolvesTo, nil, nil, nil)
+			requester := test.NewRequester(resource, nil)
 			tr := &v1.TaskRun{
 				ObjectMeta: metav1.ObjectMeta{Namespace: "default"},
 				Spec: v1.TaskRunSpec{
@@ -1026,7 +717,7 @@ func TestGetStepActionFunc_RemoteResolution_Error(t *testing.T) {
 				},
 			}
 			tektonclient := fake.NewSimpleClientset()
-			fn := resources.GetStepActionFunc(tektonclient, nil, requester, tr, *tr.Spec.TaskSpec, &tr.Spec.TaskSpec.Steps[0])
+			fn := resources.GetStepActionFunc(tektonclient, nil, requester, tr, &tr.Spec.TaskSpec.Steps[0])
 			if _, _, err := fn(ctx, tr.Spec.TaskSpec.Steps[0].Ref.Name); err == nil {
 				t.Fatalf("expected error due to invalid pipeline data but saw none")
 			}
@@ -1116,7 +807,7 @@ func TestGetTaskFunc_RemoteResolution(t *testing.T) {
 			"apiVersion: tekton.dev/v1beta1",
 			taskYAMLString,
 		}, "\n"),
-		wantTask: parse.MustParseV1TaskAndSetDefaults(t, taskYAMLString),
+		wantTask: parse.MustParseV1Task(t, taskYAMLString),
 	}, {
 		name: "v1beta1 cluster task",
 		taskYAML: strings.Join([]string{
@@ -1124,7 +815,7 @@ func TestGetTaskFunc_RemoteResolution(t *testing.T) {
 			"apiVersion: tekton.dev/v1beta1",
 			taskYAMLString,
 		}, "\n"),
-		wantTask: parse.MustParseV1TaskAndSetDefaults(t, taskYAMLString),
+		wantTask: parse.MustParseV1Task(t, taskYAMLString),
 	}, {
 		name: "v1 task",
 		taskYAML: strings.Join([]string{
@@ -1132,7 +823,7 @@ func TestGetTaskFunc_RemoteResolution(t *testing.T) {
 			"apiVersion: tekton.dev/v1",
 			taskYAMLString,
 		}, "\n"),
-		wantTask: parse.MustParseV1TaskAndSetDefaults(t, taskYAMLString),
+		wantTask: parse.MustParseV1Task(t, taskYAMLString),
 	}, {
 		name: "v1 task without defaults",
 		taskYAML: strings.Join([]string{
@@ -1140,12 +831,12 @@ func TestGetTaskFunc_RemoteResolution(t *testing.T) {
 			"apiVersion: tekton.dev/v1",
 			remoteTaskYamlWithoutDefaults,
 		}, "\n"),
-		wantTask: parse.MustParseV1TaskAndSetDefaults(t, remoteTaskYamlWithoutDefaults),
+		wantTask: parse.MustParseV1Task(t, remoteTaskYamlWithoutDefaults),
 	}}
 	for _, tc := range testcases {
 		t.Run(tc.name, func(t *testing.T) {
-			resolved := resolution.NewResolvedResource([]byte(tc.taskYAML), nil /* annotations */, sampleRefSource.DeepCopy(), nil /* data error */)
-			requester := resolution.NewRequester(resolved, nil, resource.ResolverPayload{})
+			resolved := test.NewResolvedResource([]byte(tc.taskYAML), nil /* annotations */, sampleRefSource.DeepCopy(), nil /* data error */)
+			requester := test.NewRequester(resolved, nil)
 			tr := &v1.TaskRun{
 				ObjectMeta: metav1.ObjectMeta{Namespace: "default"},
 				Spec: v1.TaskRunSpec{
@@ -1211,8 +902,8 @@ func TestGetTaskFunc_RemoteResolution_ValidationFailure(t *testing.T) {
 	}}
 	for _, tc := range testcases {
 		t.Run(tc.name, func(t *testing.T) {
-			resolved := resolution.NewResolvedResource([]byte(tc.taskYAML), nil /* annotations */, sampleRefSource.DeepCopy(), nil /* data error */)
-			requester := resolution.NewRequester(resolved, nil, resource.ResolverPayload{})
+			resolved := test.NewResolvedResource([]byte(tc.taskYAML), nil /* annotations */, sampleRefSource.DeepCopy(), nil /* data error */)
+			requester := test.NewRequester(resolved, nil)
 			tektonclient := fake.NewSimpleClientset()
 			fn := resources.GetTaskFunc(ctx, nil, tektonclient, requester, &v1.TaskRun{
 				ObjectMeta: metav1.ObjectMeta{Namespace: "default"},
@@ -1243,9 +934,8 @@ func TestGetTaskFunc_RemoteResolution_ReplacedParams(t *testing.T) {
 	ctx := context.Background()
 	cfg := config.FromContextOrDefaults(ctx)
 	ctx = config.ToContext(ctx, cfg)
-	task := parse.MustParseV1TaskAndSetDefaults(t, taskYAMLString)
+	task := parse.MustParseV1Task(t, taskYAMLString)
 	taskRef := &v1.TaskRef{
-		Name: "https://foo/bar",
 		ResolverRef: v1.ResolverRef{
 			Resolver: "git",
 			Params: []v1.Param{{
@@ -1263,21 +953,16 @@ func TestGetTaskFunc_RemoteResolution_ReplacedParams(t *testing.T) {
 		taskYAMLString,
 	}, "\n")
 
-	resolved := resolution.NewResolvedResource([]byte(taskYAML), nil, sampleRefSource.DeepCopy(), nil)
-	requester := &resolution.Requester{
+	resolved := test.NewResolvedResource([]byte(taskYAML), nil, sampleRefSource.DeepCopy(), nil)
+	requester := &test.Requester{
 		ResolvedResource: resolved,
-		ResolverPayload: resource.ResolverPayload{
-			ResolutionSpec: &resolutionV1beta1.ResolutionRequestSpec{
-				Params: v1.Params{{
-					Name:  "foo",
-					Value: *v1.NewStructuredValues("bar"),
-				}, {
-					Name:  "bar",
-					Value: *v1.NewStructuredValues("test-task"),
-				}},
-				URL: "https://foo/bar",
-			},
-		},
+		Params: v1.Params{{
+			Name:  "foo",
+			Value: *v1.NewStructuredValues("bar"),
+		}, {
+			Name:  "bar",
+			Value: *v1.NewStructuredValues("test-task"),
+		}},
 	}
 	tr := &v1.TaskRun{
 		ObjectMeta: metav1.ObjectMeta{
@@ -1353,8 +1038,8 @@ func TestGetPipelineFunc_RemoteResolutionInvalidData(t *testing.T) {
 	ctx = config.ToContext(ctx, cfg)
 	taskRef := &v1.TaskRef{ResolverRef: v1.ResolverRef{Resolver: "git"}}
 	resolvesTo := []byte("INVALID YAML")
-	res := resolution.NewResolvedResource(resolvesTo, nil, nil, nil)
-	requester := resolution.NewRequester(res, nil, resource.ResolverPayload{})
+	resource := test.NewResolvedResource(resolvesTo, nil, nil, nil)
+	requester := test.NewRequester(resource, nil)
 	tr := &v1.TaskRun{
 		ObjectMeta: metav1.ObjectMeta{Namespace: "default"},
 		Spec: v1.TaskRunSpec{
@@ -1414,7 +1099,7 @@ func TestGetTaskFunc_V1beta1Task_VerifyNoError(t *testing.T) {
 
 	testcases := []struct {
 		name                       string
-		requester                  *resolution.Requester
+		requester                  *test.Requester
 		verificationNoMatchPolicy  string
 		policies                   []*v1alpha1.VerificationPolicy
 		expected                   runtime.Object
@@ -1473,7 +1158,7 @@ func TestGetTaskFunc_V1beta1Task_VerifyNoError(t *testing.T) {
 	}
 	for _, tc := range testcases {
 		t.Run(tc.name, func(t *testing.T) {
-			ctx := test.SetupTrustedResourceConfig(context.Background(), tc.verificationNoMatchPolicy)
+			ctx = test.SetupTrustedResourceConfig(ctx, tc.verificationNoMatchPolicy)
 			tr := &v1.TaskRun{
 				ObjectMeta: metav1.ObjectMeta{Namespace: "trusted-resources"},
 				Spec: v1.TaskRunSpec{
@@ -1542,7 +1227,7 @@ func TestGetTaskFunc_V1beta1Task_VerifyError(t *testing.T) {
 
 	testcases := []struct {
 		name                           string
-		requester                      *resolution.Requester
+		requester                      *test.Requester
 		verificationNoMatchPolicy      string
 		expected                       *v1.Task
 		expectedErr                    error
@@ -1601,7 +1286,7 @@ func TestGetTaskFunc_V1beta1Task_VerifyError(t *testing.T) {
 	}
 	for _, tc := range testcases {
 		t.Run(tc.name, func(t *testing.T) {
-			ctx := test.SetupTrustedResourceConfig(ctx, tc.verificationNoMatchPolicy)
+			ctx = test.SetupTrustedResourceConfig(ctx, tc.verificationNoMatchPolicy)
 			tr := &v1.TaskRun{
 				ObjectMeta: metav1.ObjectMeta{Namespace: "trusted-resources"},
 				Spec: v1.TaskRunSpec{
@@ -1678,7 +1363,7 @@ func TestGetTaskFunc_V1Task_VerifyNoError(t *testing.T) {
 
 	testcases := []struct {
 		name                       string
-		requester                  *resolution.Requester
+		requester                  *test.Requester
 		verificationNoMatchPolicy  string
 		policies                   []*v1alpha1.VerificationPolicy
 		expected                   runtime.Object
@@ -1737,7 +1422,7 @@ func TestGetTaskFunc_V1Task_VerifyNoError(t *testing.T) {
 	}
 	for _, tc := range testcases {
 		t.Run(tc.name, func(t *testing.T) {
-			ctx := test.SetupTrustedResourceConfig(ctx, tc.verificationNoMatchPolicy)
+			ctx = test.SetupTrustedResourceConfig(ctx, tc.verificationNoMatchPolicy)
 			tr := &v1.TaskRun{
 				ObjectMeta: metav1.ObjectMeta{Namespace: "trusted-resources"},
 				Spec: v1.TaskRunSpec{
@@ -1806,7 +1491,7 @@ func TestGetTaskFunc_V1Task_VerifyError(t *testing.T) {
 
 	testcases := []struct {
 		name                       string
-		requester                  *resolution.Requester
+		requester                  *test.Requester
 		verificationNoMatchPolicy  string
 		expected                   *v1.Task
 		expectedErr                error
@@ -1863,7 +1548,7 @@ func TestGetTaskFunc_V1Task_VerifyError(t *testing.T) {
 	}
 	for _, tc := range testcases {
 		t.Run(tc.name, func(t *testing.T) {
-			ctx := test.SetupTrustedResourceConfig(ctx, tc.verificationNoMatchPolicy)
+			ctx = test.SetupTrustedResourceConfig(ctx, tc.verificationNoMatchPolicy)
 			tr := &v1.TaskRun{
 				ObjectMeta: metav1.ObjectMeta{Namespace: "trusted-resources"},
 				Spec: v1.TaskRunSpec{
@@ -1892,9 +1577,9 @@ func TestGetTaskFunc_GetFuncError(t *testing.T) {
 		t.Fatal("fail to marshal task", err)
 	}
 
-	resolvedUnsigned := resolution.NewResolvedResource(unsignedTaskBytes, nil, sampleRefSource.DeepCopy(), nil)
-	requesterUnsigned := resolution.NewRequester(resolvedUnsigned, nil, resource.ResolverPayload{})
-	resolvedUnsigned.DataErr = errors.New("resolution error")
+	resolvedUnsigned := test.NewResolvedResource(unsignedTaskBytes, nil, sampleRefSource.DeepCopy(), nil)
+	requesterUnsigned := test.NewRequester(resolvedUnsigned, nil)
+	resolvedUnsigned.DataErr = fmt.Errorf("resolution error")
 
 	trResolutionError := &v1.TaskRun{
 		ObjectMeta: metav1.ObjectMeta{Namespace: "trusted-resources"},
@@ -1911,7 +1596,7 @@ func TestGetTaskFunc_GetFuncError(t *testing.T) {
 
 	testcases := []struct {
 		name        string
-		requester   *resolution.Requester
+		requester   *test.Requester
 		taskrun     v1.TaskRun
 		expectedErr error
 	}{
@@ -1935,7 +1620,7 @@ func TestGetTaskFunc_GetFuncError(t *testing.T) {
 				},
 			}
 			store.OnConfigChanged(featureflags)
-			ctx := store.ToContext(ctx)
+			ctx = store.ToContext(ctx)
 
 			fn := resources.GetTaskFunc(ctx, k8sclient, tektonclient, tc.requester, &tc.taskrun, tc.taskrun.Spec.TaskRef, "", "default", "default", vps)
 
@@ -1954,15 +1639,9 @@ var taskYAMLString = `
 metadata:
   name: foo
 spec:
-  params:
-  - name: array
-    # type: array
-    default:
-      - "bar"
-      - "bar"
   steps:
   - name: step1
-    image: docker.io/library/ubuntu
+    image: ubuntu
     script: |
       echo "hello world!"
 `
@@ -1987,9 +1666,9 @@ spec:
   - name: foo
 `
 
-func bytesToRequester(data []byte, source *v1.RefSource) *resolution.Requester {
-	resolved := resolution.NewResolvedResource(data, nil, source, nil)
-	requester := resolution.NewRequester(resolved, nil, resource.ResolverPayload{})
+func bytesToRequester(data []byte, source *v1.RefSource) *test.Requester {
+	resolved := test.NewResolvedResource(data, nil, source, nil)
+	requester := test.NewRequester(resolved, nil)
 	return requester
 }
 
@@ -2009,7 +1688,7 @@ func getSignedV1Task(unsigned *v1.Task, signer signature.Signer, name string) (*
 
 func signInterface(signer signature.Signer, i interface{}) ([]byte, error) {
 	if signer == nil {
-		return nil, errors.New("signer is nil")
+		return nil, fmt.Errorf("signer is nil")
 	}
 	b, err := json.Marshal(i)
 	if err != nil {

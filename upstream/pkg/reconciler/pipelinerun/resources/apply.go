@@ -18,7 +18,6 @@ package resources
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"strconv"
 	"strings"
@@ -27,7 +26,6 @@ import (
 	"github.com/tektoncd/pipeline/pkg/apis/pipeline/v1beta1"
 	"github.com/tektoncd/pipeline/pkg/reconciler/taskrun/resources"
 	"github.com/tektoncd/pipeline/pkg/substitution"
-	"github.com/tektoncd/pipeline/pkg/workspace"
 )
 
 const (
@@ -40,11 +38,13 @@ const (
 	objectIndividualVariablePattern = "params.%s.%s"
 )
 
-var paramPatterns = []string{
-	"params.%s",
-	"params[%q]",
-	"params['%s']",
-}
+var (
+	paramPatterns = []string{
+		"params.%s",
+		"params[%q]",
+		"params['%s']",
+	}
+)
 
 // ApplyParameters applies the params from a PipelineRun.Params to a PipelineSpec.
 func ApplyParameters(ctx context.Context, p *v1.PipelineSpec, pr *v1.PipelineRun) *v1.PipelineSpec {
@@ -62,7 +62,7 @@ func ApplyParameters(ctx context.Context, p *v1.PipelineSpec, pr *v1.PipelineRun
 			switch p.Default.Type {
 			case v1.ParamTypeArray:
 				for _, pattern := range paramPatterns {
-					for i := range len(p.Default.ArrayVal) {
+					for i := 0; i < len(p.Default.ArrayVal); i++ {
 						stringReplacements[fmt.Sprintf(pattern+"[%d]", p.Name, i)] = p.Default.ArrayVal[i]
 					}
 					arrayReplacements[fmt.Sprintf(pattern, p.Name)] = p.Default.ArrayVal
@@ -110,7 +110,7 @@ func paramsFromPipelineRun(ctx context.Context, pr *v1.PipelineRun) (map[string]
 		switch p.Value.Type {
 		case v1.ParamTypeArray:
 			for _, pattern := range paramPatterns {
-				for i := range len(p.Value.ArrayVal) {
+				for i := 0; i < len(p.Value.ArrayVal); i++ {
 					stringReplacements[fmt.Sprintf(pattern+"[%d]", p.Name, i)] = p.Value.ArrayVal[i]
 				}
 				arrayReplacements[fmt.Sprintf(pattern, p.Name)] = p.Value.ArrayVal
@@ -147,12 +147,6 @@ func GetContextReplacements(pipelineName string, pr *v1.PipelineRun) map[string]
 // ApplyContexts applies the substitution from $(context.(pipelineRun|pipeline).*) with the specified values.
 // Currently supports only name substitution. Uses "" as a default if name is not specified.
 func ApplyContexts(spec *v1.PipelineSpec, pipelineName string, pr *v1.PipelineRun) *v1.PipelineSpec {
-	for i := range spec.Tasks {
-		spec.Tasks[i].DisplayName = substitution.ApplyReplacements(spec.Tasks[i].DisplayName, GetContextReplacements(pipelineName, pr))
-	}
-	for i := range spec.Finally {
-		spec.Finally[i].DisplayName = substitution.ApplyReplacements(spec.Finally[i].DisplayName, GetContextReplacements(pipelineName, pr))
-	}
 	return ApplyReplacements(spec, GetContextReplacements(pipelineName, pr), map[string][]string{}, map[string]map[string]string{})
 }
 
@@ -248,11 +242,8 @@ func ApplyTaskResults(targets PipelineRunState, resolvedResultRefs ResolvedResul
 				}
 			}
 			pipelineTask.When = pipelineTask.When.ReplaceVariables(stringReplacements, arrayReplacements)
-			if pipelineTask.TaskRef != nil {
-				if pipelineTask.TaskRef.Params != nil {
-					pipelineTask.TaskRef.Params = pipelineTask.TaskRef.Params.ReplaceVariables(stringReplacements, arrayReplacements, objectReplacements)
-				}
-				pipelineTask.TaskRef.Name = substitution.ApplyReplacements(pipelineTask.TaskRef.Name, stringReplacements)
+			if pipelineTask.TaskRef != nil && pipelineTask.TaskRef.Params != nil {
+				pipelineTask.TaskRef.Params = pipelineTask.TaskRef.Params.ReplaceVariables(stringReplacements, arrayReplacements, objectReplacements)
 			}
 			pipelineTask.DisplayName = substitution.ApplyReplacements(pipelineTask.DisplayName, stringReplacements)
 			for i, workspace := range pipelineTask.Workspaces {
@@ -270,11 +261,8 @@ func ApplyPipelineTaskStateContext(state PipelineRunState, replacements map[stri
 			pipelineTask := resolvedPipelineRunTask.PipelineTask.DeepCopy()
 			pipelineTask.Params = pipelineTask.Params.ReplaceVariables(replacements, nil, nil)
 			pipelineTask.When = pipelineTask.When.ReplaceVariables(replacements, nil)
-			if pipelineTask.TaskRef != nil {
-				if pipelineTask.TaskRef.Params != nil {
-					pipelineTask.TaskRef.Params = pipelineTask.TaskRef.Params.ReplaceVariables(replacements, nil, nil)
-				}
-				pipelineTask.TaskRef.Name = substitution.ApplyReplacements(pipelineTask.TaskRef.Name, replacements)
+			if pipelineTask.TaskRef != nil && pipelineTask.TaskRef.Params != nil {
+				pipelineTask.TaskRef.Params = pipelineTask.TaskRef.Params.ReplaceVariables(replacements, nil, nil)
 			}
 			pipelineTask.DisplayName = substitution.ApplyReplacements(pipelineTask.DisplayName, replacements)
 			resolvedPipelineRunTask.PipelineTask = pipelineTask
@@ -309,19 +297,15 @@ func ApplyReplacements(p *v1.PipelineSpec, replacements map[string]string, array
 			for j := range p.Tasks[i].Matrix.Include {
 				p.Tasks[i].Matrix.Include[j].Params = p.Tasks[i].Matrix.Include[j].Params.ReplaceVariables(replacements, nil, nil)
 			}
-		} else {
-			p.Tasks[i].DisplayName = substitution.ApplyReplacements(p.Tasks[i].DisplayName, replacements)
 		}
 		for j := range p.Tasks[i].Workspaces {
 			p.Tasks[i].Workspaces[j].SubPath = substitution.ApplyReplacements(p.Tasks[i].Workspaces[j].SubPath, replacements)
 		}
 		p.Tasks[i].When = p.Tasks[i].When.ReplaceVariables(replacements, arrayReplacements)
-		if p.Tasks[i].TaskRef != nil {
-			if p.Tasks[i].TaskRef.Params != nil {
-				p.Tasks[i].TaskRef.Params = p.Tasks[i].TaskRef.Params.ReplaceVariables(replacements, arrayReplacements, objectReplacements)
-			}
-			p.Tasks[i].TaskRef.Name = substitution.ApplyReplacements(p.Tasks[i].TaskRef.Name, replacements)
+		if p.Tasks[i].TaskRef != nil && p.Tasks[i].TaskRef.Params != nil {
+			p.Tasks[i].TaskRef.Params = p.Tasks[i].TaskRef.Params.ReplaceVariables(replacements, arrayReplacements, objectReplacements)
 		}
+		p.Tasks[i].DisplayName = substitution.ApplyReplacements(p.Tasks[i].DisplayName, replacements)
 		p.Tasks[i] = propagateParams(p.Tasks[i], replacements, arrayReplacements, objectReplacements)
 	}
 
@@ -332,19 +316,15 @@ func ApplyReplacements(p *v1.PipelineSpec, replacements map[string]string, array
 			for j := range p.Finally[i].Matrix.Include {
 				p.Finally[i].Matrix.Include[j].Params = p.Finally[i].Matrix.Include[j].Params.ReplaceVariables(replacements, nil, nil)
 			}
-		} else {
-			p.Finally[i].DisplayName = substitution.ApplyReplacements(p.Finally[i].DisplayName, replacements)
 		}
 		for j := range p.Finally[i].Workspaces {
 			p.Finally[i].Workspaces[j].SubPath = substitution.ApplyReplacements(p.Finally[i].Workspaces[j].SubPath, replacements)
 		}
 		p.Finally[i].When = p.Finally[i].When.ReplaceVariables(replacements, arrayReplacements)
-		if p.Finally[i].TaskRef != nil {
-			if p.Finally[i].TaskRef.Params != nil {
-				p.Finally[i].TaskRef.Params = p.Finally[i].TaskRef.Params.ReplaceVariables(replacements, arrayReplacements, objectReplacements)
-			}
-			p.Finally[i].TaskRef.Name = substitution.ApplyReplacements(p.Finally[i].TaskRef.Name, replacements)
+		if p.Finally[i].TaskRef != nil && p.Finally[i].TaskRef.Params != nil {
+			p.Finally[i].TaskRef.Params = p.Finally[i].TaskRef.Params.ReplaceVariables(replacements, arrayReplacements, objectReplacements)
 		}
+		p.Finally[i].DisplayName = substitution.ApplyReplacements(p.Finally[i].DisplayName, replacements)
 		p.Finally[i] = propagateParams(p.Finally[i], replacements, arrayReplacements, objectReplacements)
 	}
 
@@ -416,7 +396,34 @@ func ApplyResultsToWorkspaceBindings(trResults map[string][]v1.TaskRunResult, pr
 		}
 	}
 
-	pr.Spec.Workspaces = workspace.ReplaceWorkspaceBindingsVars(pr.Spec.Workspaces, stringReplacements)
+	for i, binding := range pr.Spec.Workspaces {
+		if pr.Spec.Workspaces[i].PersistentVolumeClaim != nil {
+			pr.Spec.Workspaces[i].PersistentVolumeClaim.ClaimName = substitution.ApplyReplacements(binding.PersistentVolumeClaim.ClaimName, stringReplacements)
+		}
+		pr.Spec.Workspaces[i].SubPath = substitution.ApplyReplacements(binding.SubPath, stringReplacements)
+		if pr.Spec.Workspaces[i].ConfigMap != nil {
+			pr.Spec.Workspaces[i].ConfigMap.Name = substitution.ApplyReplacements(binding.ConfigMap.Name, stringReplacements)
+		}
+		if pr.Spec.Workspaces[i].CSI != nil {
+			pr.Spec.Workspaces[i].CSI.Driver = substitution.ApplyReplacements(binding.CSI.Driver, stringReplacements)
+			if pr.Spec.Workspaces[i].CSI.NodePublishSecretRef != nil {
+				pr.Spec.Workspaces[i].CSI.NodePublishSecretRef.Name = substitution.ApplyReplacements(binding.CSI.NodePublishSecretRef.Name, stringReplacements)
+			}
+		}
+		if pr.Spec.Workspaces[i].Secret != nil {
+			pr.Spec.Workspaces[i].Secret.SecretName = substitution.ApplyReplacements(binding.Secret.SecretName, stringReplacements)
+		}
+		if pr.Spec.Workspaces[i].Projected != nil {
+			for j, source := range binding.Projected.Sources {
+				if pr.Spec.Workspaces[i].Projected.Sources[j].ConfigMap != nil {
+					pr.Spec.Workspaces[i].Projected.Sources[j].ConfigMap.Name = substitution.ApplyReplacements(source.ConfigMap.Name, stringReplacements)
+				}
+				if pr.Spec.Workspaces[i].Projected.Sources[j].Secret != nil {
+					pr.Spec.Workspaces[i].Projected.Sources[j].Secret.Name = substitution.ApplyReplacements(source.Secret.Name, stringReplacements)
+				}
+			}
+		}
+	}
 }
 
 // PropagateResults propagate the result of the completed task to the unfinished task that is not explicitly specify in the params
@@ -443,40 +450,6 @@ func PropagateResults(rpt *ResolvedPipelineTask, runStates PipelineRunState) {
 	rpt.ResolvedTask.TaskSpec = resources.ApplyReplacements(rpt.ResolvedTask.TaskSpec, stringReplacements, arrayReplacements, map[string]map[string]string{})
 }
 
-// PropagateArtifacts propagates artifact values from previous task runs into the TaskSpec of the current task.
-func PropagateArtifacts(rpt *ResolvedPipelineTask, runStates PipelineRunState) error {
-	if rpt.ResolvedTask == nil || rpt.ResolvedTask.TaskSpec == nil {
-		return nil
-	}
-	stringReplacements := map[string]string{}
-	for taskName, artifacts := range runStates.GetTaskRunsArtifacts() {
-		if artifacts != nil {
-			for i, input := range artifacts.Inputs {
-				ib, err := json.Marshal(input.Values)
-				if err != nil {
-					return err
-				}
-				stringReplacements[fmt.Sprintf("tasks.%s.inputs.%s", taskName, input.Name)] = string(ib)
-				if i == 0 {
-					stringReplacements[fmt.Sprintf("tasks.%s.inputs", taskName)] = string(ib)
-				}
-			}
-			for i, output := range artifacts.Outputs {
-				ob, err := json.Marshal(output.Values)
-				if err != nil {
-					return err
-				}
-				stringReplacements[fmt.Sprintf("tasks.%s.outputs.%s", taskName, output.Name)] = string(ob)
-				if i == 0 {
-					stringReplacements[fmt.Sprintf("tasks.%s.outputs", taskName)] = string(ob)
-				}
-			}
-		}
-	}
-	rpt.ResolvedTask.TaskSpec = resources.ApplyReplacements(rpt.ResolvedTask.TaskSpec, stringReplacements, map[string][]string{}, map[string]map[string]string{})
-	return nil
-}
-
 // ApplyTaskResultsToPipelineResults applies the results of completed TasksRuns and Runs to a Pipeline's
 // list of PipelineResults, returning the computed set of PipelineRunResults. References to
 // non-existent TaskResults or failed TaskRuns or Runs result in a PipelineResult being considered invalid
@@ -487,8 +460,7 @@ func ApplyTaskResultsToPipelineResults(
 	results []v1.PipelineResult,
 	taskRunResults map[string][]v1.TaskRunResult,
 	customTaskResults map[string][]v1beta1.CustomRunResult,
-	taskstatus map[string]string,
-) ([]v1.PipelineRunResult, error) {
+	taskstatus map[string]string) ([]v1.PipelineRunResult, error) {
 	var runResults []v1.PipelineRunResult
 	var invalidPipelineResults []string
 
@@ -633,5 +605,32 @@ func runResultValue(taskName string, resultName string, runResults map[string][]
 // placeholders in various binding types with values from provided parameters.
 func ApplyParametersToWorkspaceBindings(ctx context.Context, pr *v1.PipelineRun) {
 	parameters, _, _ := paramsFromPipelineRun(ctx, pr)
-	pr.Spec.Workspaces = workspace.ReplaceWorkspaceBindingsVars(pr.Spec.Workspaces, parameters)
+	for i, binding := range pr.Spec.Workspaces {
+		if pr.Spec.Workspaces[i].PersistentVolumeClaim != nil {
+			pr.Spec.Workspaces[i].PersistentVolumeClaim.ClaimName = substitution.ApplyReplacements(binding.PersistentVolumeClaim.ClaimName, parameters)
+		}
+		pr.Spec.Workspaces[i].SubPath = substitution.ApplyReplacements(binding.SubPath, parameters)
+		if pr.Spec.Workspaces[i].ConfigMap != nil {
+			pr.Spec.Workspaces[i].ConfigMap.Name = substitution.ApplyReplacements(binding.ConfigMap.Name, parameters)
+		}
+		if pr.Spec.Workspaces[i].Secret != nil {
+			pr.Spec.Workspaces[i].Secret.SecretName = substitution.ApplyReplacements(binding.Secret.SecretName, parameters)
+		}
+		if pr.Spec.Workspaces[i].CSI != nil {
+			pr.Spec.Workspaces[i].CSI.Driver = substitution.ApplyReplacements(binding.CSI.Driver, parameters)
+			if pr.Spec.Workspaces[i].CSI.NodePublishSecretRef != nil {
+				pr.Spec.Workspaces[i].CSI.NodePublishSecretRef.Name = substitution.ApplyReplacements(binding.CSI.NodePublishSecretRef.Name, parameters)
+			}
+		}
+		if pr.Spec.Workspaces[i].Projected != nil {
+			for j, source := range binding.Projected.Sources {
+				if pr.Spec.Workspaces[i].Projected.Sources[j].ConfigMap != nil {
+					pr.Spec.Workspaces[i].Projected.Sources[j].ConfigMap.Name = substitution.ApplyReplacements(source.ConfigMap.Name, parameters)
+				}
+				if pr.Spec.Workspaces[i].Projected.Sources[j].Secret != nil {
+					pr.Spec.Workspaces[i].Projected.Sources[j].Secret.Name = substitution.ApplyReplacements(source.Secret.Name, parameters)
+				}
+			}
+		}
+	}
 }

@@ -17,7 +17,6 @@ limitations under the License.
 package resultref_test
 
 import (
-	"errors"
 	"fmt"
 	"testing"
 
@@ -91,7 +90,7 @@ func TestParseStepExpression(t *testing.T) {
 			Value: *v1.NewStructuredValues("$(steps.sumSteps.results.sumResult.foo.bar)"),
 		},
 		wantParsedResult: resultref.ParsedResult{},
-		wantError:        errors.New("must be one of the form 1). \"tasks.<taskName>.results.<resultName>\"; 2). \"tasks.<taskName>.results.<objectResultName>.<individualAttribute>\"; 3). \"steps.<stepName>.results.<resultName>\"; 4). \"steps.<stepName>.results.<objectResultName>.<individualAttribute>\""),
+		wantError:        fmt.Errorf("must be one of the form 1). \"tasks.<taskName>.results.<resultName>\"; 2). \"tasks.<taskName>.results.<objectResultName>.<individualAttribute>\"; 3). \"steps.<stepName>.results.<resultName>\"; 4). \"steps.<stepName>.results.<objectResultName>.<individualAttribute>\""),
 	}, {
 		name: "not a step result ref",
 		param: v1.Param{
@@ -99,7 +98,7 @@ func TestParseStepExpression(t *testing.T) {
 			Value: *v1.NewStructuredValues("$(tasks.sumSteps.results.sumResult.foo.bar)"),
 		},
 		wantParsedResult: resultref.ParsedResult{},
-		wantError:        errors.New("must be one of the form 1). \"steps.<stepName>.results.<resultName>\"; 2). \"steps.<stepName>.results.<objectResultName>.<individualAttribute>\""),
+		wantError:        fmt.Errorf("must be one of the form 1). \"steps.<stepName>.results.<resultName>\"; 2). \"steps.<stepName>.results.<objectResultName>.<individualAttribute>\""),
 	}} {
 		t.Run(tt.name, func(t *testing.T) {
 			expressions, _ := tt.param.GetVarSubstitutionExpressions()
@@ -184,7 +183,7 @@ func TestParseTaskExpression(t *testing.T) {
 			Value: *v1.NewStructuredValues("$(tasks.sumTasks.results.sumResult.foo.bar)"),
 		},
 		wantParsedResult: resultref.ParsedResult{},
-		wantError:        errors.New("must be one of the form 1). \"tasks.<taskName>.results.<resultName>\"; 2). \"tasks.<taskName>.results.<objectResultName>.<individualAttribute>\"; 3). \"steps.<stepName>.results.<resultName>\"; 4). \"steps.<stepName>.results.<objectResultName>.<individualAttribute>\""),
+		wantError:        fmt.Errorf("must be one of the form 1). \"tasks.<taskName>.results.<resultName>\"; 2). \"tasks.<taskName>.results.<objectResultName>.<individualAttribute>\"; 3). \"steps.<stepName>.results.<resultName>\"; 4). \"steps.<stepName>.results.<objectResultName>.<individualAttribute>\""),
 	}, {
 		name: "not a task result ref",
 		param: v1.Param{
@@ -192,7 +191,7 @@ func TestParseTaskExpression(t *testing.T) {
 			Value: *v1.NewStructuredValues("$(nottasks.sumTasks.results.sumResult.foo.bar)"),
 		},
 		wantParsedResult: resultref.ParsedResult{},
-		wantError:        errors.New("must be one of the form 1). \"tasks.<taskName>.results.<resultName>\"; 2). \"tasks.<taskName>.results.<objectResultName>.<individualAttribute>\""),
+		wantError:        fmt.Errorf("must be one of the form 1). \"tasks.<taskName>.results.<resultName>\"; 2). \"tasks.<taskName>.results.<objectResultName>.<individualAttribute>\""),
 	}} {
 		t.Run(tt.name, func(t *testing.T) {
 			expressions, _ := tt.param.GetVarSubstitutionExpressions()
@@ -218,12 +217,11 @@ func TestParseResultName(t *testing.T) {
 		name  string
 		input string
 		want  []string
-	}{
-		{
-			name:  "array indexing",
-			input: "anArrayResult[1]",
-			want:  []string{"anArrayResult", "1"},
-		},
+	}{{
+		name:  "array indexing",
+		input: "anArrayResult[1]",
+		want:  []string{"anArrayResult", "1"},
+	},
 		{
 			name:  "array star reference",
 			input: "anArrayResult[*]",

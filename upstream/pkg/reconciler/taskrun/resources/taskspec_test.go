@@ -19,23 +19,20 @@ package resources_test
 import (
 	"context"
 	"errors"
+	"fmt"
 	"testing"
 	"time"
 
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
 	v1 "github.com/tektoncd/pipeline/pkg/apis/pipeline/v1"
-	"github.com/tektoncd/pipeline/pkg/apis/pipeline/v1beta1"
+	"github.com/tektoncd/pipeline/pkg/apis/pipeline/v1alpha1"
 	"github.com/tektoncd/pipeline/pkg/client/clientset/versioned/fake"
 	"github.com/tektoncd/pipeline/pkg/reconciler/taskrun/resources"
-	"github.com/tektoncd/pipeline/pkg/remoteresolution/resource"
 	"github.com/tektoncd/pipeline/pkg/trustedresources"
 	"github.com/tektoncd/pipeline/test/diff"
-	"github.com/tektoncd/pipeline/test/parse"
-	test "github.com/tektoncd/pipeline/test/remoteresolution"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"sigs.k8s.io/yaml"
 )
 
 func TestGetTaskSpec_Ref(t *testing.T) {
@@ -64,6 +61,7 @@ func TestGetTaskSpec_Ref(t *testing.T) {
 		return task, sampleRefSource.DeepCopy(), nil, nil
 	}
 	resolvedObjectMeta, taskSpec, err := resources.GetTaskData(context.Background(), tr, gt)
+
 	if err != nil {
 		t.Fatalf("Did not expect error getting task spec but got: %s", err)
 	}
@@ -97,6 +95,7 @@ func TestGetTaskSpec_Embedded(t *testing.T) {
 		return nil, nil, nil, errors.New("shouldn't be called")
 	}
 	resolvedObjectMeta, taskSpec, err := resources.GetTaskData(context.Background(), tr, gt)
+
 	if err != nil {
 		t.Fatalf("Did not expect error getting task spec but got: %s", err)
 	}
@@ -201,7 +200,7 @@ func TestGetTaskData_ResolutionSuccess(t *testing.T) {
 	}
 
 	if d := cmp.Diff(sourceSpec, *resolvedSpec); d != "" {
-		t.Error(diff.PrintWantGot(d))
+		t.Errorf(diff.PrintWantGot(d))
 	}
 }
 
@@ -297,343 +296,7 @@ func TestGetTaskData_VerificationResult(t *testing.T) {
 		t.Fatalf("Did not expect error but got: %s", err)
 	}
 	if d := cmp.Diff(verificationResult, r.VerificationResult, cmpopts.EquateErrors()); d != "" {
-		t.Error(diff.PrintWantGot(d))
-	}
-}
-
-func TestGetStepActionsData_Provenance(t *testing.T) {
-	source := v1.RefSource{
-		URI:    "ref-source",
-		Digest: map[string]string{"sha256": "abcd123456"},
-	}
-	stepAction := parse.MustParseV1beta1StepAction(t, `
-metadata:
-  name: stepAction
-  namespace: foo
-spec:
-  image: myImage
-  command: ["ls"]
-`)
-
-	stepActionBytes, err := yaml.Marshal(stepAction)
-	if err != nil {
-		t.Fatal("failed to marshal StepAction", err)
-	}
-	rr := test.NewResolvedResource(stepActionBytes, map[string]string{}, &source, nil)
-	requester := test.NewRequester(rr, nil, resource.ResolverPayload{})
-	tests := []struct {
-		name string
-		tr   *v1.TaskRun
-		want *v1.TaskRun
-	}{{
-		name: "remote-step-action-with-provenance",
-		tr: &v1.TaskRun{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      "mytaskrun",
-				Namespace: "default",
-			},
-			Spec: v1.TaskRunSpec{
-				TaskSpec: &v1.TaskSpec{
-					Steps: []v1.Step{{
-						Name: "stepname",
-						Ref: &v1.Ref{
-							ResolverRef: v1.ResolverRef{
-								Resolver: "foo",
-								Params: []v1.Param{{
-									Name: "bar",
-									Value: v1.ParamValue{
-										Type:      v1.ParamTypeString,
-										StringVal: "baz",
-									},
-								}},
-							},
-						},
-					}},
-				},
-			},
-		},
-		want: &v1.TaskRun{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      "mytaskrun",
-				Namespace: "default",
-			},
-			Spec: v1.TaskRunSpec{
-				TaskSpec: &v1.TaskSpec{
-					Steps: []v1.Step{{
-						Name: "stepname",
-						Ref: &v1.Ref{
-							ResolverRef: v1.ResolverRef{
-								Resolver: "foo",
-								Params: []v1.Param{{
-									Name: "bar",
-									Value: v1.ParamValue{
-										Type:      v1.ParamTypeString,
-										StringVal: "baz",
-									},
-								}},
-							},
-						},
-					}},
-				},
-			},
-			Status: v1.TaskRunStatus{
-				TaskRunStatusFields: v1.TaskRunStatusFields{
-					Steps: []v1.StepState{{
-						Name: "stepname",
-						Provenance: &v1.Provenance{
-							RefSource: &source,
-						},
-					}},
-				},
-			},
-		},
-	}, {
-		name: "multiple-remote-step-actions-with-provenance",
-		tr: &v1.TaskRun{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      "mytaskrun",
-				Namespace: "default",
-			},
-			Spec: v1.TaskRunSpec{
-				TaskSpec: &v1.TaskSpec{
-					Steps: []v1.Step{{
-						Name: "step1",
-						Ref: &v1.Ref{
-							ResolverRef: v1.ResolverRef{
-								Resolver: "foo",
-								Params: []v1.Param{{
-									Name: "bar",
-									Value: v1.ParamValue{
-										Type:      v1.ParamTypeString,
-										StringVal: "baz",
-									},
-								}},
-							},
-						},
-					}, {
-						Name: "step2",
-						Ref: &v1.Ref{
-							ResolverRef: v1.ResolverRef{
-								Resolver: "foo",
-								Params: []v1.Param{{
-									Name: "bar",
-									Value: v1.ParamValue{
-										Type:      v1.ParamTypeString,
-										StringVal: "baz",
-									},
-								}},
-							},
-						},
-					}},
-				},
-			},
-		},
-		want: &v1.TaskRun{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      "mytaskrun",
-				Namespace: "default",
-			},
-			Spec: v1.TaskRunSpec{
-				TaskSpec: &v1.TaskSpec{
-					Steps: []v1.Step{{
-						Name: "step1",
-						Ref: &v1.Ref{
-							ResolverRef: v1.ResolverRef{
-								Resolver: "foo",
-								Params: []v1.Param{{
-									Name: "bar",
-									Value: v1.ParamValue{
-										Type:      v1.ParamTypeString,
-										StringVal: "baz",
-									},
-								}},
-							},
-						},
-					}, {
-						Name: "step2",
-						Ref: &v1.Ref{
-							ResolverRef: v1.ResolverRef{
-								Resolver: "foo",
-								Params: []v1.Param{{
-									Name: "bar",
-									Value: v1.ParamValue{
-										Type:      v1.ParamTypeString,
-										StringVal: "baz",
-									},
-								}},
-							},
-						},
-					}},
-				},
-			},
-			Status: v1.TaskRunStatus{
-				TaskRunStatusFields: v1.TaskRunStatusFields{
-					Steps: []v1.StepState{{
-						Name: "step1",
-						Provenance: &v1.Provenance{
-							RefSource: &source,
-						},
-					}, {
-						Name: "step2",
-						Provenance: &v1.Provenance{
-							RefSource: &source,
-						},
-					}},
-				},
-			},
-		},
-	}, {
-		name: "remote-step-action-with-existing-provenance",
-		tr: &v1.TaskRun{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      "mytaskrun",
-				Namespace: "default",
-			},
-			Spec: v1.TaskRunSpec{
-				TaskSpec: &v1.TaskSpec{
-					Steps: []v1.Step{{
-						Name: "step1",
-						Ref: &v1.Ref{
-							ResolverRef: v1.ResolverRef{
-								Resolver: "foo",
-								Params: []v1.Param{{
-									Name: "bar",
-									Value: v1.ParamValue{
-										Type:      v1.ParamTypeString,
-										StringVal: "baz",
-									},
-								}},
-							},
-						},
-					}},
-				},
-			},
-			Status: v1.TaskRunStatus{
-				TaskRunStatusFields: v1.TaskRunStatusFields{
-					Steps: []v1.StepState{{
-						Name: "step1",
-						Provenance: &v1.Provenance{
-							RefSource: &source,
-						},
-					}},
-				},
-			},
-		},
-		want: &v1.TaskRun{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      "mytaskrun",
-				Namespace: "default",
-			},
-			Spec: v1.TaskRunSpec{
-				TaskSpec: &v1.TaskSpec{
-					Steps: []v1.Step{{
-						Name: "step1",
-						Ref: &v1.Ref{
-							ResolverRef: v1.ResolverRef{
-								Resolver: "foo",
-								Params: []v1.Param{{
-									Name: "bar",
-									Value: v1.ParamValue{
-										Type:      v1.ParamTypeString,
-										StringVal: "baz",
-									},
-								}},
-							},
-						},
-					}},
-				},
-			},
-			Status: v1.TaskRunStatus{
-				TaskRunStatusFields: v1.TaskRunStatusFields{
-					Steps: []v1.StepState{{
-						Name: "step1",
-						Provenance: &v1.Provenance{
-							RefSource: &source,
-						},
-					}},
-				},
-			},
-		},
-	}, {
-		name: "remote-step-action-with-missing-provenance",
-		tr: &v1.TaskRun{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      "mytaskrun",
-				Namespace: "default",
-			},
-			Spec: v1.TaskRunSpec{
-				TaskSpec: &v1.TaskSpec{
-					Steps: []v1.Step{{
-						Name: "step1",
-						Ref: &v1.Ref{
-							ResolverRef: v1.ResolverRef{
-								Resolver: "foo",
-								Params: []v1.Param{{
-									Name: "bar",
-									Value: v1.ParamValue{
-										Type:      v1.ParamTypeString,
-										StringVal: "baz",
-									},
-								}},
-							},
-						},
-					}},
-				},
-			},
-			Status: v1.TaskRunStatus{
-				TaskRunStatusFields: v1.TaskRunStatusFields{
-					Steps: []v1.StepState{{
-						Name: "step1",
-					}},
-				},
-			},
-		},
-		want: &v1.TaskRun{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      "mytaskrun",
-				Namespace: "default",
-			},
-			Spec: v1.TaskRunSpec{
-				TaskSpec: &v1.TaskSpec{
-					Steps: []v1.Step{{
-						Name: "step1",
-						Ref: &v1.Ref{
-							ResolverRef: v1.ResolverRef{
-								Resolver: "foo",
-								Params: []v1.Param{{
-									Name: "bar",
-									Value: v1.ParamValue{
-										Type:      v1.ParamTypeString,
-										StringVal: "baz",
-									},
-								}},
-							},
-						},
-					}},
-				},
-			},
-			Status: v1.TaskRunStatus{
-				TaskRunStatusFields: v1.TaskRunStatusFields{
-					Steps: []v1.StepState{{
-						Name: "step1",
-						Provenance: &v1.Provenance{
-							RefSource: &source,
-						},
-					}},
-				},
-			},
-		},
-	}}
-	for _, tt := range tests {
-		ctx := context.Background()
-		tektonclient := fake.NewSimpleClientset(stepAction)
-		_, err := resources.GetStepActionsData(ctx, *tt.tr.Spec.TaskSpec, tt.tr, tektonclient, nil, requester)
-		if err != nil {
-			t.Fatalf("Did not expect an error but got : %s", err)
-		}
-		if d := cmp.Diff(tt.want, tt.tr); d != "" {
-			t.Errorf("the taskrun did not match what was expected diff: %s", diff.PrintWantGot(d))
-		}
+		t.Errorf(diff.PrintWantGot(d))
 	}
 }
 
@@ -643,7 +306,7 @@ func TestGetStepActionsData(t *testing.T) {
 	tests := []struct {
 		name       string
 		tr         *v1.TaskRun
-		stepAction *v1beta1.StepAction
+		stepAction *v1alpha1.StepAction
 		want       []v1.Step
 	}{{
 		name: "step-action-with-command-args",
@@ -663,12 +326,12 @@ func TestGetStepActionsData(t *testing.T) {
 				},
 			},
 		},
-		stepAction: &v1beta1.StepAction{
+		stepAction: &v1alpha1.StepAction{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      "stepAction",
 				Namespace: "default",
 			},
-			Spec: v1beta1.StepActionSpec{
+			Spec: v1alpha1.StepActionSpec{
 				Image:   "myimage",
 				Command: []string{"ls"},
 				Args:    []string{"-lh"},
@@ -705,12 +368,12 @@ func TestGetStepActionsData(t *testing.T) {
 				},
 			},
 		},
-		stepAction: &v1beta1.StepAction{
+		stepAction: &v1alpha1.StepAction{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      "stepActionWithScript",
 				Namespace: "default",
 			},
-			Spec: v1beta1.StepActionSpec{
+			Spec: v1alpha1.StepActionSpec{
 				Image:  "myimage",
 				Script: "ls",
 			},
@@ -736,12 +399,12 @@ func TestGetStepActionsData(t *testing.T) {
 				},
 			},
 		},
-		stepAction: &v1beta1.StepAction{
+		stepAction: &v1alpha1.StepAction{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      "stepActionWithEnv",
 				Namespace: "default",
 			},
-			Spec: v1beta1.StepActionSpec{
+			Spec: v1alpha1.StepActionSpec{
 				Image: "myimage",
 				Env: []corev1.EnvVar{{
 					Name:  "env1",
@@ -773,12 +436,12 @@ func TestGetStepActionsData(t *testing.T) {
 				},
 			},
 		},
-		stepAction: &v1beta1.StepAction{
+		stepAction: &v1alpha1.StepAction{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      "stepActionWithScript",
 				Namespace: "default",
 			},
-			Spec: v1beta1.StepActionSpec{
+			Spec: v1alpha1.StepActionSpec{
 				Image:  "myimage",
 				Script: "ls",
 				Results: []v1.StepResult{{
@@ -812,12 +475,12 @@ func TestGetStepActionsData(t *testing.T) {
 				},
 			},
 		},
-		stepAction: &v1beta1.StepAction{
+		stepAction: &v1alpha1.StepAction{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      "stepAction",
 				Namespace: "default",
 			},
-			Spec: v1beta1.StepActionSpec{
+			Spec: v1alpha1.StepActionSpec{
 				Image:   "myimage",
 				Command: []string{"ls"},
 				Args:    []string{"-lh"},
@@ -850,12 +513,12 @@ func TestGetStepActionsData(t *testing.T) {
 				},
 			},
 		},
-		stepAction: &v1beta1.StepAction{
+		stepAction: &v1alpha1.StepAction{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      "stepAction",
 				Namespace: "default",
 			},
-			Spec: v1beta1.StepActionSpec{
+			Spec: v1alpha1.StepActionSpec{
 				Image:           "myimage",
 				Command:         []string{"ls"},
 				Args:            []string{"-lh"},
@@ -914,12 +577,12 @@ func TestGetStepActionsData(t *testing.T) {
 				},
 			},
 		},
-		stepAction: &v1beta1.StepAction{
+		stepAction: &v1alpha1.StepAction{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      "stepAction",
 				Namespace: "default",
 			},
-			Spec: v1beta1.StepActionSpec{
+			Spec: v1alpha1.StepActionSpec{
 				Image: "myimage",
 				Args:  []string{"$(params.string-param)", "$(params.array-param[0])", "$(params.array-param[1])", "$(params.array-param[*])", "$(params.object-param.key)"},
 				Params: v1.ParamSpecs{{
@@ -985,12 +648,12 @@ func TestGetStepActionsData(t *testing.T) {
 				},
 			},
 		},
-		stepAction: &v1beta1.StepAction{
+		stepAction: &v1alpha1.StepAction{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      "stepAction",
 				Namespace: "default",
 			},
-			Spec: v1beta1.StepActionSpec{
+			Spec: v1alpha1.StepActionSpec{
 				Image: "myimage",
 				Args:  []string{"$(params.string-param)", "$(params.array-param[0])", "$(params.array-param[1])", "$(params.array-param[*])", "$(params.object-param.key)"},
 				Params: v1.ParamSpecs{{
@@ -1027,12 +690,12 @@ func TestGetStepActionsData(t *testing.T) {
 				},
 			},
 		},
-		stepAction: &v1beta1.StepAction{
+		stepAction: &v1alpha1.StepAction{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      "stepAction",
 				Namespace: "default",
 			},
-			Spec: v1beta1.StepActionSpec{
+			Spec: v1alpha1.StepActionSpec{
 				Image: "myimage",
 				Args:  []string{"$(params.string-param)", "$(params.array-param[0])", "$(params.array-param[1])", "$(params.array-param[*])", "$(params.object-param.key)"},
 				Params: v1.ParamSpecs{{
@@ -1117,12 +780,12 @@ func TestGetStepActionsData(t *testing.T) {
 				},
 			},
 		},
-		stepAction: &v1beta1.StepAction{
+		stepAction: &v1alpha1.StepAction{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      "stepAction",
 				Namespace: "default",
 			},
-			Spec: v1beta1.StepActionSpec{
+			Spec: v1alpha1.StepActionSpec{
 				Image: "myimage",
 				Args:  []string{"$(params.string-param)", "$(params.array-param[0])", "$(params.array-param[1])", "$(params.array-param[*])", "$(params.object-param.key)", "$(params.object-param.key2)", "$(params.object-param.key3)"},
 				Params: v1.ParamSpecs{{
@@ -1153,61 +816,6 @@ func TestGetStepActionsData(t *testing.T) {
 		want: []v1.Step{{
 			Image: "myimage",
 			Args:  []string{"taskrun string param", "taskspec", "array", "taskspec", "array", "param", "taskrun key", "taskspec key2", "step action key3"},
-		}},
-	}, {
-		name: "params in step propagated to stepaction only",
-		tr: &v1.TaskRun{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      "mytaskrun",
-				Namespace: "default",
-			},
-			Spec: v1.TaskRunSpec{
-				Params: v1.Params{{
-					Name: "stringparam",
-					Value: v1.ParamValue{
-						Type:      v1.ParamTypeString,
-						StringVal: "taskrun string param",
-					},
-				}},
-				TaskSpec: &v1.TaskSpec{
-					Steps: []v1.Step{{
-						Ref: &v1.Ref{
-							Name: "stepAction",
-						},
-						Params: v1.Params{{
-							Name: "stringparam",
-							Value: v1.ParamValue{
-								Type:      v1.ParamTypeString,
-								StringVal: "step string param",
-							},
-						}},
-						OnError:      v1.OnErrorType("$(params.stringparam)"),
-						StdoutConfig: &v1.StepOutputConfig{Path: "$(params.stringparam)"},
-						StderrConfig: &v1.StepOutputConfig{Path: "$(params.stringparam)"},
-					}},
-				},
-			},
-		},
-		stepAction: &v1beta1.StepAction{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      "stepAction",
-				Namespace: "default",
-			},
-			Spec: v1beta1.StepActionSpec{
-				Image: "myimage",
-				Args:  []string{"echo", "$(params.stringparam)"},
-				Params: v1.ParamSpecs{{
-					Name: "stringparam",
-					Type: v1.ParamTypeString,
-				}},
-			},
-		},
-		want: []v1.Step{{
-			Image:        "myimage",
-			Args:         []string{"echo", "step string param"},
-			OnError:      v1.OnErrorType("$(params.stringparam)"),
-			StdoutConfig: &v1.StepOutputConfig{Path: "$(params.stringparam)"},
-			StderrConfig: &v1.StepOutputConfig{Path: "$(params.stringparam)"},
 		}},
 	}, {
 		name: "propagating step result substitution strings into step actions",
@@ -1248,12 +856,12 @@ func TestGetStepActionsData(t *testing.T) {
 				},
 			},
 		},
-		stepAction: &v1beta1.StepAction{
+		stepAction: &v1alpha1.StepAction{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      "stepAction",
 				Namespace: "default",
 			},
-			Spec: v1beta1.StepActionSpec{
+			Spec: v1alpha1.StepActionSpec{
 				Image:   "myimage",
 				Args:    []string{"$(params.string-param)", "$(params.array-param[0])", "$(params.array-param[1])", "$(params.array-param[*])", "$(params.object-param.key)"},
 				Command: []string{"$(params[\"string-param\"])", "$(params[\"array-param\"][0])"},
@@ -1301,54 +909,6 @@ func TestGetStepActionsData(t *testing.T) {
 				Value: "$(steps.inlined-step.results.result1)",
 			}},
 		}},
-	}, {
-		name: "param types are matching",
-		tr: &v1.TaskRun{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      "mytaskrun",
-				Namespace: "default",
-			},
-			Spec: v1.TaskRunSpec{
-				TaskSpec: &v1.TaskSpec{
-					Steps: []v1.Step{{
-						Name: "test",
-						Ref:  &v1.Ref{Name: "stepAction"},
-						Params: v1.Params{{
-							Name: "commands",
-							Value: v1.ParamValue{
-								Type:     v1.ParamTypeArray,
-								ArrayVal: []string{"Hello, I am of type list"},
-							},
-						}},
-					}},
-				},
-			},
-		},
-		stepAction: &v1beta1.StepAction{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      "stepAction",
-				Namespace: "default",
-			},
-			Spec: v1beta1.StepActionSpec{
-				Image:  "myimage",
-				Args:   []string{"$(params.commands)"},
-				Script: "echo $@",
-				Params: v1.ParamSpecs{{
-					Name: "commands",
-					Type: v1.ParamTypeArray,
-					Default: &v1.ParamValue{
-						Type:     v1.ParamTypeArray,
-						ArrayVal: []string{"Hello, I am the default value"},
-					},
-				}},
-			},
-		},
-		want: []v1.Step{{
-			Name:   "test",
-			Image:  "myimage",
-			Args:   []string{"Hello, I am of type list"},
-			Script: "echo $@",
-		}},
 	}}
 	for _, tt := range tests {
 		ctx := context.Background()
@@ -1368,7 +928,7 @@ func TestGetStepActionsData_Error(t *testing.T) {
 	tests := []struct {
 		name          string
 		tr            *v1.TaskRun
-		stepAction    *v1beta1.StepAction
+		stepAction    *v1alpha1.StepAction
 		expectedError error
 	}{{
 		name: "namespace missing error",
@@ -1386,8 +946,8 @@ func TestGetStepActionsData_Error(t *testing.T) {
 				},
 			},
 		},
-		stepAction:    &v1beta1.StepAction{},
-		expectedError: errors.New("must specify namespace to resolve reference to step action stepActionError"),
+		stepAction:    &v1alpha1.StepAction{},
+		expectedError: fmt.Errorf("must specify namespace to resolve reference to step action stepActionError"),
 	}, {
 		name: "params missing",
 		tr: &v1.TaskRun{
@@ -1405,12 +965,12 @@ func TestGetStepActionsData_Error(t *testing.T) {
 				},
 			},
 		},
-		stepAction: &v1beta1.StepAction{
+		stepAction: &v1alpha1.StepAction{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      "stepaction",
 				Namespace: "default",
 			},
-			Spec: v1beta1.StepActionSpec{
+			Spec: v1alpha1.StepActionSpec{
 				Image: "myimage",
 				Params: v1.ParamSpecs{{
 					Name: "string-param",
@@ -1418,7 +978,7 @@ func TestGetStepActionsData_Error(t *testing.T) {
 				}},
 			},
 		},
-		expectedError: errors.New("non-existent params in Step: [string-param]"),
+		expectedError: fmt.Errorf("non-existent params in Step: [string-param]"),
 	}, {
 		name: "params extra",
 		tr: &v1.TaskRun{
@@ -1440,56 +1000,16 @@ func TestGetStepActionsData_Error(t *testing.T) {
 				},
 			},
 		},
-		stepAction: &v1beta1.StepAction{
+		stepAction: &v1alpha1.StepAction{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      "stepaction",
 				Namespace: "default",
 			},
-			Spec: v1beta1.StepActionSpec{
+			Spec: v1alpha1.StepActionSpec{
 				Image: "myimage",
 			},
 		},
-		expectedError: errors.New("extra params passed by Step to StepAction: [string-param]"),
-	}, {
-		name: "param types not matching",
-		tr: &v1.TaskRun{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      "mytaskrun",
-				Namespace: "default",
-			},
-			Spec: v1.TaskRunSpec{
-				TaskSpec: &v1.TaskSpec{
-					Steps: []v1.Step{{
-						Name: "test",
-						Ref:  &v1.Ref{Name: "stepAction"},
-						Params: v1.Params{{
-							Name:  "commands",
-							Value: *v1.NewStructuredValues("Hello, I am of type string"),
-						}},
-					}},
-				},
-			},
-		},
-		stepAction: &v1beta1.StepAction{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      "stepAction",
-				Namespace: "default",
-			},
-			Spec: v1beta1.StepActionSpec{
-				Image:  "myimage",
-				Args:   []string{"$(params.commands)"},
-				Script: "echo $@",
-				Params: v1.ParamSpecs{{
-					Name: "commands",
-					Type: v1.ParamTypeArray,
-					Default: &v1.ParamValue{
-						Type:     v1.ParamTypeArray,
-						ArrayVal: []string{"Hello, I am the default value"},
-					},
-				}},
-			},
-		},
-		expectedError: errors.New("invalid parameter substitution: commands. Please check the types of the default value and the passed value"),
+		expectedError: fmt.Errorf("extra params passed by Step to StepAction: [string-param]"),
 	}}
 	for _, tt := range tests {
 		ctx := context.Background()

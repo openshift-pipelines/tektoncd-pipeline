@@ -19,14 +19,12 @@ package resources
 import (
 	"context"
 	"fmt"
-	"strings"
 	"time"
 
 	"github.com/tektoncd/pipeline/pkg/apis/pipeline"
 	v1 "github.com/tektoncd/pipeline/pkg/apis/pipeline/v1"
 	"github.com/tektoncd/pipeline/pkg/apis/pipeline/v1beta1"
 	"github.com/tektoncd/pipeline/pkg/reconciler/pipeline/dag"
-	"github.com/tektoncd/pipeline/pkg/substitution"
 	"go.uber.org/zap"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -43,7 +41,6 @@ const (
 	PipelineTaskStatusPrefix = "tasks."
 	// PipelineTaskStatusSuffix is a suffix of the param representing execution state of pipelineTask
 	PipelineTaskStatusSuffix = ".status"
-	PipelineTaskReasonSuffix = ".reason"
 )
 
 // PipelineRunState is a slice of ResolvedPipelineRunTasks the represents the current execution
@@ -182,30 +179,6 @@ func (state PipelineRunState) GetTaskRunsResults() map[string][]v1.TaskRunResult
 	return results
 }
 
-// GetTaskRunsArtifacts returns a map of all successfully completed TaskRuns in the state, with the pipeline task name as
-// the key and the artifacts from the corresponding TaskRun as the value. It only includes tasks which have completed successfully.
-func (state PipelineRunState) GetTaskRunsArtifacts() map[string]*v1.Artifacts {
-	results := make(map[string]*v1.Artifacts)
-	for _, rpt := range state {
-		if rpt.IsCustomTask() {
-			continue
-		}
-		if !rpt.isSuccessful() {
-			continue
-		}
-		if rpt.PipelineTask.IsMatrixed() {
-			var ars v1.Artifacts
-			for _, tr := range rpt.TaskRuns {
-				ars.Merge(tr.Status.Artifacts)
-			}
-			results[rpt.PipelineTask.Name] = &ars
-		} else {
-			results[rpt.PipelineTask.Name] = rpt.TaskRuns[0].Status.Artifacts
-		}
-	}
-	return results
-}
-
 // ConvertResultsMapToTaskRunResults converts the map of results from Matrixed PipelineTasks to a list
 // of TaskRunResults to standard the format
 func ConvertResultsMapToTaskRunResults(resultsMap map[string][]string) []v1.TaskRunResult {
@@ -275,53 +248,8 @@ func (facts *PipelineRunFacts) GetChildReferences() []v1.ChildStatusReference {
 	return childRefs
 }
 
-func (t *ResolvedPipelineTask) getDisplayName(customRun *v1beta1.CustomRun, taskRun *v1.TaskRun, c v1.ChildStatusReference) v1.ChildStatusReference {
-	replacements := make(map[string]string)
-	if taskRun != nil {
-		for _, p := range taskRun.Spec.Params {
-			if p.Value.Type == v1.ParamTypeString {
-				replacements[fmt.Sprintf("%s.%s", v1.ParamsPrefix, p.Name)] = p.Value.StringVal
-			}
-		}
-	}
-	if customRun != nil {
-		for _, p := range customRun.Spec.Params {
-			if p.Value.Type == v1beta1.ParamTypeString {
-				replacements[fmt.Sprintf("%s.%s", v1.ParamsPrefix, p.Name)] = p.Value.StringVal
-			}
-		}
-	}
-
-	if t.PipelineTask.DisplayName != "" {
-		c.DisplayName = substitution.ApplyReplacements(t.PipelineTask.DisplayName, replacements)
-	}
-	if t.PipelineTask.Matrix != nil {
-		var dn string
-		for _, i := range t.PipelineTask.Matrix.Include {
-			if i.Name == "" {
-				continue
-			}
-			match := true
-			for _, ip := range i.Params {
-				v, ok := replacements[fmt.Sprintf("%s.%s", v1.ParamsPrefix, ip.Name)]
-				if !ok || (ip.Value.Type == v1.ParamTypeString && ip.Value.StringVal != v) {
-					match = false
-					break
-				}
-			}
-			if match {
-				dn = fmt.Sprintf("%s %s", dn, substitution.ApplyReplacements(i.Name, replacements))
-			}
-		}
-		if dn != "" {
-			c.DisplayName = strings.TrimSpace(dn)
-		}
-	}
-	return c
-}
-
 func (t *ResolvedPipelineTask) getChildRefForRun(customRun *v1beta1.CustomRun) v1.ChildStatusReference {
-	c := v1.ChildStatusReference{
+	return v1.ChildStatusReference{
 		TypeMeta: runtime.TypeMeta{
 			APIVersion: v1beta1.SchemeGroupVersion.String(),
 			Kind:       pipeline.CustomRunControllerName,
@@ -330,11 +258,10 @@ func (t *ResolvedPipelineTask) getChildRefForRun(customRun *v1beta1.CustomRun) v
 		PipelineTaskName: t.PipelineTask.Name,
 		WhenExpressions:  t.PipelineTask.When,
 	}
-	return t.getDisplayName(customRun, nil, c)
 }
 
 func (t *ResolvedPipelineTask) getChildRefForTaskRun(taskRun *v1.TaskRun) v1.ChildStatusReference {
-	c := v1.ChildStatusReference{
+	return v1.ChildStatusReference{
 		TypeMeta: runtime.TypeMeta{
 			APIVersion: v1.SchemeGroupVersion.String(),
 			Kind:       pipeline.TaskRunControllerName,
@@ -343,7 +270,6 @@ func (t *ResolvedPipelineTask) getChildRefForTaskRun(taskRun *v1.TaskRun) v1.Chi
 		PipelineTaskName: t.PipelineTask.Name,
 		WhenExpressions:  t.PipelineTask.When,
 	}
-	return t.getDisplayName(nil, taskRun, c)
 }
 
 // getNextTasks returns a list of tasks which should be executed next i.e.
@@ -630,7 +556,6 @@ func (facts *PipelineRunFacts) GetPipelineTaskStatus() map[string]string {
 				s = PipelineTaskStateNone
 			}
 			tStatus[PipelineTaskStatusPrefix+t.PipelineTask.Name+PipelineTaskStatusSuffix] = s
-			tStatus[PipelineTaskStatusPrefix+t.PipelineTask.Name+PipelineTaskReasonSuffix] = t.getReason()
 		}
 	}
 	// initialize aggregate status of all dag tasks to None

@@ -47,7 +47,7 @@ func TestCreateVolumes(t *testing.T) {
 		}},
 		expectedVolumes: map[string]corev1.Volume{
 			"custom": {
-				Name: "ws-20573",
+				Name: "ws-9l9zj",
 				VolumeSource: corev1.VolumeSource{
 					PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{
 						ClaimName: "mypvc",
@@ -66,7 +66,7 @@ func TestCreateVolumes(t *testing.T) {
 		}},
 		expectedVolumes: map[string]corev1.Volume{
 			"custom": {
-				Name: "ws-20573",
+				Name: "ws-mz4c7",
 				VolumeSource: corev1.VolumeSource{
 					EmptyDir: &corev1.EmptyDirVolumeSource{
 						Medium: corev1.StorageMediumMemory,
@@ -91,7 +91,7 @@ func TestCreateVolumes(t *testing.T) {
 		}},
 		expectedVolumes: map[string]corev1.Volume{
 			"custom": {
-				Name: "ws-20573",
+				Name: "ws-mssqb",
 				VolumeSource: corev1.VolumeSource{
 					ConfigMap: &corev1.ConfigMapVolumeSource{
 						LocalObjectReference: corev1.LocalObjectReference{
@@ -120,7 +120,7 @@ func TestCreateVolumes(t *testing.T) {
 		}},
 		expectedVolumes: map[string]corev1.Volume{
 			"custom": {
-				Name: "ws-20573",
+				Name: "ws-78c5n",
 				VolumeSource: corev1.VolumeSource{
 					Secret: &corev1.SecretVolumeSource{
 						SecretName: "foobarsecret",
@@ -163,7 +163,7 @@ func TestCreateVolumes(t *testing.T) {
 		}},
 		expectedVolumes: map[string]corev1.Volume{
 			"custom": {
-				Name: "ws-20573",
+				Name: "ws-6nl7g",
 				VolumeSource: corev1.VolumeSource{
 					Projected: &corev1.ProjectedVolumeSource{
 						Sources: []corev1.VolumeProjection{{
@@ -211,7 +211,7 @@ func TestCreateVolumes(t *testing.T) {
 		}},
 		expectedVolumes: map[string]corev1.Volume{
 			"custom": {
-				Name: "ws-20573",
+				Name: "ws-j2tds",
 				VolumeSource: corev1.VolumeSource{
 					PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{
 						ClaimName: "mypvc",
@@ -219,7 +219,7 @@ func TestCreateVolumes(t *testing.T) {
 				},
 			},
 			"even-more-custom": {
-				Name: "ws-338c2",
+				Name: "ws-vr6ds",
 				VolumeSource: corev1.VolumeSource{
 					PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{
 						ClaimName: "myotherpvc",
@@ -244,7 +244,7 @@ func TestCreateVolumes(t *testing.T) {
 		}},
 		expectedVolumes: map[string]corev1.Volume{
 			"custom": {
-				Name: "ws-20573",
+				Name: "ws-l22wn",
 				VolumeSource: corev1.VolumeSource{
 					PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{
 						ClaimName: "mypvc",
@@ -253,52 +253,11 @@ func TestCreateVolumes(t *testing.T) {
 			},
 			"custom2": {
 				// Since it is the same PVC source, it can't be added twice with two different names
-				Name: "ws-20573",
+				Name: "ws-l22wn",
 				VolumeSource: corev1.VolumeSource{
 					PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{
 						ClaimName: "mypvc",
 					},
-				},
-			},
-		},
-	}, {
-		name: "consistent hashed name for different inputs",
-		workspaces: []v1.WorkspaceBinding{{
-			Name:     "test-01097628",
-			EmptyDir: &corev1.EmptyDirVolumeSource{},
-		}, {
-			Name:     "test-01617609",
-			EmptyDir: &corev1.EmptyDirVolumeSource{},
-		}, {
-			Name:     "test-01675975",
-			EmptyDir: &corev1.EmptyDirVolumeSource{},
-		}, {
-			Name:     "test-01809743",
-			EmptyDir: &corev1.EmptyDirVolumeSource{},
-		}},
-		expectedVolumes: map[string]corev1.Volume{
-			"test-01097628": {
-				Name: "ws-f32ff",
-				VolumeSource: corev1.VolumeSource{
-					EmptyDir: &corev1.EmptyDirVolumeSource{},
-				},
-			},
-			"test-01617609": {
-				Name: "ws-a0814",
-				VolumeSource: corev1.VolumeSource{
-					EmptyDir: &corev1.EmptyDirVolumeSource{},
-				},
-			},
-			"test-01675975": {
-				Name: "ws-b2d09",
-				VolumeSource: corev1.VolumeSource{
-					EmptyDir: &corev1.EmptyDirVolumeSource{},
-				},
-			},
-			"test-01809743": {
-				Name: "ws-60320",
-				VolumeSource: corev1.VolumeSource{
-					EmptyDir: &corev1.EmptyDirVolumeSource{},
 				},
 			},
 		},
@@ -336,13 +295,13 @@ func TestApply(t *testing.T) {
 		expectedTaskSpec: v1.TaskSpec{
 			StepTemplate: &v1.StepTemplate{
 				VolumeMounts: []corev1.VolumeMount{{
-					Name:      "ws-20573",
+					Name:      "ws-9l9zj",
 					MountPath: "/workspace/custom",
 					SubPath:   "/foo/bar/baz",
 				}},
 			},
 			Volumes: []corev1.Volume{{
-				Name: "ws-20573",
+				Name: "ws-9l9zj",
 				VolumeSource: corev1.VolumeSource{
 					PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{
 						ClaimName: "mypvc",
@@ -370,13 +329,13 @@ func TestApply(t *testing.T) {
 		expectedTaskSpec: v1.TaskSpec{
 			StepTemplate: &v1.StepTemplate{
 				VolumeMounts: []corev1.VolumeMount{{
-					Name:      "ws-20573",
+					Name:      "ws-mz4c7",
 					MountPath: "/workspace/custom",
 					SubPath:   "/foo/bar/baz", // TODO: what happens when you use subPath with emptyDir
 				}},
 			},
 			Volumes: []corev1.Volume{{
-				Name: "ws-20573",
+				Name: "ws-mz4c7",
 				VolumeSource: corev1.VolumeSource{
 					EmptyDir: &corev1.EmptyDirVolumeSource{
 						Medium: corev1.StorageMediumMemory,
@@ -424,13 +383,13 @@ func TestApply(t *testing.T) {
 		expectedTaskSpec: v1.TaskSpec{
 			StepTemplate: &v1.StepTemplate{
 				VolumeMounts: []corev1.VolumeMount{{
-					Name:      "ws-20573",
+					Name:      "ws-mssqb",
 					MountPath: "/workspace/custom",
 					SubPath:   "/foo/bar/baz", // TODO: what happens when you use subPath with emptyDir
 				}},
 			},
 			Volumes: []corev1.Volume{{
-				Name: "ws-20573",
+				Name: "ws-mssqb",
 				VolumeSource: corev1.VolumeSource{
 					Projected: &corev1.ProjectedVolumeSource{
 						Sources: []corev1.VolumeProjection{{
@@ -493,7 +452,7 @@ func TestApply(t *testing.T) {
 					Name:      "awesome-volume",
 					MountPath: "/",
 				}, {
-					Name:      "ws-20573",
+					Name:      "ws-78c5n",
 					MountPath: "/workspace/custom",
 					SubPath:   "/foo/bar/baz", // TODO: what happens when you use subPath with emptyDir
 				}},
@@ -504,7 +463,7 @@ func TestApply(t *testing.T) {
 					EmptyDir: &corev1.EmptyDirVolumeSource{},
 				},
 			}, {
-				Name: "ws-20573",
+				Name: "ws-78c5n",
 				VolumeSource: corev1.VolumeSource{
 					EmptyDir: &corev1.EmptyDirVolumeSource{
 						Medium: corev1.StorageMediumMemory,
@@ -552,24 +511,24 @@ func TestApply(t *testing.T) {
 		expectedTaskSpec: v1.TaskSpec{
 			StepTemplate: &v1.StepTemplate{
 				VolumeMounts: []corev1.VolumeMount{{
-					Name:      "ws-20573",
+					Name:      "ws-6nl7g",
 					MountPath: "/workspace/custom",
 					SubPath:   "/foo/bar/baz",
 				}, {
-					Name:      "ws-338c2",
+					Name:      "ws-j2tds",
 					MountPath: "/workspace/even-more-custom",
 					SubPath:   "",
 				}},
 			},
 			Volumes: []corev1.Volume{{
-				Name: "ws-20573",
+				Name: "ws-6nl7g",
 				VolumeSource: corev1.VolumeSource{
 					PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{
 						ClaimName: "mypvc",
 					},
 				},
 			}, {
-				Name: "ws-338c2",
+				Name: "ws-j2tds",
 				VolumeSource: corev1.VolumeSource{
 					PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{
 						ClaimName: "myotherpvc",
@@ -606,17 +565,17 @@ func TestApply(t *testing.T) {
 		expectedTaskSpec: v1.TaskSpec{
 			StepTemplate: &v1.StepTemplate{
 				VolumeMounts: []corev1.VolumeMount{{
-					Name:      "ws-20573",
+					Name:      "ws-vr6ds",
 					MountPath: "/workspace/custom",
 					SubPath:   "/foo/bar/baz",
 				}, {
-					Name:      "ws-20573",
+					Name:      "ws-vr6ds",
 					MountPath: "/workspace/custom2",
 					SubPath:   "/very/professional/work/space",
 				}},
 			},
 			Volumes: []corev1.Volume{{
-				Name: "ws-20573",
+				Name: "ws-vr6ds",
 				VolumeSource: corev1.VolumeSource{
 					PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{
 						ClaimName: "mypvc",
@@ -646,12 +605,12 @@ func TestApply(t *testing.T) {
 		expectedTaskSpec: v1.TaskSpec{
 			StepTemplate: &v1.StepTemplate{
 				VolumeMounts: []corev1.VolumeMount{{
-					Name:      "ws-20573",
+					Name:      "ws-twkr2",
 					MountPath: "/my/fancy/mount/path",
 				}},
 			},
 			Volumes: []corev1.Volume{{
-				Name: "ws-20573",
+				Name: "ws-twkr2",
 				VolumeSource: corev1.VolumeSource{
 					PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{
 						ClaimName: "mypvc",
@@ -681,13 +640,13 @@ func TestApply(t *testing.T) {
 		expectedTaskSpec: v1.TaskSpec{
 			StepTemplate: &v1.StepTemplate{
 				VolumeMounts: []corev1.VolumeMount{{
-					Name:      "ws-20573",
+					Name:      "ws-mnq6l",
 					MountPath: "/my/fancy/mount/path",
 					ReadOnly:  true,
 				}},
 			},
 			Volumes: []corev1.Volume{{
-				Name: "ws-20573",
+				Name: "ws-mnq6l",
 				VolumeSource: corev1.VolumeSource{
 					PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{
 						ClaimName: "mypvc",
@@ -719,14 +678,14 @@ func TestApply(t *testing.T) {
 		expectedTaskSpec: v1.TaskSpec{
 			StepTemplate: &v1.StepTemplate{
 				VolumeMounts: []corev1.VolumeMount{{
-					Name:      "ws-20573",
+					Name:      "ws-hvpvf",
 					MountPath: "/workspace/csi",
 					SubPath:   "/foo/bar/baz",
 					ReadOnly:  true,
 				}},
 			},
 			Volumes: []corev1.Volume{{
-				Name: "ws-20573",
+				Name: "ws-hvpvf",
 				VolumeSource: corev1.VolumeSource{
 					CSI: &corev1.CSIVolumeSource{
 						Driver: "secrets-store.csi.k8s.io",
@@ -776,7 +735,7 @@ func TestApply_PropagatedWorkspacesFromWorkspaceBindingToDeclarations(t *testing
 		}},
 		expectedTaskSpec: v1.TaskSpec{
 			Volumes: []corev1.Volume{{
-				Name: "ws-c88ff",
+				Name: "ws-9l9zj",
 				VolumeSource: corev1.VolumeSource{
 					PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{
 						ClaimName: "mypvc",
@@ -793,7 +752,7 @@ func TestApply_PropagatedWorkspacesFromWorkspaceBindingToDeclarations(t *testing
 				ReadOnly:  false,
 			}},
 			StepTemplate: &v1.StepTemplate{
-				VolumeMounts: []corev1.VolumeMount{{Name: "ws-c88ff", MountPath: "/workspace/workspace2"}},
+				VolumeMounts: []corev1.VolumeMount{{Name: "ws-9l9zj", MountPath: "/workspace/workspace2"}},
 			},
 		},
 	}} {
@@ -839,7 +798,7 @@ func TestApply_IsolatedWorkspaces(t *testing.T) {
 		expectedTaskSpec: v1.TaskSpec{
 			StepTemplate: &v1.StepTemplate{},
 			Volumes: []corev1.Volume{{
-				Name: "ws-1bcf2",
+				Name: "ws-9l9zj",
 				VolumeSource: corev1.VolumeSource{
 					PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{
 						ClaimName: "testpvc",
@@ -848,7 +807,7 @@ func TestApply_IsolatedWorkspaces(t *testing.T) {
 			}},
 			Steps: []v1.Step{{
 				VolumeMounts: []corev1.VolumeMount{{
-					Name:      "ws-1bcf2",
+					Name:      "ws-9l9zj",
 					MountPath: "/workspace/source",
 				}},
 				Workspaces: []v1.WorkspaceUsage{{
@@ -884,7 +843,7 @@ func TestApply_IsolatedWorkspaces(t *testing.T) {
 		expectedTaskSpec: v1.TaskSpec{
 			StepTemplate: &v1.StepTemplate{},
 			Volumes: []corev1.Volume{{
-				Name: "ws-1bcf2",
+				Name: "ws-mz4c7",
 				VolumeSource: corev1.VolumeSource{
 					PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{
 						ClaimName: "testpvc",
@@ -896,7 +855,7 @@ func TestApply_IsolatedWorkspaces(t *testing.T) {
 			}},
 			Sidecars: []v1.Sidecar{{
 				VolumeMounts: []corev1.VolumeMount{{
-					Name:      "ws-1bcf2",
+					Name:      "ws-mz4c7",
 					MountPath: "/workspace/source",
 				}},
 				Workspaces: []v1.WorkspaceUsage{{
@@ -935,7 +894,7 @@ func TestApply_IsolatedWorkspaces(t *testing.T) {
 		expectedTaskSpec: v1.TaskSpec{
 			StepTemplate: &v1.StepTemplate{},
 			Volumes: []corev1.Volume{{
-				Name: "ws-1bcf2",
+				Name: "ws-mssqb",
 				VolumeSource: corev1.VolumeSource{
 					PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{
 						ClaimName: "testpvc",
@@ -944,7 +903,7 @@ func TestApply_IsolatedWorkspaces(t *testing.T) {
 			}},
 			Steps: []v1.Step{{
 				VolumeMounts: []corev1.VolumeMount{{
-					Name:      "ws-1bcf2",
+					Name:      "ws-mssqb",
 					MountPath: "/workspace/source",
 				}},
 				Workspaces: []v1.WorkspaceUsage{{
@@ -955,7 +914,7 @@ func TestApply_IsolatedWorkspaces(t *testing.T) {
 			}},
 			Sidecars: []v1.Sidecar{{
 				VolumeMounts: []corev1.VolumeMount{{
-					Name:      "ws-1bcf2",
+					Name:      "ws-mssqb",
 					MountPath: "/workspace/source",
 				}},
 				Workspaces: []v1.WorkspaceUsage{{
@@ -984,11 +943,11 @@ func TestApply_IsolatedWorkspaces(t *testing.T) {
 		expectedTaskSpec: v1.TaskSpec{
 			StepTemplate: &v1.StepTemplate{
 				VolumeMounts: []corev1.VolumeMount{{
-					Name: "ws-1bcf2", MountPath: "/workspace/source",
+					Name: "ws-78c5n", MountPath: "/workspace/source",
 				}},
 			},
 			Volumes: []corev1.Volume{{
-				Name: "ws-1bcf2",
+				Name: "ws-78c5n",
 				VolumeSource: corev1.VolumeSource{
 					PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{
 						ClaimName: "testpvc",
@@ -998,7 +957,7 @@ func TestApply_IsolatedWorkspaces(t *testing.T) {
 			Steps: []v1.Step{{}},
 			Sidecars: []v1.Sidecar{{
 				VolumeMounts: []corev1.VolumeMount{{
-					Name:      "ws-1bcf2",
+					Name:      "ws-78c5n",
 					MountPath: "/workspace/source",
 				}},
 			}},
@@ -1034,7 +993,7 @@ func TestApply_IsolatedWorkspaces(t *testing.T) {
 		expectedTaskSpec: v1.TaskSpec{
 			StepTemplate: &v1.StepTemplate{},
 			Volumes: []corev1.Volume{{
-				Name: "ws-1bcf2",
+				Name: "ws-6nl7g",
 				VolumeSource: corev1.VolumeSource{
 					PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{
 						ClaimName: "testpvc",
@@ -1047,7 +1006,7 @@ func TestApply_IsolatedWorkspaces(t *testing.T) {
 					MountPath: "/foo",
 				}},
 				VolumeMounts: []corev1.VolumeMount{{
-					Name:      "ws-1bcf2",
+					Name:      "ws-6nl7g",
 					MountPath: "/foo",
 				}},
 			}},
@@ -1057,7 +1016,7 @@ func TestApply_IsolatedWorkspaces(t *testing.T) {
 					MountPath: "/bar",
 				}},
 				VolumeMounts: []corev1.VolumeMount{{
-					Name:      "ws-1bcf2",
+					Name:      "ws-6nl7g",
 					MountPath: "/bar",
 				}},
 			}},
@@ -1090,7 +1049,7 @@ func TestApply_IsolatedWorkspaces(t *testing.T) {
 		expectedTaskSpec: v1.TaskSpec{
 			StepTemplate: &v1.StepTemplate{
 				VolumeMounts: []corev1.VolumeMount{{
-					Name:      "ws-20573",
+					Name:      "ws-j2tds",
 					MountPath: "/my/fancy/mount/path",
 					ReadOnly:  true,
 				}},
@@ -1103,7 +1062,7 @@ func TestApply_IsolatedWorkspaces(t *testing.T) {
 				}},
 			}},
 			Volumes: []corev1.Volume{{
-				Name: "ws-20573",
+				Name: "ws-j2tds",
 				VolumeSource: corev1.VolumeSource{
 					PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{
 						ClaimName: "mypvc",
@@ -1373,213 +1332,6 @@ func TestFindWorkspacesUsedByTask(t *testing.T) {
 			}
 			if d := cmp.Diff(tt.want, got); d != "" {
 				t.Error(diff.PrintWantGot(d))
-			}
-		})
-	}
-}
-
-func TestReplaceWorkspaceBindingsVars(t *testing.T) {
-	testCases := []struct {
-		name              string
-		workspaceBindings []v1.WorkspaceBinding
-		replacements      map[string]string
-		expected          []v1.WorkspaceBinding
-	}{
-		{
-			name:         "No replacements",
-			replacements: nil,
-			workspaceBindings: []v1.WorkspaceBinding{
-				{SubPath: "$(params.to-replace)"},
-			},
-			expected: []v1.WorkspaceBinding{
-				{SubPath: "$(params.to-replace)"},
-			},
-		},
-		{
-			name: "Replace SubPath",
-			replacements: map[string]string{
-				"params.to-replace": "replaced",
-			},
-			workspaceBindings: []v1.WorkspaceBinding{
-				{SubPath: "$(params.to-replace)"},
-			},
-			expected: []v1.WorkspaceBinding{
-				{SubPath: "replaced"},
-			},
-		},
-		{
-			name: "Replace PersistentVolumeClaim",
-			replacements: map[string]string{
-				"params.to-replace": "replaced",
-			},
-			workspaceBindings: []v1.WorkspaceBinding{
-				{
-					PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{
-						ClaimName: "$(params.to-replace)",
-					},
-				},
-			},
-			expected: []v1.WorkspaceBinding{
-				{
-					PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{
-						ClaimName: "replaced",
-					},
-				},
-			},
-		},
-		{
-			name: "Replace ConfigMap",
-			replacements: map[string]string{
-				"params.to-replace": "replaced",
-			},
-			workspaceBindings: []v1.WorkspaceBinding{
-				{
-					ConfigMap: &corev1.ConfigMapVolumeSource{
-						LocalObjectReference: corev1.LocalObjectReference{
-							Name: "$(params.to-replace)",
-						},
-						Items: []corev1.KeyToPath{{
-							Key:  "$(params.to-replace)",
-							Path: "$(params.to-replace)",
-						}},
-					},
-				},
-			},
-			expected: []v1.WorkspaceBinding{
-				{
-					ConfigMap: &corev1.ConfigMapVolumeSource{
-						LocalObjectReference: corev1.LocalObjectReference{
-							Name: "replaced",
-						},
-						Items: []corev1.KeyToPath{{
-							Key:  "replaced",
-							Path: "replaced",
-						}},
-					},
-				},
-			},
-		},
-		{
-			name: "Replace Secret",
-			replacements: map[string]string{
-				"params.to-replace": "replaced",
-			},
-			workspaceBindings: []v1.WorkspaceBinding{
-				{
-					Secret: &corev1.SecretVolumeSource{
-						SecretName: "$(params.to-replace)",
-						Items: []corev1.KeyToPath{{
-							Key:  "$(params.to-replace)",
-							Path: "$(params.to-replace)",
-						}},
-					},
-				},
-			},
-			expected: []v1.WorkspaceBinding{
-				{
-					Secret: &corev1.SecretVolumeSource{
-						SecretName: "replaced",
-						Items: []corev1.KeyToPath{{
-							Key:  "replaced",
-							Path: "replaced",
-						}},
-					},
-				},
-			},
-		},
-		{
-			name: "Replace Projected",
-			replacements: map[string]string{
-				"params.to-replace": "replaced",
-			},
-			workspaceBindings: []v1.WorkspaceBinding{
-				{
-					Projected: &corev1.ProjectedVolumeSource{
-						Sources: []corev1.VolumeProjection{{
-							ConfigMap: &corev1.ConfigMapProjection{
-								LocalObjectReference: corev1.LocalObjectReference{
-									Name: "$(params.to-replace)",
-								},
-								Items: []corev1.KeyToPath{{
-									Key:  "$(params.to-replace)",
-									Path: "$(params.to-replace)",
-								}},
-							},
-						}, {
-							Secret: &corev1.SecretProjection{
-								LocalObjectReference: corev1.LocalObjectReference{
-									Name: "$(params.to-replace)",
-								},
-								Items: []corev1.KeyToPath{{
-									Key:  "$(params.to-replace)",
-									Path: "$(params.to-replace)",
-								}},
-							},
-						}},
-					},
-				},
-			},
-			expected: []v1.WorkspaceBinding{
-				{
-					Projected: &corev1.ProjectedVolumeSource{
-						Sources: []corev1.VolumeProjection{{
-							ConfigMap: &corev1.ConfigMapProjection{
-								LocalObjectReference: corev1.LocalObjectReference{
-									Name: "replaced",
-								},
-								Items: []corev1.KeyToPath{{
-									Key:  "replaced",
-									Path: "replaced",
-								}},
-							},
-						}, {
-							Secret: &corev1.SecretProjection{
-								LocalObjectReference: corev1.LocalObjectReference{
-									Name: "replaced",
-								},
-								Items: []corev1.KeyToPath{{
-									Key:  "replaced",
-									Path: "replaced",
-								}},
-							},
-						}},
-					},
-				},
-			},
-		},
-		{
-			name: "Replace CSI",
-			replacements: map[string]string{
-				"params.to-replace": "replaced",
-			},
-			workspaceBindings: []v1.WorkspaceBinding{
-				{
-					CSI: &corev1.CSIVolumeSource{
-						Driver: "$(params.to-replace)",
-						NodePublishSecretRef: &corev1.LocalObjectReference{
-							Name: "$(params.to-replace)",
-						},
-					},
-				},
-			},
-			expected: []v1.WorkspaceBinding{
-				{
-					CSI: &corev1.CSIVolumeSource{
-						Driver: "replaced",
-						NodePublishSecretRef: &corev1.LocalObjectReference{
-							Name: "replaced",
-						},
-					},
-				},
-			},
-		},
-	}
-
-	for _, tc := range testCases {
-		t.Run(tc.name, func(t *testing.T) {
-			result := workspace.ReplaceWorkspaceBindingsVars(tc.workspaceBindings, tc.replacements)
-			if d := cmp.Diff(tc.expected, result); d != "" {
-				t.Errorf("Test case %q, diff: %s", tc.name, diff.PrintWantGot(d))
 			}
 		})
 	}

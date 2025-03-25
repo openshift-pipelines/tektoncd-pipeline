@@ -56,13 +56,9 @@ var (
 	trDurationView                             *view.View
 	prTRDurationView                           *view.View
 	trCountView                                *view.View
-	trTotalView                                *view.View
 	runningTRsCountView                        *view.View
-	runningTRsView                             *view.View
 	runningTRsThrottledByQuotaCountView        *view.View
 	runningTRsThrottledByNodeCountView         *view.View
-	runningTRsThrottledByQuotaView             *view.View
-	runningTRsThrottledByNodeView              *view.View
 	runningTRsWaitingOnTaskResolutionCountView *view.View
 	podLatencyView                             *view.View
 
@@ -80,15 +76,7 @@ var (
 		"number of taskruns",
 		stats.UnitDimensionless)
 
-	trTotal = stats.Float64("taskrun_total",
-		"Number of taskruns",
-		stats.UnitDimensionless)
-
 	runningTRsCount = stats.Float64("running_taskruns_count",
-		"Number of taskruns executing currently",
-		stats.UnitDimensionless)
-
-	runningTRs = stats.Float64("running_taskruns",
 		"Number of taskruns executing currently",
 		stats.UnitDimensionless)
 
@@ -104,14 +92,6 @@ var (
 		"Number of taskruns executing currently that are waiting on resolution requests for their task references.",
 		stats.UnitDimensionless)
 
-	runningTRsThrottledByQuota = stats.Float64("running_taskruns_throttled_by_quota",
-		"Number of taskruns executing currently, but whose underlying Pods or Containers are suspended by k8s because of defined ResourceQuotas.  Such suspensions can occur as part of initial scheduling of the Pod, or scheduling of any of the subsequent Container(s) in the Pod after the first Container is started",
-		stats.UnitDimensionless)
-
-	runningTRsThrottledByNode = stats.Float64("running_taskruns_throttled_by_node",
-		"Number of taskruns executing currently, but whose underlying Pods or Containers are suspended by k8s because of Node level constraints. Such suspensions can occur as part of initial scheduling of the Pod, or scheduling of any of the subsequent Container(s) in the Pod after the first Container is started",
-		stats.UnitDimensionless)
-
 	podLatency = stats.Float64("taskruns_pod_latency_milliseconds",
 		"scheduling latency for the taskruns pods",
 		stats.UnitMilliseconds)
@@ -121,7 +101,6 @@ var (
 type Recorder struct {
 	mutex       sync.Mutex
 	initialized bool
-	cfg         *config.Metrics
 
 	ReportingPeriod time.Duration
 
@@ -145,14 +124,14 @@ var (
 // to log the TaskRun related metrics
 func NewRecorder(ctx context.Context) (*Recorder, error) {
 	once.Do(func() {
-		cfg := config.FromContextOrDefaults(ctx)
 		r = &Recorder{
 			initialized: true,
-			cfg:         cfg.Metrics,
 
 			// Default to reporting metrics every 30s.
 			ReportingPeriod: 30 * time.Second,
 		}
+
+		cfg := config.FromContextOrDefaults(ctx)
 
 		errRegistering = viewRegister(cfg.Metrics)
 		if errRegistering != nil {
@@ -213,12 +192,6 @@ func viewRegister(cfg *config.Metrics) error {
 		}
 	}
 
-	trCountViewTags := []tag.Key{statusTag}
-	if cfg.CountWithReason {
-		trCountViewTags = append(trCountViewTags, reasonTag)
-		trunTag = append(trunTag, reasonTag)
-	}
-
 	trDurationView = &view.View{
 		Description: trDuration.Description(),
 		Measure:     trDuration,
@@ -232,27 +205,19 @@ func viewRegister(cfg *config.Metrics) error {
 		TagKeys:     append([]tag.Key{statusTag, namespaceTag}, append(trunTag, prunTag...)...),
 	}
 
+	trCountViewTags := []tag.Key{statusTag}
+	if cfg.CountWithReason {
+		trCountViewTags = append(trCountViewTags, reasonTag)
+	}
 	trCountView = &view.View{
 		Description: trCount.Description(),
 		Measure:     trCount,
 		Aggregation: view.Count(),
 		TagKeys:     trCountViewTags,
 	}
-	trTotalView = &view.View{
-		Description: trTotal.Description(),
-		Measure:     trTotal,
-		Aggregation: view.Count(),
-		TagKeys:     []tag.Key{statusTag},
-	}
 	runningTRsCountView = &view.View{
 		Description: runningTRsCount.Description(),
 		Measure:     runningTRsCount,
-		Aggregation: view.LastValue(),
-	}
-
-	runningTRsView = &view.View{
-		Description: runningTRs.Description(),
-		Measure:     runningTRs,
 		Aggregation: view.LastValue(),
 	}
 	runningTRsThrottledByQuotaCountView = &view.View{
@@ -270,23 +235,6 @@ func viewRegister(cfg *config.Metrics) error {
 		Measure:     runningTRsWaitingOnTaskResolutionCount,
 		Aggregation: view.LastValue(),
 	}
-
-	throttleViewTags := []tag.Key{}
-	if cfg.ThrottleWithNamespace {
-		throttleViewTags = append(throttleViewTags, namespaceTag)
-	}
-	runningTRsThrottledByQuotaView = &view.View{
-		Description: runningTRsThrottledByQuota.Description(),
-		Measure:     runningTRsThrottledByQuota,
-		Aggregation: view.LastValue(),
-		TagKeys:     throttleViewTags,
-	}
-	runningTRsThrottledByNodeView = &view.View{
-		Description: runningTRsThrottledByNode.Description(),
-		Measure:     runningTRsThrottledByNode,
-		Aggregation: view.LastValue(),
-		TagKeys:     throttleViewTags,
-	}
 	podLatencyView = &view.View{
 		Description: podLatency.Description(),
 		Measure:     podLatency,
@@ -297,14 +245,10 @@ func viewRegister(cfg *config.Metrics) error {
 		trDurationView,
 		prTRDurationView,
 		trCountView,
-		trTotalView,
 		runningTRsCountView,
-		runningTRsView,
 		runningTRsThrottledByQuotaCountView,
 		runningTRsThrottledByNodeCountView,
 		runningTRsWaitingOnTaskResolutionCountView,
-		runningTRsThrottledByQuotaView,
-		runningTRsThrottledByNodeView,
 		podLatencyView,
 	)
 }
@@ -314,20 +258,17 @@ func viewUnregister() {
 		trDurationView,
 		prTRDurationView,
 		trCountView,
-		trTotalView,
 		runningTRsCountView,
-		runningTRsView,
 		runningTRsThrottledByQuotaCountView,
 		runningTRsThrottledByNodeCountView,
 		runningTRsWaitingOnTaskResolutionCountView,
-		runningTRsThrottledByQuotaView,
-		runningTRsThrottledByNodeView,
 		podLatencyView,
 	)
 }
 
-// OnStore returns a function that checks if metrics are configured for a config.Store, and registers it if so
-func OnStore(logger *zap.SugaredLogger, r *Recorder) func(name string, value interface{}) {
+// MetricsOnStore returns a function that checks if metrics are configured for a config.Store, and registers it if so
+func MetricsOnStore(logger *zap.SugaredLogger) func(name string,
+	value interface{}) {
 	return func(name string, value interface{}) {
 		if name == config.GetMetricsConfigName() {
 			cfg, ok := value.(*config.Metrics)
@@ -335,8 +276,6 @@ func OnStore(logger *zap.SugaredLogger, r *Recorder) func(name string, value int
 				logger.Error("Failed to do type insertion for extracting metrics config")
 				return
 			}
-			r.updateConfig(cfg)
-			// Update metrics according to the configuration
 			viewUnregister()
 			err := viewRegister(cfg)
 			if err != nil {
@@ -348,10 +287,8 @@ func OnStore(logger *zap.SugaredLogger, r *Recorder) func(name string, value int
 }
 
 func pipelinerunInsertTag(pipeline, pipelinerun string) []tag.Mutator {
-	return []tag.Mutator{
-		tag.Insert(pipelineTag, pipeline),
-		tag.Insert(pipelinerunTag, pipelinerun),
-	}
+	return []tag.Mutator{tag.Insert(pipelineTag, pipeline),
+		tag.Insert(pipelinerunTag, pipelinerun)}
 }
 
 func pipelineInsertTag(pipeline, pipelinerun string) []tag.Mutator {
@@ -359,10 +296,8 @@ func pipelineInsertTag(pipeline, pipelinerun string) []tag.Mutator {
 }
 
 func taskrunInsertTag(task, taskrun string) []tag.Mutator {
-	return []tag.Mutator{
-		tag.Insert(taskTag, task),
-		tag.Insert(taskrunTag, taskrun),
-	}
+	return []tag.Mutator{tag.Insert(taskTag, task),
+		tag.Insert(taskrunTag, taskrun)}
 }
 
 func taskInsertTag(task, taskrun string) []tag.Mutator {
@@ -379,15 +314,6 @@ func getTaskTagName(tr *v1.TaskRun) string {
 	case tr.Spec.TaskRef != nil && len(tr.Spec.TaskRef.Name) > 0:
 		taskName = tr.Spec.TaskRef.Name
 	case tr.Spec.TaskSpec != nil:
-		pipelineTaskTable, hasPipelineTaskTable := tr.Labels[pipeline.PipelineTaskLabelKey]
-		if hasPipelineTaskTable && len(pipelineTaskTable) > 0 {
-			taskName = pipelineTaskTable
-		}
-	case tr.Spec.TaskRef != nil && tr.Spec.TaskRef.Kind == v1.ClusterTaskRefKind:
-		clusterTaskLabel, hasClusterTaskLabel := tr.Labels[pipeline.ClusterTaskLabelKey]
-		if hasClusterTaskLabel && len(clusterTaskLabel) > 0 {
-			taskName = clusterTaskLabel
-		}
 	default:
 		if len(tr.Labels) > 0 {
 			taskLabel, hasTaskLabel := tr.Labels[pipeline.TaskLabelKey]
@@ -398,13 +324,6 @@ func getTaskTagName(tr *v1.TaskRun) string {
 	}
 
 	return taskName
-}
-
-func (r *Recorder) updateConfig(cfg *config.Metrics) {
-	r.mutex.Lock()
-	defer r.mutex.Unlock()
-
-	r.cfg = cfg
 }
 
 // DurationAndCount logs the duration of TaskRun execution and
@@ -452,7 +371,6 @@ func (r *Recorder) DurationAndCount(ctx context.Context, tr *v1.TaskRun, beforeC
 
 	metrics.Record(ctx, durationStat.M(duration.Seconds()))
 	metrics.Record(ctx, trCount.M(1))
-	metrics.Record(ctx, trTotal.M(1))
 
 	return nil
 }
@@ -472,43 +390,22 @@ func (r *Recorder) RunningTaskRuns(ctx context.Context, lister listers.TaskRunLi
 		return err
 	}
 
-	addNamespaceLabelToQuotaThrottleMetric := r.cfg != nil && r.cfg.ThrottleWithNamespace
-
 	var runningTrs int
-	trsThrottledByQuota := map[string]int{}
-	trsThrottledByQuotaCount := 0
-	trsThrottledByNode := map[string]int{}
-	trsThrottledByNodeCount := 0
+	var trsThrottledByQuota int
+	var trsThrottledByNode int
 	var trsWaitResolvingTaskRef int
 	for _, pr := range trs {
-		// initialize metrics with namespace tag to zero if unset; will then update as needed below
-		_, ok := trsThrottledByQuota[pr.Namespace]
-		if !ok {
-			trsThrottledByQuota[pr.Namespace] = 0
-		}
-		_, ok = trsThrottledByNode[pr.Namespace]
-		if !ok {
-			trsThrottledByNode[pr.Namespace] = 0
-		}
-
 		if pr.IsDone() {
 			continue
 		}
 		runningTrs++
-
 		succeedCondition := pr.Status.GetCondition(apis.ConditionSucceeded)
 		if succeedCondition != nil && succeedCondition.Status == corev1.ConditionUnknown {
 			switch succeedCondition.Reason {
 			case pod.ReasonExceededResourceQuota:
-				trsThrottledByQuotaCount++
-				cnt := trsThrottledByQuota[pr.Namespace]
-				cnt++
-				trsThrottledByQuota[pr.Namespace] = cnt
+				trsThrottledByQuota++
 			case pod.ReasonExceededNodeResources:
-				trsThrottledByNodeCount++
-				cnt := trsThrottledByNode[pr.Namespace]
-				cnt++
-				trsThrottledByNode[pr.Namespace] = cnt
+				trsThrottledByNode++
 			case v1.TaskRunReasonResolvingTaskRef:
 				trsWaitResolvingTaskRef++
 			}
@@ -520,33 +417,10 @@ func (r *Recorder) RunningTaskRuns(ctx context.Context, lister listers.TaskRunLi
 		return err
 	}
 	metrics.Record(ctx, runningTRsCount.M(float64(runningTrs)))
-	metrics.Record(ctx, runningTRs.M(float64(runningTrs)))
+	metrics.Record(ctx, runningTRsThrottledByNodeCount.M(float64(trsThrottledByNode)))
+	metrics.Record(ctx, runningTRsThrottledByQuotaCount.M(float64(trsThrottledByQuota)))
 	metrics.Record(ctx, runningTRsWaitingOnTaskResolutionCount.M(float64(trsWaitResolvingTaskRef)))
-	metrics.Record(ctx, runningTRsThrottledByQuotaCount.M(float64(trsThrottledByQuotaCount)))
-	metrics.Record(ctx, runningTRsThrottledByNodeCount.M(float64(trsThrottledByNodeCount)))
 
-	for ns, cnt := range trsThrottledByQuota {
-		var mutators []tag.Mutator
-		if addNamespaceLabelToQuotaThrottleMetric {
-			mutators = []tag.Mutator{tag.Insert(namespaceTag, ns)}
-		}
-		ctx, err := tag.New(ctx, mutators...)
-		if err != nil {
-			return err
-		}
-		metrics.Record(ctx, runningTRsThrottledByQuota.M(float64(cnt)))
-	}
-	for ns, cnt := range trsThrottledByNode {
-		var mutators []tag.Mutator
-		if addNamespaceLabelToQuotaThrottleMetric {
-			mutators = []tag.Mutator{tag.Insert(namespaceTag, ns)}
-		}
-		ctx, err := tag.New(ctx, mutators...)
-		if err != nil {
-			return err
-		}
-		metrics.Record(ctx, runningTRsThrottledByNode.M(float64(cnt)))
-	}
 	return nil
 }
 
@@ -594,10 +468,8 @@ func (r *Recorder) RecordPodLatency(ctx context.Context, pod *corev1.Pod, tr *v1
 
 	ctx, err := tag.New(
 		ctx,
-		append([]tag.Mutator{
-			tag.Insert(namespaceTag, tr.Namespace),
-			tag.Insert(podTag, pod.Name),
-		},
+		append([]tag.Mutator{tag.Insert(namespaceTag, tr.Namespace),
+			tag.Insert(podTag, pod.Name)},
 			r.insertTaskTag(taskName, tr.Name)...)...)
 	if err != nil {
 		return err

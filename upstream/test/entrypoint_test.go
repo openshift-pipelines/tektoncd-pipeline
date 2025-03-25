@@ -54,10 +54,10 @@ metadata:
 spec:
   taskSpec:
     steps:
-    - image: mirror.gcr.io/busybox
+    - image: busybox
       workingDir: /workspace
       script: 'sleep 3 && touch foo'
-    - image: mirror.gcr.io/ubuntu
+    - image: ubuntu
       workingDir: /workspace
       script: 'ls foo'
 `, epTaskRunName, namespace)), metav1.CreateOptions{}); err != nil {

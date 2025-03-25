@@ -21,7 +21,6 @@ package test
 
 import (
 	"context"
-	"fmt"
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
@@ -34,11 +33,14 @@ import (
 	duckv1 "knative.dev/pkg/apis/duck/v1"
 	knativetest "knative.dev/pkg/test"
 	"knative.dev/pkg/test/helpers"
+
+	"fmt"
 )
 
-var requireAlphaFeatureFlag = requireAnyGate(map[string]string{
-	"enable-api-fields": "alpha",
-})
+var (
+	requireAlphaFeatureFlag = requireAnyGate(map[string]string{
+		"enable-api-fields": "alpha"})
+)
 
 // TestPipelineRunMatrixed is an integration test that verifies that a Matrixed PipelineRun
 // succeeds with both `matrix params` and `matrix include params`. It also tests array indexing
@@ -70,7 +72,7 @@ spec:
       default: ""
   steps:
     - name: echo
-      image: mirror.gcr.io/alpine
+      image: alpine
       script: |
         echo "$(params.GOARCH) and $(params.version)"
 `, namespace))
@@ -85,7 +87,7 @@ spec:
       type: array
   steps:
     - name: produce-a-list-of-results
-      image: mirror.gcr.io/bash
+      image: bash:latest
       script: |
         #!/usr/bin/env bash
         echo -n "[\"linux/amd64\",\"linux/ppc64le\"]" | tee $(results.GOARCHs.path)
@@ -101,7 +103,7 @@ spec:
       type: array
   steps:
     - name: produce-a-list-of-versions
-      image: mirror.gcr.io/bash
+      image: bash:latest
       script: |
         #!/usr/bin/env bash
         echo -n "[\"go1.17\",\"go1.18.1\"]" | tee $(results.versions.path)
@@ -206,9 +208,6 @@ spec:
 				Reason:  "Succeeded",
 				Message: "All Steps have completed executing",
 			}}},
-			TaskRunStatusFields: v1.TaskRunStatusFields{
-				Artifacts: &v1.Artifacts{},
-			},
 		},
 	}, {
 		ObjectMeta: metav1.ObjectMeta{
@@ -238,9 +237,6 @@ spec:
 				Reason:  "Succeeded",
 				Message: "All Steps have completed executing",
 			}}},
-			TaskRunStatusFields: v1.TaskRunStatusFields{
-				Artifacts: &v1.Artifacts{},
-			},
 		},
 	}, {
 		ObjectMeta: metav1.ObjectMeta{
@@ -267,9 +263,6 @@ spec:
 				Reason:  "Succeeded",
 				Message: "All Steps have completed executing",
 			}}},
-			TaskRunStatusFields: v1.TaskRunStatusFields{
-				Artifacts: &v1.Artifacts{},
-			},
 		},
 	}, {
 		ObjectMeta: metav1.ObjectMeta{
@@ -296,9 +289,6 @@ spec:
 				Reason:  "Succeeded",
 				Message: "All Steps have completed executing",
 			}}},
-			TaskRunStatusFields: v1.TaskRunStatusFields{
-				Artifacts: &v1.Artifacts{},
-			},
 		},
 	}, {
 		ObjectMeta: metav1.ObjectMeta{
@@ -319,9 +309,6 @@ spec:
 				Reason:  "Succeeded",
 				Message: "All Steps have completed executing",
 			}}},
-			TaskRunStatusFields: v1.TaskRunStatusFields{
-				Artifacts: &v1.Artifacts{},
-			},
 		},
 	}, {
 		ObjectMeta: metav1.ObjectMeta{
@@ -338,7 +325,6 @@ spec:
 					Type:  "array",
 					Value: v1.ParamValue{Type: v1.ParamTypeArray, ArrayVal: []string{"linux/amd64", "linux/ppc64le"}},
 				}},
-				Artifacts: &v1.Artifacts{},
 			},
 			Status: duckv1.Status{Conditions: []apis.Condition{{
 				Type:    apis.ConditionSucceeded,
@@ -362,7 +348,6 @@ spec:
 					Type:  "array",
 					Value: v1.ParamValue{Type: v1.ParamTypeArray, ArrayVal: []string{"go1.17", "go1.18.1"}},
 				}},
-				Artifacts: &v1.Artifacts{},
 			},
 			Status: duckv1.Status{Conditions: []apis.Condition{{
 				Type:    apis.ConditionSucceeded,
@@ -378,7 +363,7 @@ spec:
 		t.Fatalf("Error waiting for PipelineRun %s to finish: %s", prName, err)
 	}
 
-	actualTaskrunList, err := c.V1TaskRunClient.List(ctx, metav1.ListOptions{LabelSelector: "tekton.dev/pipelineRun=" + prName})
+	actualTaskrunList, err := c.V1TaskRunClient.List(ctx, metav1.ListOptions{LabelSelector: fmt.Sprintf("tekton.dev/pipelineRun=%s", prName)})
 	if err != nil {
 		t.Fatalf("Error listing TaskRuns for PipelineRun %s: %s", prName, err)
 	}
@@ -420,7 +405,7 @@ spec:
     - name: exit-code
   steps:
     - name: echo
-      image: mirror.gcr.io/alpine
+      image: alpine
       script: |
         exit "$(params.exit-code)"
 `, namespace))

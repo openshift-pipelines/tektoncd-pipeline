@@ -158,6 +158,10 @@ A `Tekton Bundle` is an OCI artifact that contains Tekton resources like `Tasks`
 
 You can reference a `Tekton bundle` in a `TaskRef` in both `v1` and `v1beta1` using [remote resolution](./bundle-resolver.md#pipeline-resolution). The example syntax shown below for `v1` uses remote resolution and requires enabling [beta features](./additional-configs.md#beta-features).
 
+In `v1beta1`, you can also reference a `Tekton bundle` using OCI bundle syntax, which has been deprecated in favor of remote resolution. The example shown below for `v1beta1` uses OCI bundle syntax, and requires enabling `enable-tekton-oci-bundles: "true"` feature flag.
+
+{{< tabs >}}
+{{% tab "v1 & v1beta1" %}}
 ```yaml
 spec:
   pipelineRef:
@@ -170,6 +174,17 @@ spec:
     - name: kind
       value: Pipeline
 ```
+{{% /tab %}}
+
+{{% tab "v1beta1" %}}
+ ```yaml
+ spec:
+   pipelineRef:
+     name: mypipeline
+     bundle: docker.io/myrepo/mycatalog:v1.0
+ ```
+{{% /tab %}}
+{{< /tabs >}}
 
 The syntax and caveats are similar to using `Tekton Bundles` for  `Task` references
 in [Pipelines](pipelines.md#tekton-bundles) or [TaskRuns](taskruns.md#tekton-bundles).
@@ -777,8 +792,9 @@ spec:
             image: busybox
             command: ["/bin/sh", "-c"]
             args:
-              - echo $(tasks.add-uid.results.uid)
-              # - echo $(params.uid)
+              - echo
+              # - $(params.uid)
+              - $(tasks.add-uid.results.uid)
 ```
 
 On executing the `PipelineRun`, the `Results` will be interpolated during resolution.
@@ -793,7 +809,8 @@ spec:
   taskSpec:
     steps:
       args:
-        echo 1001
+        echo
+        1001
       command:
         - /bin/sh
         - -c
@@ -814,7 +831,8 @@ status:
   taskSpec:
     steps:
       args:
-        echo 1001
+        echo
+        1001
       command:
         /bin/sh
         -c
@@ -1413,8 +1431,8 @@ If you set the timeout to 0, the `PipelineRun` fails immediately upon encounteri
 ### The `status` field
 
 Your `PipelineRun`'s `status` field can contain the following fields:
+
 - Required:
-  <!-- wokeignore:rule=master -->
   - `status` - Most relevant, `status.conditions`, which contains the latest observations of the `PipelineRun`'s state. [See here](https://github.com/kubernetes/community/blob/master/contributors/devel/sig-architecture/api-conventions.md#typical-status-properties) for information on typical status properties.
   - `startTime` - The time at which the `PipelineRun` began executing, in [RFC3339](https://tools.ietf.org/html/rfc3339) format.
   - `completionTime` - The time at which the `PipelineRun` finished executing, in [RFC3339](https://tools.ietf.org/html/rfc3339) format.

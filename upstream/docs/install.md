@@ -21,7 +21,7 @@ This guide explains how to install Tekton Pipelines.
 
 ## Prerequisites
 
--   A [Kubernetes cluster][k8s] running version 1.28 or later.
+-   A [Kubernetes cluster][k8s] running version 1.25 or later.
 -   [Kubectl][].
 -   Grant `cluster-admin` privileges to the current user. See the [Kubernetes
     role-based access control (RBAC) docs][rbac] for more information.
@@ -71,9 +71,6 @@ To install Tekton Pipelines on a Kubernetes cluster:
      ```bash
      kubectl apply --filename https://storage.googleapis.com/tekton-releases/pipeline/latest/release.notags.yaml
      ```
-
-Multi-tenant installation is only partially supported today, read the [guide](./developers/multi-tenant-support.md)
-for reference.
 
 1. Monitor the installation:
 

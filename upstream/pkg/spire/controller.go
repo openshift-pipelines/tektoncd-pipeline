@@ -223,23 +223,18 @@ func (sc *spireControllerAPIClient) CreateEntries(ctx context.Context, tr *v1bet
 		return err
 	}
 
-	if len(resp.GetResults()) != len(entries) {
+	if len(resp.Results) != len(entries) {
 		return fmt.Errorf("batch create entry failed, malformed response expected %v result", len(entries))
 	}
 
 	var errPaths []string
 	var errCodes []int32
 
-	for _, r := range resp.GetResults() {
-		statusCode := r.GetStatus().GetCode()
-		if statusCode < 0 {
-			return fmt.Errorf("statusCode overflows uint32: %d", statusCode)
-		}
-		code := codes.Code(statusCode)
-
-		if code != codes.AlreadyExists && code != codes.OK {
-			errPaths = append(errPaths, r.GetEntry().GetSpiffeId().GetPath())
-			errCodes = append(errCodes, statusCode)
+	for _, r := range resp.Results {
+		if codes.Code(r.Status.Code) != codes.AlreadyExists &&
+			codes.Code(r.Status.Code) != codes.OK {
+			errPaths = append(errPaths, r.Entry.SpiffeId.Path)
+			errCodes = append(errCodes, r.Status.Code)
 		}
 	}
 
@@ -266,13 +261,13 @@ func (sc *spireControllerAPIClient) getEntries(ctx context.Context, tr *v1beta1.
 			return nil, err
 		}
 
-		entries = append(entries, resp.GetEntries()...)
+		entries = append(entries, resp.Entries...)
 
-		if resp.GetNextPageToken() == "" {
+		if resp.NextPageToken == "" {
 			break
 		}
 
-		req.PageToken = resp.GetNextPageToken()
+		req.PageToken = resp.NextPageToken
 	}
 
 	return entries, nil
@@ -286,7 +281,7 @@ func (sc *spireControllerAPIClient) DeleteEntry(ctx context.Context, tr *v1beta1
 
 	var ids []string
 	for _, e := range entries {
-		ids = append(ids, e.GetId())
+		ids = append(ids, e.Id)
 	}
 
 	req := &entryv1.BatchDeleteEntryRequest{
@@ -300,16 +295,11 @@ func (sc *spireControllerAPIClient) DeleteEntry(ctx context.Context, tr *v1beta1
 	var errIds []string
 	var errCodes []int32
 
-	for _, r := range resp.GetResults() {
-		statusCode := r.GetStatus().GetCode()
-		if statusCode < 0 {
-			return fmt.Errorf("statusCode overflows uint32: %d", statusCode)
-		}
-		code := codes.Code(statusCode)
-
-		if code != codes.NotFound && code != codes.OK {
-			errIds = append(errIds, r.GetId())
-			errCodes = append(errCodes, statusCode)
+	for _, r := range resp.Results {
+		if codes.Code(r.Status.Code) != codes.NotFound &&
+			codes.Code(r.Status.Code) != codes.OK {
+			errIds = append(errIds, r.Id)
+			errCodes = append(errCodes, r.Status.Code)
 		}
 	}
 

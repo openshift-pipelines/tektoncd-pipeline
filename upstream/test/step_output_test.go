@@ -56,7 +56,7 @@ func TestStepOutput(t *testing.T) {
 						Name:      "data",
 						MountPath: "/data",
 					}},
-					Script: "echo -n " + wantResultValue,
+					Script: fmt.Sprintf("echo -n %s", wantResultValue),
 					StdoutConfig: &v1.StepOutputConfig{
 						Path: "/data/step-echo-stdout",
 					},
@@ -134,7 +134,7 @@ func TestStepOutputWithWorkspace(t *testing.T) {
 				Steps: []v1.Step{{
 					Name:   "echo",
 					Image:  "busybox",
-					Script: "echo -n " + wantResultValue,
+					Script: fmt.Sprintf("echo -n %s", wantResultValue),
 					StdoutConfig: &v1.StepOutputConfig{
 						Path: "/data/step-echo-stdout",
 					},
