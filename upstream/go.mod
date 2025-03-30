@@ -1,7 +1,8 @@
 module github.com/tektoncd/pipeline
 
-go 1.22
-toolchain go1.22.5
+go 1.22.3
+
+toolchain go1.22.9
 
 require (
 	github.com/Microsoft/go-winio v0.6.2 // indirect
@@ -195,7 +196,7 @@ require (
 	github.com/gobuffalo/flect v1.0.2 // indirect
 	github.com/gogo/protobuf v1.3.2 // indirect
 	github.com/golang-jwt/jwt/v4 v4.5.0 // indirect
-	github.com/golang/groupcache v0.0.0-20210331224755-41bb18bfe9da // indirect
+	github.com/golang/groupcache v0.0.0-20241129210726-2c02b8208cf8 // indirect
 	github.com/golang/protobuf v1.5.4 // indirect
 	github.com/google/gofuzz v1.2.0 // indirect
 	github.com/hashicorp/go-version v1.7.0
