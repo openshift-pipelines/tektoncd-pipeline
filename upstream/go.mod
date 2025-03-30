@@ -1,7 +1,8 @@
 module github.com/tektoncd/pipeline
 
-go 1.22
-toolchain go1.22.5
+go 1.22.3
+
+toolchain go1.22.9
 
 require (
 	github.com/Microsoft/go-winio v0.6.2 // indirect
@@ -145,7 +146,7 @@ replace (
 )
 
 require (
-	contrib.go.opencensus.io/exporter/ocagent v0.7.1-0.20200907061046-05415f1de66d // indirect
+	contrib.go.opencensus.io/exporter/ocagent v0.7.1-0.20230502190836-7399e0f8ee5e // indirect
 	contrib.go.opencensus.io/exporter/prometheus v0.4.2 // indirect
 	github.com/Azure/azure-sdk-for-go v68.0.0+incompatible // indirect
 	github.com/Azure/go-autorest v14.2.0+incompatible // indirect
