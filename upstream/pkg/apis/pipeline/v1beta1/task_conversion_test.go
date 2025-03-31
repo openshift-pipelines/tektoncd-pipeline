@@ -96,22 +96,6 @@ spec:
           key:
             type: string
 `
-	stepWhenTaskYAML := `
-metadata:
-  name: foo
-  namespace: bar
-spec:
-  displayName: "task-step-when"
-  description: test
-  steps:
-    - image: foo
-      name: should-execute
-      image: bash:latest
-      when:
-       - input: "$(workspaces.custom.bound)"
-         operator: in
-         values: ["true"]
-`
 	stepActionTaskYAML := `
 metadata:
   name: foo
@@ -346,9 +330,6 @@ spec:
 	stepResultTaskV1beta1 := parse.MustParseV1beta1Task(t, stepResultTaskYAML)
 	stepResultTaskV1 := parse.MustParseV1Task(t, stepResultTaskYAML)
 
-	stepWhenTaskV1beta1 := parse.MustParseV1beta1Task(t, stepWhenTaskYAML)
-	stepWhenTaskV1 := parse.MustParseV1Task(t, stepWhenTaskYAML)
-
 	stepActionTaskV1beta1 := parse.MustParseV1beta1Task(t, stepActionTaskYAML)
 	stepActionTaskV1 := parse.MustParseV1Task(t, stepActionTaskYAML)
 
@@ -394,10 +375,6 @@ spec:
 		name:        "step results in task",
 		v1beta1Task: stepResultTaskV1beta1,
 		v1Task:      stepResultTaskV1,
-	}, {
-		name:        "step when in task",
-		v1beta1Task: stepWhenTaskV1beta1,
-		v1Task:      stepWhenTaskV1,
 	}, {
 		name:        "step action in task",
 		v1beta1Task: stepActionTaskV1beta1,

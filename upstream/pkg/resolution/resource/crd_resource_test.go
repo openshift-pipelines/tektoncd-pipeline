@@ -25,11 +25,10 @@ import (
 	"github.com/google/go-cmp/cmp"
 	"github.com/tektoncd/pipeline/pkg/apis/resolution/v1beta1"
 	ttesting "github.com/tektoncd/pipeline/pkg/reconciler/testing"
-	"github.com/tektoncd/pipeline/pkg/resolution/common"
+	resolutioncommon "github.com/tektoncd/pipeline/pkg/resolution/common"
 	"github.com/tektoncd/pipeline/pkg/resolution/resource"
 	"github.com/tektoncd/pipeline/test"
 	"github.com/tektoncd/pipeline/test/diff"
-	resolution "github.com/tektoncd/pipeline/test/resolution"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"knative.dev/pkg/logging"
 	_ "knative.dev/pkg/system/testing" // Setup system.Namespace()
@@ -145,7 +144,7 @@ conditions:
 
 	testCases := []struct {
 		name                      string
-		inputRequest              *resolution.RawRequest
+		inputRequest              *test.RawRequest
 		inputResolutionRequest    *v1beta1.ResolutionRequest
 		expectedResolutionRequest *v1beta1.ResolutionRequest
 		expectedResolvedResource  *v1beta1.ResolutionRequest
@@ -157,7 +156,7 @@ conditions:
 			inputResolutionRequest:    nil,
 			expectedResolutionRequest: createdRR.DeepCopy(),
 			expectedResolvedResource:  nil,
-			expectedErr:               common.ErrRequestInProgress,
+			expectedErr:               resolutioncommon.ErrRequestInProgress,
 		},
 		{
 			name:                      "resolution request exist and status is unknown",
@@ -165,7 +164,7 @@ conditions:
 			inputResolutionRequest:    unknownRR.DeepCopy(),
 			expectedResolutionRequest: nil,
 			expectedResolvedResource:  nil,
-			expectedErr:               common.ErrRequestInProgress,
+			expectedErr:               resolutioncommon.ErrRequestInProgress,
 		},
 		{
 			name:                      "resolution request exist and status is succeeded",
@@ -189,7 +188,7 @@ conditions:
 			inputResolutionRequest:    failedRR.DeepCopy(),
 			expectedResolutionRequest: nil,
 			expectedResolvedResource:  nil,
-			expectedErr:               common.NewError(common.ReasonResolutionFailed, errors.New("error message")),
+			expectedErr:               resolutioncommon.NewError(resolutioncommon.ReasonResolutionFailed, errors.New("error message")),
 		},
 	}
 
@@ -205,7 +204,7 @@ conditions:
 			ctx := testAssets.Ctx
 			clients := testAssets.Clients
 
-			resolver := common.ResolverName("git")
+			resolver := resolutioncommon.ResolverName("git")
 			crdRequester := resource.NewCRDRequester(clients.ResolutionRequests, testAssets.Informers.ResolutionRequest.Lister())
 			requestWithOwner := &ownerRequest{
 				Request:  tc.inputRequest.Request(),
@@ -236,7 +235,7 @@ conditions:
 				if err != nil {
 					t.Errorf("unexpected error decoding expected resource data: %v", err)
 				}
-				expectedResolvedResource := resolution.NewResolvedResource(data, rr.Status.Annotations, rr.Status.RefSource, nil)
+				expectedResolvedResource := test.NewResolvedResource(data, rr.Status.Annotations, rr.Status.RefSource, nil)
 				assertResolvedResourceEqual(t, expectedResolvedResource, resolvedResource)
 			}
 
@@ -256,7 +255,7 @@ conditions:
 }
 
 type ownerRequest struct {
-	common.Request
+	resolutioncommon.Request
 	ownerRef metav1.OwnerReference
 }
 
@@ -264,9 +263,9 @@ func (r *ownerRequest) OwnerRef() metav1.OwnerReference {
 	return r.ownerRef
 }
 
-func mustParseRawRequest(t *testing.T, yamlStr string) *resolution.RawRequest {
+func mustParseRawRequest(t *testing.T, yamlStr string) *test.RawRequest {
 	t.Helper()
-	output := &resolution.RawRequest{}
+	output := &test.RawRequest{}
 	if err := yaml.Unmarshal([]byte(yamlStr), output); err != nil {
 		t.Errorf("parsing raw request %s: %v", yamlStr, err)
 	}
@@ -300,7 +299,7 @@ func mustParseResolutionRequestStatus(t *testing.T, yamlStr string) *v1beta1.Res
 	return output
 }
 
-func assertResolvedResourceEqual(t *testing.T, expected, actual common.ResolvedResource) {
+func assertResolvedResourceEqual(t *testing.T, expected, actual resolutioncommon.ResolvedResource) {
 	t.Helper()
 	expectedBytes, err := expected.Data()
 	if err != nil {

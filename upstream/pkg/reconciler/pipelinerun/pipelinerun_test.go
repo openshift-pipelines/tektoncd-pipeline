@@ -226,7 +226,7 @@ func getTaskRuns(ctx context.Context, t *testing.T, clients test.Clients, namesp
 	outputs := make(map[string]*v1.TaskRun)
 	for _, item := range taskRuns.Items {
 		tr := item
-		outputs[item.Name] = &tr
+		outputs[tr.Name] = &tr
 	}
 
 	return outputs
@@ -244,7 +244,6 @@ func TestReconcile(t *testing.T) {
 metadata:
   name: test-pipeline-run-success
   namespace: foo
-  uid: bar
 spec:
   params:
   - name: bar
@@ -398,8 +397,6 @@ spec:
     name: unit-test-task
     kind: Task
 `)
-	expectedTaskRun.Labels["tekton.dev/pipelineRunUID"] = "bar"
-	expectedTaskRun.OwnerReferences[0].UID = "bar"
 	// ignore IgnoreUnexported ignore both after and before steps fields
 	if d := cmp.Diff(expectedTaskRun, actual, ignoreTypeMeta, ignoreResourceVersion); d != "" {
 		t.Errorf("expected to see TaskRun %v created. Diff %s", expectedTaskRun, diff.PrintWantGot(d))
@@ -430,7 +427,6 @@ func TestReconcile_V1Beta1CustomTask(t *testing.T) {
 	simpleCustomTaskPRYAML := `metadata:
   name: test-pipelinerun
   namespace: namespace
-  uid: bar
 spec:
   pipelineSpec:
     tasks:
@@ -450,7 +446,6 @@ spec:
     tekton.dev/pipeline: test-pipelinerun
     tekton.dev/pipelineRun: test-pipelinerun
     tekton.dev/pipelineTask: custom-task
-    tekton.dev/pipelineRunUID: bar
   name: test-pipelinerun-custom-task
   namespace: namespace
   ownerReferences:
@@ -459,7 +454,6 @@ spec:
     controller: true
     kind: PipelineRun
     name: test-pipelinerun
-    uid: bar
 spec:
   params:
   - name: param1
@@ -962,26 +956,10 @@ spec:
 			"Warning Failed [User error] PipelineRun foo/embedded-pipeline-mismatching-param-type parameters have mismatching types with Pipeline foo/embedded-pipeline-mismatching-param-type's parameters: parameters have inconsistent types : [some-param]",
 		},
 	}, {
-		name: "invalid-pipeline-run-missing-params-with-ref-shd-stop-reconciling",
-		pipelineRun: parse.MustParseV1PipelineRun(t, `
-metadata:
-  name: pipelinerun-missing-params-1
-  namespace: foo
-spec:
-  pipelineRef:
-    name: a-pipeline-with-array-params
-`),
-		reason:         v1.PipelineRunReasonParameterMissing.String(),
-		permanentError: true,
-		wantEvents: []string{
-			"Normal Started",
-			"Warning Failed [User error] PipelineRun foo/pipelinerun-missing-params-1 is missing some parameters required by Pipeline foo/a-pipeline-with-array-params: pipelineRun missing parameters: [some-param]",
-		},
-	}, {
-		name: "invalid-pipeline-run-missing-params-with-spec-shd-stop-reconciling",
+		name: "invalid-pipeline-run-missing-params-shd-stop-reconciling",
 		pipelineRun: parse.MustParseV1PipelineRun(t, fmt.Sprintf(`
 metadata:
-  name: pipelinerun-missing-params-2
+  name: pipelinerun-missing-params
   namespace: foo
 spec:
   pipelineSpec:
@@ -997,7 +975,7 @@ spec:
 		permanentError: true,
 		wantEvents: []string{
 			"Normal Started",
-			"Warning Failed [User error] PipelineRun foo/pipelinerun-missing-params-2 is missing some parameters required by Pipeline foo/pipelinerun-missing-params-2: pipelineRun missing parameters: [some-param]",
+			"Warning Failed [User error] PipelineRun foo parameters is missing some parameters required by Pipeline pipelinerun-missing-params's parameters: pipelineRun missing parameters: [some-param]",
 		},
 	}, {
 		name: "invalid-pipeline-with-invalid-dag-graph",
@@ -2512,7 +2490,24 @@ spec:
 }
 
 func TestReconcileWithTimeoutDisabled(t *testing.T) {
-	ps := []*v1.Pipeline{parse.MustParseV1Pipeline(t, `
+	testCases := []struct {
+		name    string
+		timeout time.Duration
+	}{
+		{
+			name:    "pipeline timeout is 24h",
+			timeout: 24 * time.Hour,
+		},
+		{
+			name:    "pipeline timeout is way longer than 24h",
+			timeout: 360 * time.Hour,
+		},
+	}
+
+	for _, tc := range testCases {
+		startTime := time.Date(2022, time.January, 1, 0, 0, 0, 0, time.UTC).Add(-3 * tc.timeout)
+		t.Run(tc.name, func(t *testing.T) {
+			ps := []*v1.Pipeline{parse.MustParseV1Pipeline(t, `
 metadata:
   name: test-pipeline
   namespace: foo
@@ -2524,22 +2519,8 @@ spec:
   - name: hello-world-2
     taskRef:
       name: hello-world
-`), parse.MustParseV1Pipeline(t, `
-metadata:
-  name: test-pipeline-with-finally
-  namespace: foo
-spec:
-  tasks:
-  - name: hello-world-1
-    taskRef:
-      name: hello-world
-  finally:
-  - name: hello-world-2
-    taskRef:
-      name: hello-world
 `)}
-
-	prs := []*v1.PipelineRun{parse.MustParseV1PipelineRun(t, `
+			prs := []*v1.PipelineRun{parse.MustParseV1PipelineRun(t, `
 metadata:
   name: test-pipeline-run-with-timeout-disabled
   namespace: foo
@@ -2552,108 +2533,32 @@ spec:
     pipeline: 0h0m0s
 status:
   startTime: "2021-12-30T00:00:00Z"
-`), parse.MustParseV1PipelineRun(t, `
-metadata:
-  name:  test-pipeline-run-with-timeout-disabled
-  namespace: foo
-spec:
-  pipelineRef:
-    name: test-pipeline-with-finally
-  taskRunTemplate:
-    serviceAccountName: test-sa
-  timeouts:
-    pipeline: 96h0m0s
-    tasks: 96h0m0s
-status:
-  startTime: "2021-12-30T00:00:00Z"
-  finallyStartTime: "2021-12-30T23:44:59Z"
 `)}
-	ts := []*v1.Task{simpleHelloWorldTask}
+			ts := []*v1.Task{simpleHelloWorldTask}
 
-	trs := []*v1.TaskRun{mustParseTaskRunWithObjectMeta(t, taskRunObjectMeta("test-pipeline-run-with-timeout-hello-world-1", "foo", "test-pipeline-run-with-timeout-disabled",
-		"test-pipeline", "hello-world-1", false), `
-spec:
-  serviceAccountName: test-sa
-  taskRef:
-    name: hello-world
-    kind: Task
-`), mustParseTaskRunWithObjectMeta(t, taskRunObjectMeta("test-pipeline-run-with-timeout-with-finally-hello-world-1", "foo", "test-pipeline-run-with-timeout-disabled",
-		"test-pipeline-with-finally", "hello-world-1", false), `
-spec:
-  startTime: "2021-12-30T00:00:00Z"
-  serviceAccountName: test-sa
-  taskRef:
-    name: hello-world
-    kind: Task
-  conditions:
-  - lastTransitionTime: null
-    status: "True"
-    type: Succeeded  
-`), mustParseTaskRunWithObjectMeta(t, taskRunObjectMeta("test-pipeline-run-with-timeout-with-finally-hello-world-2", "foo", "test-pipeline-run-with-timeout-disabled",
-		"test-pipeline-with-finally", "hello-world-2", false), `
+			trs := []*v1.TaskRun{mustParseTaskRunWithObjectMeta(t, taskRunObjectMeta("test-pipeline-run-with-timeout-hello-world-1", "foo", "test-pipeline-run-with-timeout-disabled",
+				"test-pipeline", "hello-world-1", false), `
 spec:
   serviceAccountName: test-sa
   taskRef:
     name: hello-world
     kind: Task
 `)}
-
-	testCases := []struct {
-		name    string
-		timeout time.Duration
-		trs     []*v1.TaskRun
-		ts      []*v1.Task
-		ps      []*v1.Pipeline
-		prs     []*v1.PipelineRun
-	}{
-		{
-			name:    "pipeline timeout is 24h",
-			timeout: 24 * time.Hour,
-			trs:     []*v1.TaskRun{trs[0]},
-			ts:      []*v1.Task{ts[0]},
-			prs:     []*v1.PipelineRun{prs[0]},
-			ps:      []*v1.Pipeline{ps[0]},
-		},
-		{
-			name:    "pipeline timeout is way longer than 24h",
-			timeout: 360 * time.Hour,
-			trs:     []*v1.TaskRun{trs[0]},
-			ts:      []*v1.Task{ts[0]},
-			prs:     []*v1.PipelineRun{prs[0]},
-			ps:      []*v1.Pipeline{ps[0]},
-		},
-		{
-			name:    "pipeline timeout is 24h, and the final task timeout is 0s",
-			timeout: 24 * time.Hour,
-			trs:     []*v1.TaskRun{trs[1], trs[2]},
-			ts:      []*v1.Task{ts[0]},
-			prs:     []*v1.PipelineRun{prs[1]},
-			ps:      []*v1.Pipeline{ps[1]},
-		},
-	}
-
-	for _, tc := range testCases {
-		startTime := time.Date(2022, time.January, 1, 0, 0, 0, 0, time.UTC).Add(-3 * tc.timeout)
-		notAdjustedCreationTimestamp := time.Date(2022, time.January, 1, 0, 0, 0, 0, time.UTC).Add(tc.timeout)
-		t.Run(tc.name, func(t *testing.T) {
 			start := metav1.NewTime(startTime)
-			tc.prs[0].Status.StartTime = &start
-			for i := range tc.trs {
-				tc.trs[i].CreationTimestamp = metav1.Time{Time: notAdjustedCreationTimestamp}
-			}
+			prs[0].Status.StartTime = &start
 
 			d := test.Data{
-				PipelineRuns: tc.prs,
-				Pipelines:    tc.ps,
-				Tasks:        tc.ts,
-				TaskRuns:     tc.trs,
+				PipelineRuns: prs,
+				Pipelines:    ps,
+				Tasks:        ts,
+				TaskRuns:     trs,
 			}
 			prt := newPipelineRunTest(t, d)
 			defer prt.Cancel()
 
 			c := prt.TestAssets.Controller
 			clients := prt.TestAssets.Clients
-			reconcileError := c.Reconciler.Reconcile(prt.TestAssets.Ctx, fmt.Sprintf("%s/%s", "foo", tc.prs[0].Name))
+			reconcileError := c.Reconciler.Reconcile(prt.TestAssets.Ctx, "foo/test-pipeline-run-with-timeout-disabled")
 			if reconcileError == nil {
 				t.Errorf("expected error, but got nil")
 			}
@@ -2663,7 +2568,7 @@ spec:
 				t.Errorf("Expected a positive requeue duration but got %s", requeueDuration.String())
 			}
 			prt.Test.Logf("Getting reconciled run")
-			reconciledRun, err := clients.Pipeline.TektonV1().PipelineRuns("foo").Get(prt.TestAssets.Ctx, tc.prs[0].Name, metav1.GetOptions{})
+			reconciledRun, err := clients.Pipeline.TektonV1().PipelineRuns("foo").Get(prt.TestAssets.Ctx, "test-pipeline-run-with-timeout-disabled", metav1.GetOptions{})
 			if err != nil {
 				prt.Test.Errorf("Somehow had error getting reconciled run out of fake client: %s", err)
 			}
@@ -2786,7 +2691,7 @@ spec:
 			prt.Test.Logf("Getting events")
 			// Check generated events match what's expected
 			if err := k8sevent.CheckEventsOrdered(prt.Test, prt.TestAssets.Recorder.Events, "test-pipeline-run-with-timeout", wantEvents); err != nil {
-				prt.Test.Error(err.Error())
+				prt.Test.Errorf(err.Error())
 			}
 
 			// The PipelineRun should be timed out.
@@ -3569,7 +3474,7 @@ spec:
 			}
 			err = k8sevent.CheckEventsOrdered(t, testAssets.Recorder.Events, prName, wantEvents)
 			if err != nil {
-				t.Error(err.Error())
+				t.Errorf(err.Error())
 			}
 
 			// Turn off failing reactor and retry reconciliation
@@ -3687,7 +3592,7 @@ spec:
 	}
 	err = k8sevent.CheckEventsOrdered(t, testAssets.Recorder.Events, prName, wantEvents)
 	if err != nil {
-		t.Error(err.Error())
+		t.Errorf(err.Error())
 	}
 
 	// Turn off failing reactor and retry reconciliation
@@ -3784,6 +3689,7 @@ metadata:
     PipelineRunAnnotation: PipelineRunValue
   labels:
     PipelineRunLabel: PipelineRunValue
+    tekton.dev/pipeline: WillNotBeUsed
   name: test-pipeline-run-with-labels
   namespace: foo
 spec:
@@ -6914,7 +6820,7 @@ metadata:
 				t.Errorf("storePipelineSpec() error = %v", err)
 			}
 			if d := cmp.Diff(tc.wantPipelineRun, pr); d != "" {
-				t.Fatal(diff.PrintWantGot(d))
+				t.Fatalf(diff.PrintWantGot(d))
 			}
 
 			// mock second reconcile
@@ -6922,7 +6828,7 @@ metadata:
 				t.Errorf("storePipelineSpec() error = %v", err)
 			}
 			if d := cmp.Diff(tc.wantPipelineRun, pr); d != "" {
-				t.Fatal(diff.PrintWantGot(d))
+				t.Fatalf(diff.PrintWantGot(d))
 			}
 		})
 	}
@@ -6946,10 +6852,10 @@ func Test_storePipelineSpec_metadata(t *testing.T) {
 		t.Errorf("storePipelineSpecAndMergeMeta error = %v", err)
 	}
 	if d := cmp.Diff(wantedlabels, pr.ObjectMeta.Labels); d != "" {
-		t.Fatal(diff.PrintWantGot(d))
+		t.Fatalf(diff.PrintWantGot(d))
 	}
 	if d := cmp.Diff(wantedannotations, pr.ObjectMeta.Annotations); d != "" {
-		t.Fatal(diff.PrintWantGot(d))
+		t.Fatalf(diff.PrintWantGot(d))
 	}
 }
 
@@ -8339,73 +8245,6 @@ spec:
 	}
 }
 
-func TestReconciler_ReconcileKind_PipelineRunLabels(t *testing.T) {
-	names.TestingSeed()
-
-	pipelineName := "p-pipelinetask"
-	pipelineRunName := "pr-pipelinetask"
-
-	ps := []*v1.Pipeline{parse.MustParseV1Pipeline(t, `
-metadata:
-  name: p-pipelinetask
-  namespace: foo
-spec:
-  tasks:
-  - name: task1
-    taskRef:
-      name: mytask
-`)}
-
-	prs := []*v1.PipelineRun{parse.MustParseV1PipelineRun(t, `
-metadata:
-  name: pr-pipelinetask
-  namespace: foo
-spec:
-  pipelineRef:
-    params:
-    - name: kind
-      value: pipeline
-    - name: name
-      value: p-pipelinetask
-    - name: namespace
-      value: foo
-    resolver: cluster
-`)}
-
-	ts := []*v1.Task{{ObjectMeta: baseObjectMeta("mytask", "foo")}}
-
-	trs := []*v1.TaskRun{mustParseTaskRunWithObjectMeta(t,
-		taskRunObjectMeta(pipelineRunName+"-task1-xxyy", "foo", pipelineRunName, pipelineName, "task1", false),
-		`
-spec:
-  serviceAccountName: test-sa
-  taskRef:
-    name: mytask
-status:
-  conditions:
-  - reason: "done"
-    status: "True"
-    type: Succeeded
-`)}
-
-	d := test.Data{
-		PipelineRuns: prs,
-		Pipelines:    ps,
-		Tasks:        ts,
-		TaskRuns:     trs,
-	}
-	prt := newPipelineRunTest(t, d)
-	defer prt.Cancel()
-
-	actualPipelineRun, _ := prt.reconcileRun("foo", pipelineRunName, []string{}, false)
-	if actualPipelineRun.Labels == nil {
-		t.Fatalf("Pelinerun should have labels")
-	}
-	if v, ok := actualPipelineRun.Labels[pipeline.PipelineLabelKey]; !ok || v != pipelineName {
-		t.Fatalf("The expected name of the pipeline is %s, but the actual name is %s", pipelineName, v)
-	}
-}
-
 // newPipelineRunTest returns PipelineRunTest with a new PipelineRun controller created with specified state through data
 // This PipelineRunTest can be reused for multiple PipelineRuns by calling reconcileRun for each pipelineRun
 func newPipelineRunTest(t *testing.T, data test.Data) *PipelineRunTest {
@@ -8449,7 +8288,7 @@ func (prt PipelineRunTest) reconcileRun(namespace, pipelineRunName string, wantE
 	// Check generated events match what's expected
 	if len(wantEvents) > 0 {
 		if err := k8sevent.CheckEventsOrdered(prt.Test, prt.TestAssets.Recorder.Events, pipelineRunName, wantEvents); err != nil {
-			prt.Test.Error(err.Error())
+			prt.Test.Errorf(err.Error())
 		}
 	}
 
@@ -8642,132 +8481,6 @@ spec:
 		}
 		if !tc.wantFailed && reconciledRun.Status.GetCondition(apis.ConditionSucceeded).IsFalse() {
 			t.Errorf("Expected PipelineRun to not be failed but has condition status false")
-		}
-	}
-}
-
-func TestReconcile_RemotePipeline_PipelineNameLabel(t *testing.T) {
-	names.TestingSeed()
-
-	namespace := "foo"
-	prName := "test-pipeline-run-success"
-	trName := "test-pipeline-run-success-unit-test-1"
-
-	prs := []*v1.PipelineRun{parse.MustParseV1PipelineRun(t, `
-metadata:
-  name: test-pipeline-run-success
-  namespace: foo
-spec:
-  pipelineRef:
-    resolver: bar
-  taskRunTemplate:
-    serviceAccountName: test-sa
-  timeout: 1h0m0s
-`)}
-	ps := parse.MustParseV1Pipeline(t, `
-metadata:
-  name: test-pipeline
-  namespace: foo
-spec:
-  tasks:
-  - name: unit-test-1
-    taskRef:
-      resolver: bar
-`)
-	notNamePipeline := parse.MustParseV1Pipeline(t, `
-metadata:
-  namespace: foo
-spec:
-  tasks:
-  - name: unit-test-1
-    taskRef:
-      resolver: bar
-`)
-
-	remoteTask := parse.MustParseV1Task(t, `
-metadata:
-  name: unit-test-task
-  namespace: foo
-`)
-
-	pipelineBytes, err := yaml.Marshal(ps)
-	if err != nil {
-		t.Fatal("fail to marshal pipeline", err)
-	}
-	notNamePipelineBytes, err := yaml.Marshal(notNamePipeline)
-	if err != nil {
-		t.Fatal("fail to marshal pipeline", err)
-	}
-
-	taskBytes, err := yaml.Marshal(remoteTask)
-	if err != nil {
-		t.Fatal("fail to marshal task", err)
-	}
-
-	pipelineReq := getResolvedResolutionRequest(t, "bar", pipelineBytes, "foo", prName)
-	notNamePipelineReq := getResolvedResolutionRequest(t, "bar", notNamePipelineBytes, "foo", prName)
-	taskReq := getResolvedResolutionRequest(t, "bar", taskBytes, "foo", trName)
-
-	tcs := []struct {
-		name             string
-		wantPipelineName string
-		pipelineReq      resolutionv1beta1.ResolutionRequest
-		taskReq          resolutionv1beta1.ResolutionRequest
-	}{{
-		name: "remote pipeline contains name",
-		// Use the name from the remote pipeline
-		wantPipelineName: ps.Name,
-		pipelineReq:      pipelineReq,
-		taskReq:          taskReq,
-	}, {
-		name:             "remote pipeline without name",
-		wantPipelineName: prs[0].Name,
-		pipelineReq:      notNamePipelineReq,
-		taskReq:          taskReq,
-	}}
-
-	for _, tc := range tcs {
-		// Unlike the tests above, we do *not* locally define our pipeline or unit-test task.
-		d := test.Data{
-			PipelineRuns: prs,
-			ServiceAccounts: []*corev1.ServiceAccount{{
-				ObjectMeta: metav1.ObjectMeta{Name: prs[0].Spec.TaskRunTemplate.ServiceAccountName, Namespace: namespace},
-			}},
-			ConfigMaps: []*corev1.ConfigMap{
-				{
-					ObjectMeta: metav1.ObjectMeta{Name: config.GetFeatureFlagsConfigName(), Namespace: system.Namespace()},
-					Data: map[string]string{
-						"enable-api-fields": "beta",
-					},
-				},
-			},
-			ResolutionRequests: []*resolutionv1beta1.ResolutionRequest{&tc.taskReq, &tc.pipelineReq},
-		}
-
-		prt := newPipelineRunTest(t, d)
-		defer prt.Cancel()
-
-		wantEvents := []string{
-			"Normal Started",
-			"Normal Running Tasks Completed: 0",
-		}
-		reconciledRun, _ := prt.reconcileRun(namespace, prName, wantEvents, false)
-		if len(reconciledRun.Labels) == 0 {
-			t.Errorf("the pipeline label in pr is not set")
-		}
-		pName := reconciledRun.Labels[pipeline.PipelineLabelKey]
-		if reconciledRun.Labels[pipeline.PipelineLabelKey] != tc.wantPipelineName {
-			t.Errorf("want pipeline name %s, but got %s", tc.wantPipelineName, pName)
-		}
-
-		// Verify the pipeline name label after the second `reconcile`, to prevent it from being overwritten again.
-		reconciledRun, _ = prt.reconcileRun(namespace, prName, wantEvents, false)
-		if len(reconciledRun.Labels) == 0 {
-			t.Errorf("the pipeline label in pr is not set")
-		}
-		pName = reconciledRun.Labels[pipeline.PipelineLabelKey]
-		if reconciledRun.Labels[pipeline.PipelineLabelKey] != tc.wantPipelineName {
-			t.Errorf("want pipeline name %s, but got %s", tc.wantPipelineName, pName)
 		}
 	}
 }
@@ -9340,13 +9053,11 @@ func taskRunObjectMeta(trName, ns, prName, pipelineName, pipelineTaskName string
 			APIVersion:         "tekton.dev/v1",
 			Controller:         &trueb,
 			BlockOwnerDeletion: &trueb,
-			UID:                "",
 		}},
 		Labels: map[string]string{
-			pipeline.PipelineLabelKey:       pipelineName,
-			pipeline.PipelineRunLabelKey:    prName,
-			pipeline.PipelineTaskLabelKey:   pipelineTaskName,
-			pipeline.PipelineRunUIDLabelKey: "",
+			pipeline.PipelineLabelKey:     pipelineName,
+			pipeline.PipelineRunLabelKey:  prName,
+			pipeline.PipelineTaskLabelKey: pipelineTaskName,
 		},
 		Annotations: map[string]string{},
 	}
@@ -12172,7 +11883,7 @@ spec:
       type: array
   steps:
     - name: produce-a-list-of-platforms
-      image: docker.io/library/bash:5.2.26
+      image: bash:latest
       script: |
         #!/usr/bin/env bash
         echo -n "[\"linux\",\"mac\",\"windows\"]" | tee $(results.platforms.path)
@@ -12657,7 +12368,7 @@ spec:
       type: array
   steps:
     - name: produce-a-list-of-platforms
-      image: docker.io/library/bash:5.2.26
+      image: bash:latest
       script: |
         #!/usr/bin/env bash
         echo -n "[\"linux\",\"mac\",\"windows\"]" | tee $(results.platforms.path)
@@ -16887,7 +16598,7 @@ spec:
 // the ResolutionRequest's name is generated by resolverName, namespace and runName.
 func getResolvedResolutionRequest(t *testing.T, resolverName string, resourceBytes []byte, namespace string, runName string) resolutionv1beta1.ResolutionRequest {
 	t.Helper()
-	name, err := remoteresource.GenerateDeterministicNameFromSpec(resolverName, namespace+"/"+runName, &resolutionv1beta1.ResolutionRequestSpec{})
+	name, err := remoteresource.GenerateDeterministicName(resolverName, namespace+"/"+runName, nil)
 	if err != nil {
 		t.Errorf("error generating name for %s/%s/%s: %v", resolverName, namespace, runName, err)
 	}
@@ -17683,7 +17394,7 @@ func Test_runNextSchedulableTask(t *testing.T) {
 								ObjectMeta: metav1.ObjectMeta{
 									Name:            "task2",
 									ResourceVersion: "00002",
-									Labels:          map[string]string{"tekton.dev/pipelineRun": "", "tekton.dev/pipelineTask": "task2", "tekton.dev/pipelineRunUID": ""},
+									Labels:          map[string]string{"tekton.dev/pipelineRun": "", "tekton.dev/pipelineTask": "task2"},
 									OwnerReferences: []metav1.OwnerReference{
 										{
 											APIVersion:         "tekton.dev/v1",

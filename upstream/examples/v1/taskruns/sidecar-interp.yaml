@@ -12,7 +12,7 @@ spec:
         emptyDir: {}
     sidecars:
       - name: value-sidecar
-        image: mirror.gcr.io/ubuntu
+        image: ubuntu
         command:
           - /bin/bash
         args:
@@ -23,7 +23,7 @@ spec:
             mountPath: /shared
     steps:
       - name: check-value
-        image: mirror.gcr.io/ubuntu
+        image: ubuntu
         script: |
           #!/bin/bash
           VALUE=$(cat /shared/value)

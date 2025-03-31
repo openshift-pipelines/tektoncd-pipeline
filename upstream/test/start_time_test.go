@@ -56,15 +56,15 @@ metadata:
 spec:
   taskSpec:
     steps:
-    - image: mirror.gcr.io/busybox
+    - image: busybox
       script: sleep 2
-    - image: mirror.gcr.io/busybox
+    - image: busybox
       script: sleep 2
-    - image: mirror.gcr.io/busybox
+    - image: busybox
       script: sleep 2
-    - image: mirror.gcr.io/busybox
+    - image: busybox
       script: sleep 2
-    - image: mirror.gcr.io/busybox
+    - image: busybox
       script: sleep 2
 `, helpers.ObjectNameForTest(t), namespace)), metav1.CreateOptions{})
 	if err != nil {
