@@ -21,11 +21,9 @@ import (
 	"fmt"
 	"path/filepath"
 	"regexp"
-	"sort"
 	"strconv"
 	"strings"
 
-	"github.com/tektoncd/pipeline/internal/artifactref"
 	"github.com/tektoncd/pipeline/pkg/apis/pipeline"
 	v1 "github.com/tektoncd/pipeline/pkg/apis/pipeline/v1"
 	"github.com/tektoncd/pipeline/pkg/container"
@@ -51,14 +49,6 @@ var (
 		"inputs.params.%s",
 	}
 
-	substitutionToParamNamePatterns = []string{
-		`^params\.(\w+)$`,
-		`^params\["([^"]+)"\]$`,
-		`^params\['([^']+)'\]$`,
-		// FIXME(vdemeester) Remove that with deprecating v1beta1
-		`^inputs\.params\.(\w+)$`,
-	}
-
 	paramIndexRegexPatterns = []string{
 		`\$\(params.%s\[([0-9]*)*\*?\]\)`,
 		`\$\(params\[%q\]\[([0-9]*)*\*?\]\)`,
@@ -67,7 +57,7 @@ var (
 )
 
 // applyStepActionParameters applies the params from the Task and the underlying Step to the referenced StepAction.
-func applyStepActionParameters(step *v1.Step, spec *v1.TaskSpec, tr *v1.TaskRun, stepParams v1.Params, defaults []v1.ParamSpec) (*v1.Step, error) {
+func applyStepActionParameters(step *v1.Step, spec *v1.TaskSpec, tr *v1.TaskRun, stepParams v1.Params, defaults []v1.ParamSpec) *v1.Step {
 	if stepParams != nil {
 		stringR, arrayR, objectR := getTaskParameters(spec, tr, spec.Params...)
 		stepParams = stepParams.ReplaceVariables(stringR, arrayR, objectR)
@@ -88,45 +78,8 @@ func applyStepActionParameters(step *v1.Step, spec *v1.TaskSpec, tr *v1.TaskRun,
 	for k, v := range stepResultReplacements {
 		stringReplacements[k] = v
 	}
-
-	// Check if there are duplicate keys in the replacements
-	// If the same key is present in both stringReplacements and arrayReplacements, it means
-	// that the default value and the passed value have different types.
-	err := checkForDuplicateKeys(stringReplacements, arrayReplacements)
-	if err != nil {
-		return nil, err
-	}
-
 	container.ApplyStepReplacements(step, stringReplacements, arrayReplacements)
-	return step, nil
-}
-
-// checkForDuplicateKeys checks if there are duplicate keys in the replacements
-func checkForDuplicateKeys(stringReplacements map[string]string, arrayReplacements map[string][]string) error {
-	keys := make([]string, 0, len(stringReplacements))
-	for k := range stringReplacements {
-		keys = append(keys, k)
-	}
-	sort.Strings(keys)
-	for _, k := range keys {
-		if _, ok := arrayReplacements[k]; ok {
-			paramName := paramNameFromReplacementKey(k)
-			return fmt.Errorf("invalid parameter substitution: %s. Please check the types of the default value and the passed value", paramName)
-		}
-	}
-	return nil
-}
-
-// paramNameFromReplacementKey returns the param name from the replacement key in best effort
-func paramNameFromReplacementKey(key string) string {
-	for _, regexPattern := range substitutionToParamNamePatterns {
-		re := regexp.MustCompile(regexPattern)
-		if matches := re.FindStringSubmatch(key); matches != nil {
-			return matches[1]
-		}
-	}
-	// If no match is found, return the key
-	return key
+	return step
 }
 
 // findArrayIndexParamUsage finds the array index in a string using array param substitution
@@ -246,7 +199,7 @@ func replacementsFromDefaultParams(defaults v1.ParamSpecs) (map[string]string, m
 			switch p.Default.Type {
 			case v1.ParamTypeArray:
 				for _, pattern := range paramPatterns {
-					for i := range len(p.Default.ArrayVal) {
+					for i := 0; i < len(p.Default.ArrayVal); i++ {
 						stringReplacements[fmt.Sprintf(pattern+"[%d]", p.Name, i)] = p.Default.ArrayVal[i]
 					}
 					arrayReplacements[fmt.Sprintf(pattern, p.Name)] = p.Default.ArrayVal
@@ -281,7 +234,7 @@ func replacementsFromParams(params v1.Params) (map[string]string, map[string][]s
 		switch p.Value.Type {
 		case v1.ParamTypeArray:
 			for _, pattern := range paramPatterns {
-				for i := range len(p.Value.ArrayVal) {
+				for i := 0; i < len(p.Value.ArrayVal); i++ {
 					stringReplacements[fmt.Sprintf(pattern+"[%d]", p.Name, i)] = p.Value.ArrayVal[i]
 				}
 				arrayReplacements[fmt.Sprintf(pattern, p.Name)] = p.Value.ArrayVal
@@ -446,20 +399,19 @@ func getTaskResultReplacements(spec *v1.TaskSpec) map[string]string {
 	return stringReplacements
 }
 
-// ApplyArtifacts replaces the occurrences of artifacts.path and step.artifacts.path with the absolute tekton internal path
+// ApplyArtifacts replaces the occurrences of step.artifacts.path with the absolute tekton internal path
 func ApplyArtifacts(spec *v1.TaskSpec) *v1.TaskSpec {
 	for i := range spec.Steps {
-		stringReplacements := getArtifactReplacements(spec.Steps[i], i)
+		stringReplacements := getStepArtifactReplacements(spec.Steps[i], i)
 		container.ApplyStepReplacements(&spec.Steps[i], stringReplacements, map[string][]string{})
 	}
 	return spec
 }
 
-func getArtifactReplacements(step v1.Step, idx int) map[string]string {
+func getStepArtifactReplacements(step v1.Step, idx int) map[string]string {
 	stringReplacements := map[string]string{}
 	stepName := pod.StepName(step.Name, idx)
-	stringReplacements[artifactref.StepArtifactPathPattern] = filepath.Join(pipeline.StepsDir, stepName, "artifacts", "provenance.json")
-	stringReplacements[artifactref.TaskArtifactPathPattern] = filepath.Join(pipeline.ArtifactsDir, "provenance.json")
+	stringReplacements["step.artifacts.path"] = filepath.Join(pipeline.StepsDir, stepName, "artifacts", "provenance.json")
 
 	return stringReplacements
 }
@@ -470,7 +422,8 @@ func ApplyStepExitCodePath(spec *v1.TaskSpec) *v1.TaskSpec {
 	stringReplacements := map[string]string{}
 
 	for i, step := range spec.Steps {
-		stringReplacements[fmt.Sprintf("steps.%s.exitCode.path", pod.StepName(step.Name, i))] = filepath.Join(pipeline.StepsDir, pod.StepName(step.Name, i), "exitCode")
+		stringReplacements[fmt.Sprintf("steps.%s.exitCode.path", pod.StepName(step.Name, i))] =
+			filepath.Join(pipeline.StepsDir, pod.StepName(step.Name, i), "exitCode")
 	}
 	return ApplyReplacements(spec, stringReplacements, map[string][]string{}, map[string]map[string]string{})
 }

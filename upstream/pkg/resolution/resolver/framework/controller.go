@@ -46,7 +46,7 @@ type ReconcilerModifier = func(reconciler *Reconciler)
 // This sets up a lot of the boilerplate that individual resolvers
 // shouldn't need to be concerned with since it's common to all of them.
 func NewController(ctx context.Context, resolver Resolver, modifiers ...ReconcilerModifier) func(context.Context, configmap.Watcher) *controller.Impl {
-	if err := ValidateResolver(ctx, resolver.GetSelector(ctx)); err != nil {
+	if err := validateResolver(ctx, resolver); err != nil {
 		panic(err.Error())
 	}
 	return func(ctx context.Context, cmw configmap.Watcher) *controller.Impl {
@@ -60,7 +60,7 @@ func NewController(ctx context.Context, resolver Resolver, modifiers ...Reconcil
 		}
 
 		r := &Reconciler{
-			LeaderAwareFuncs:           LeaderAwareFuncs(rrInformer.Lister()),
+			LeaderAwareFuncs:           leaderAwareFuncs(rrInformer.Lister()),
 			kubeClientSet:              kubeclientset,
 			resolutionRequestLister:    rrInformer.Lister(),
 			resolutionRequestClientSet: rrclientset,
@@ -82,7 +82,7 @@ func NewController(ctx context.Context, resolver Resolver, modifiers ...Reconcil
 		})
 
 		_, err := rrInformer.Informer().AddEventHandler(cache.FilteringResourceEventHandler{
-			FilterFunc: FilterResolutionRequestsBySelector(resolver.GetSelector(ctx)),
+			FilterFunc: filterResolutionRequestsBySelector(resolver.GetSelector(ctx)),
 			Handler: cache.ResourceEventHandlerFuncs{
 				AddFunc: impl.Enqueue,
 				UpdateFunc: func(oldObj, newObj interface{}) {
@@ -101,35 +101,7 @@ func NewController(ctx context.Context, resolver Resolver, modifiers ...Reconcil
 	}
 }
 
-// watchConfigChanges binds a framework.Resolver to updates on its
-// configmap, using knative's configmap helpers. This is only done if
-// the resolver implements the framework.ConfigWatcher interface.
-func watchConfigChanges(ctx context.Context, reconciler *Reconciler, cmw configmap.Watcher) {
-	if configWatcher, ok := reconciler.resolver.(ConfigWatcher); ok {
-		logger := logging.FromContext(ctx)
-		resolverConfigName := configWatcher.GetConfigName(ctx)
-		if resolverConfigName == "" {
-			panic("resolver returned empty config name")
-		}
-		reconciler.configStore = NewConfigStore(resolverConfigName, logger)
-		reconciler.configStore.WatchConfigs(cmw)
-	}
-}
-
-// applyModifiersAndDefaults applies the given modifiers to
-// a reconciler and, after doing so, sets any default values for things
-// that weren't set by a modifier.
-func applyModifiersAndDefaults(ctx context.Context, r *Reconciler, modifiers []ReconcilerModifier) {
-	for _, mod := range modifiers {
-		mod(r)
-	}
-
-	if r.Clock == nil {
-		r.Clock = clock.RealClock{}
-	}
-}
-
-func FilterResolutionRequestsBySelector(selector map[string]string) func(obj interface{}) bool {
+func filterResolutionRequestsBySelector(selector map[string]string) func(obj interface{}) bool {
 	return func(obj interface{}) bool {
 		rr, ok := obj.(*v1beta1.ResolutionRequest)
 		if !ok {
@@ -155,7 +127,7 @@ func FilterResolutionRequestsBySelector(selector map[string]string) func(obj int
 // fact that the controller crashes if they're missing. It looks
 // like this is bucketing based on labels. Should we use the filter
 // selector from above in the call to lister.List here?
-func LeaderAwareFuncs(lister rrlister.ResolutionRequestLister) reconciler.LeaderAwareFuncs {
+func leaderAwareFuncs(lister rrlister.ResolutionRequestLister) reconciler.LeaderAwareFuncs {
 	return reconciler.LeaderAwareFuncs{
 		PromoteFunc: func(bkt reconciler.Bucket, enq func(reconciler.Bucket, types.NamespacedName)) error {
 			all, err := lister.List(labels.Everything())
@@ -184,7 +156,8 @@ var (
 	ErrorMissingTypeSelector = ErrMissingTypeSelector
 )
 
-func ValidateResolver(ctx context.Context, sel map[string]string) error {
+func validateResolver(ctx context.Context, r Resolver) error {
+	sel := r.GetSelector(ctx)
 	if sel == nil {
 		return ErrMissingTypeSelector
 	}
@@ -192,4 +165,32 @@ func ValidateResolver(ctx context.Context, sel map[string]string) error {
 		return ErrMissingTypeSelector
 	}
 	return nil
+}
+
+// watchConfigChanges binds a framework.Resolver to updates on its
+// configmap, using knative's configmap helpers. This is only done if
+// the resolver implements the framework.ConfigWatcher interface.
+func watchConfigChanges(ctx context.Context, reconciler *Reconciler, cmw configmap.Watcher) {
+	if configWatcher, ok := reconciler.resolver.(ConfigWatcher); ok {
+		logger := logging.FromContext(ctx)
+		resolverConfigName := configWatcher.GetConfigName(ctx)
+		if resolverConfigName == "" {
+			panic("resolver returned empty config name")
+		}
+		reconciler.configStore = NewConfigStore(resolverConfigName, logger)
+		reconciler.configStore.WatchConfigs(cmw)
+	}
+}
+
+// applyModifiersAndDefaults applies the given modifiers to
+// a reconciler and, after doing so, sets any default values for things
+// that weren't set by a modifier.
+func applyModifiersAndDefaults(ctx context.Context, r *Reconciler, modifiers []ReconcilerModifier) {
+	for _, mod := range modifiers {
+		mod(r)
+	}
+
+	if r.Clock == nil {
+		r.Clock = clock.RealClock{}
+	}
 }

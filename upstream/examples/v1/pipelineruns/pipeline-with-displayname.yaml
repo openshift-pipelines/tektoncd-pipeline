@@ -18,7 +18,7 @@ spec:
       description: The sum of the two provided integers
   steps:
     - name: sum
-      image: mirror.gcr.io/bash
+      image: bash:latest
       script: |
         #!/usr/bin/env bash
         echo -n $(( "$(params.a)" + "$(params.b)" )) | tee $(results.sum.path)
@@ -74,7 +74,7 @@ spec:
             type: string
         steps:
           - name: print
-            image: mirror.gcr.io/alpine
+            image: alpine
             script: |
               echo "$(params.sum)"
 ---

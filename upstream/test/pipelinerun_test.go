@@ -68,7 +68,7 @@ spec:
   - name: HELLO
     default: "Hi!"
   steps:
-  - image: mirror.gcr.io/ubuntu
+  - image: ubuntu
     script: |
       #!/usr/bin/env bash
       echo "$(params.HELLO)"
@@ -91,6 +91,8 @@ spec:
 	}}
 
 	for i, td := range tds {
+		i := i   // capture range variable
+		td := td // capture range variable
 		t.Run(td.name, func(t *testing.T) {
 			t.Parallel()
 			ctx := context.Background()
@@ -295,6 +297,8 @@ spec:
 	}}
 
 	for i, td := range tds {
+		i := i   // capture range variable
+		td := td // capture range variable
 		t.Run(td.name, func(t *testing.T) {
 			t.Parallel()
 			ctx := context.Background()
@@ -440,7 +444,7 @@ spec:
     taskSpec:
       steps:
       - name: echo
-        image: mirror.gcr.io/ubuntu
+        image: ubuntu
         script: |
           #!/usr/bin/env bash
           # Sleep for 10s
@@ -450,7 +454,7 @@ spec:
     taskSpec:
       steps:
       - name: echo
-        image: mirror.gcr.io/ubuntu
+        image: ubuntu
         script: |
           #!/usr/bin/env bash
           # Sleep for another 10s
@@ -512,7 +516,7 @@ metadata:
   namespace: %s
 spec:
   steps:
-  - image: mirror.gcr.io/ubuntu
+  - image: ubuntu
     command: ['/bin/bash']
     args: ['-c', 'echo hello, world']
 `, taskName, namespace)), metav1.CreateOptions{}); err != nil {
@@ -582,10 +586,10 @@ metadata:
   namespace: %s
 spec:
   steps:
-  - image: mirror.gcr.io/busybox
+  - image: busybox
     name: write-data-task-0-step-0
     script: echo stuff | tee $(results.result-stuff.path)
-  - image: mirror.gcr.io/busybox
+  - image: busybox
     name: write-data-task-0-step-1
     script: echo other | tee $(results.result-other.path)
   results:
@@ -600,10 +604,10 @@ spec:
   params:
   - name: check-stuff
   steps:
-  - image: mirror.gcr.io/busybox
+  - image: busybox
     name: read-from-task-0
     script: echo $(params.check-stuff)
-  - image: mirror.gcr.io/busybox
+  - image: busybox
     name: write-data-task-1
     script: echo | tee $(results.result-something.path)
   results:
@@ -618,9 +622,9 @@ spec:
   - name: check-other
   steps:
   - script: echo $(params.check-other)
-    image: mirror.gcr.io/busybox
+    image: busybox
     name: read-from-task-0
-  - image: mirror.gcr.io/busybox
+  - image: busybox
     name: write-data-task-1
     script: echo something | tee $(results.result-else.path)
   results:
@@ -637,7 +641,7 @@ spec:
   - name: workspacepath-else
     value: $(tasks.create-file.results.result-else)
   steps:
-  - image: mirror.gcr.io/busybox
+  - image: busybox
     script: echo params.workspacepath-something
 `, helpers.ObjectNameForTest(t), namespace)),
 	}
@@ -971,7 +975,7 @@ metadata:
   namespace: %s
 spec:
   steps:
-  - image: mirror.gcr.io/ubuntu
+  - image: ubuntu
     command: ['/bin/bash']
     args: ['-c', 'echo hello, world']
 `, taskName, namespace)), metav1.CreateOptions{}); err != nil {
@@ -1007,7 +1011,7 @@ spec:
           - name: abc
         steps:
         - name: update-sa
-          image: mirror.gcr.io/bash
+          image: bash:latest
           script: |
             echo 'test' >  $(results.abc.path)
             exit 1
