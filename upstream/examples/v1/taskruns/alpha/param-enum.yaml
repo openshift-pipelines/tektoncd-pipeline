@@ -9,7 +9,7 @@ spec:
     default: "v1"
   steps:
   - name: build
-    image: mirror.gcr.io/bash
+    image: bash:3.2
     script: |
       echo "$(params.message)"
 ---

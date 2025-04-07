@@ -13,7 +13,7 @@ spec:
       default: ""
   steps:
     - name: echo
-      image: mirror.gcr.io/alpine
+      image: alpine
       script: |
         echo "$(params.platform) and $(params.browser)"
 ---

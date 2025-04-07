@@ -62,7 +62,7 @@ spec:
           memory: 5000Gi
   steps:
     - name: echo
-      image: mirror.gcr.io/ubuntu
+      image: ubuntu
       script: |
         #!/usr/bin/env bash
         echo "Good Morning!" > $(workspaces.task-ws.path)
