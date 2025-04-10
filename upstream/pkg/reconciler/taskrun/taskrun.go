@@ -22,7 +22,6 @@ import (
 	"fmt"
 	"reflect"
 	"slices"
-	"strconv"
 	"strings"
 	"time"
 
@@ -39,7 +38,6 @@ import (
 	alphalisters "github.com/tektoncd/pipeline/pkg/client/listers/pipeline/v1alpha1"
 	"github.com/tektoncd/pipeline/pkg/internal/affinityassistant"
 	"github.com/tektoncd/pipeline/pkg/internal/computeresources"
-	"github.com/tektoncd/pipeline/pkg/internal/defaultresourcerequirements"
 	resolutionutil "github.com/tektoncd/pipeline/pkg/internal/resolution"
 	podconvert "github.com/tektoncd/pipeline/pkg/pod"
 	tknreconciler "github.com/tektoncd/pipeline/pkg/reconciler"
@@ -49,8 +47,7 @@ import (
 	"github.com/tektoncd/pipeline/pkg/reconciler/taskrun/resources"
 	"github.com/tektoncd/pipeline/pkg/reconciler/volumeclaim"
 	"github.com/tektoncd/pipeline/pkg/remote"
-	resolution "github.com/tektoncd/pipeline/pkg/remoteresolution/resource"
-	resolutioncommon "github.com/tektoncd/pipeline/pkg/resolution/common"
+	resolution "github.com/tektoncd/pipeline/pkg/resolution/resource"
 	"github.com/tektoncd/pipeline/pkg/spire"
 	"github.com/tektoncd/pipeline/pkg/taskrunmetrics"
 	"github.com/tektoncd/pipeline/pkg/trustedresources"
@@ -153,28 +150,8 @@ func (c *Reconciler) ReconcileKind(ctx context.Context, tr *v1.TaskRun) pkgrecon
 		// and may not have had all of the assumed default specified.
 		tr.SetDefaults(ctx)
 
-		// Check if current k8s version is less than 1.29
-		// Since Kubernetes Major version cannot be 0 and if it's 2 then sidecar will be in
-		// we are only concerned about major version 1 and if the minor is less than 29 then
-		// we need to do the current logic
-		useTektonSidecar := true
-		if config.FromContextOrDefaults(ctx).FeatureFlags.EnableKubernetesSidecar {
-			dc := c.KubeClientSet.Discovery()
-			sv, err := dc.ServerVersion()
-			if err != nil {
-				return err
-			}
-			svMajorInt, _ := strconv.Atoi(sv.Major)
-			svMinorInt, _ := strconv.Atoi(sv.Minor)
-			if svMajorInt >= 1 && svMinorInt >= 29 {
-				useTektonSidecar = false
-				logger.Infof("Using Kubernetes Native Sidecars \n")
-			}
-		}
-		if useTektonSidecar {
-			if err := c.stopSidecars(ctx, tr); err != nil {
-				return err
-			}
+		if err := c.stopSidecars(ctx, tr); err != nil {
+			return err
 		}
 
 		return c.finishReconcileUpdateEmitEvents(ctx, tr, before, nil)
@@ -431,7 +408,7 @@ func (c *Reconciler) prepare(ctx context.Context, tr *v1.TaskRun) (*v1.TaskSpec,
 		return nil, nil, err
 	case err != nil:
 		logger.Errorf("Failed to determine Task spec to use for taskrun %s: %v", tr.Name, err)
-		if resolutioncommon.IsErrTransient(err) {
+		if resources.IsErrTransient(err) {
 			return nil, nil, err
 		}
 		tr.Status.MarkResourceFailed(v1.TaskRunReasonFailedResolution, err)
@@ -456,7 +433,7 @@ func (c *Reconciler) prepare(ctx context.Context, tr *v1.TaskRun) (*v1.TaskSpec,
 		return nil, nil, err
 	case err != nil:
 		logger.Errorf("Failed to determine StepAction to use for TaskRun %s: %v", tr.Name, err)
-		if resolutioncommon.IsErrTransient(err) {
+		if resources.IsErrTransient(err) {
 			return nil, nil, err
 		}
 		tr.Status.MarkResourceFailed(v1.TaskRunReasonFailedResolution, err)
@@ -902,7 +879,6 @@ func (c *Reconciler) createPod(ctx context.Context, ts *v1.TaskSpec, tr *v1.Task
 		EntrypointCache: c.entrypointCache,
 	}
 	pod, err := podbuilder.Build(ctx, tr, *ts,
-		defaultresourcerequirements.NewTransformer(ctx),
 		computeresources.NewTransformer(ctx, tr.Namespace, c.limitrangeLister),
 		affinityassistant.NewTransformer(ctx, tr.Annotations),
 	)
@@ -1060,7 +1036,7 @@ func storeTaskSpecAndMergeMeta(ctx context.Context, tr *v1.TaskRun, ts *v1.TaskS
 		// Propagate labels from Task to TaskRun. TaskRun labels take precedences over Task.
 		tr.ObjectMeta.Labels = kmap.Union(meta.Labels, tr.ObjectMeta.Labels)
 		if tr.Spec.TaskRef != nil {
-			if tr.Spec.TaskRef.Kind == v1.ClusterTaskRefKind {
+			if tr.Spec.TaskRef.Kind == "ClusterTask" {
 				tr.ObjectMeta.Labels[pipeline.ClusterTaskLabelKey] = meta.Name
 			} else {
 				tr.ObjectMeta.Labels[pipeline.TaskLabelKey] = meta.Name
