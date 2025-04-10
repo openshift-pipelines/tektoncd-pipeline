@@ -23,8 +23,8 @@ import (
 	"github.com/tektoncd/pipeline/pkg/remote"
 	resolutioncommon "github.com/tektoncd/pipeline/pkg/resolution/common"
 	remoteresource "github.com/tektoncd/pipeline/pkg/resolution/resource"
+	"github.com/tektoncd/pipeline/test"
 	"github.com/tektoncd/pipeline/test/diff"
-	resolution "github.com/tektoncd/pipeline/test/resolution"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"knative.dev/pkg/kmeta"
 )
@@ -40,7 +40,7 @@ spec:
     taskSpec:
       steps:
       - name: step1
-        image: docker.io/library/ubuntu
+        image: ubuntu
         script: |
           echo "hello world!"
 `)
@@ -60,11 +60,11 @@ func TestGet_Successful(t *testing.T) {
 				Namespace: "bar",
 			},
 		}
-		resolved := &resolution.ResolvedResource{
+		resolved := &test.ResolvedResource{
 			ResolvedData:        tc.resolvedData,
 			ResolvedAnnotations: tc.resolvedAnnotations,
 		}
-		requester := &resolution.Requester{
+		requester := &test.Requester{
 			SubmitErr:        nil,
 			ResolvedResource: resolved,
 		}
@@ -75,73 +75,14 @@ func TestGet_Successful(t *testing.T) {
 	}
 }
 
-var invalidPipelineBytes = []byte(`
-kind: Pipeline
-apiVersion: tekton.dev/v1
-metadata:
-  name: foo
-spec:
-  tasks:
-  - name: task1
-    taskSpec:
-      foo: bar
-      steps:
-      - name: step1
-        image: ubuntu
-        script: |
-          echo "hello world!"
-        foo: bar
-`)
-
-var invalidTaskBytes = []byte(`
-kind: Task
-apiVersion: tekton.dev/v1
-metadata:
-  name: foo
-spec:
-  foo: bar
-  steps:
-    - name: step1
-      image: ubuntu
-      script: |
-        echo "hello world!"
-`)
-
-var invalidStepActionBytes = []byte(`
-kind: StepAction
-apiVersion: tekton.dev/v1beta1
-metadata:
-  name: foo
-spec:
-  image: ubuntu
-  script: |
-    echo "hello world!"
-  foo: bar
-`)
-
 func TestGet_Errors(t *testing.T) {
 	genericError := errors.New("uh oh something bad happened")
-	notARuntimeObject := &resolution.ResolvedResource{
+	notARuntimeObject := &test.ResolvedResource{
 		ResolvedData:        []byte(">:)"),
 		ResolvedAnnotations: nil,
 	}
-	invalidDataResource := &resolution.ResolvedResource{
+	invalidDataResource := &test.ResolvedResource{
 		DataErr:             errors.New("data access error"),
-		ResolvedAnnotations: nil,
-	}
-	invalidPipeline := &resolution.ResolvedResource{
-		ResolvedData:        invalidPipelineBytes,
-		DataErr:             errors.New(`spec.tasks[0].taskSpec.foo", unknown field "spec.tasks[0].taskSpec.steps[0].foo`),
-		ResolvedAnnotations: nil,
-	}
-	invalidTask := &resolution.ResolvedResource{
-		ResolvedData:        invalidTaskBytes,
-		DataErr:             errors.New(`spec.foo", unknown field "spec.steps[0].foo`),
-		ResolvedAnnotations: nil,
-	}
-	invalidStepAction := &resolution.ResolvedResource{
-		ResolvedData:        invalidStepActionBytes,
-		DataErr:             errors.New(`unknown field "spec.foo`),
 		ResolvedAnnotations: nil,
 	}
 	for _, tc := range []struct {
@@ -168,18 +109,6 @@ func TestGet_Errors(t *testing.T) {
 		submitErr:        nil,
 		expectedGetErr:   &DataAccessError{},
 		resolvedResource: invalidDataResource,
-	}, {
-		submitErr:        nil,
-		expectedGetErr:   &DataAccessError{},
-		resolvedResource: invalidPipeline,
-	}, {
-		submitErr:        nil,
-		expectedGetErr:   &DataAccessError{},
-		resolvedResource: invalidTask,
-	}, {
-		submitErr:        nil,
-		expectedGetErr:   &DataAccessError{},
-		resolvedResource: invalidStepAction,
 	}} {
 		ctx := context.Background()
 		owner := &v1beta1.PipelineRun{
@@ -188,7 +117,7 @@ func TestGet_Errors(t *testing.T) {
 				Namespace: "bar",
 			},
 		}
-		requester := &resolution.Requester{
+		requester := &test.Requester{
 			SubmitErr:        tc.submitErr,
 			ResolvedResource: tc.resolvedResource,
 		}

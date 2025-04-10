@@ -34,10 +34,8 @@ import (
 	duckv1 "knative.dev/pkg/apis/duck/v1"
 )
 
-var (
-	now       = time.Date(2022, time.January, 1, 0, 0, 0, 0, time.UTC)
-	testClock = clock.NewFakePassiveClock(now)
-)
+var now = time.Date(2022, time.January, 1, 0, 0, 0, 0, time.UTC)
+var testClock = clock.NewFakePassiveClock(now)
 
 func TestGetParams(t *testing.T) {
 	for _, c := range []struct {
@@ -345,7 +343,7 @@ func TestRunGetTimeOut(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			result := tc.run.GetTimeout()
 			if d := cmp.Diff(tc.expectedValue, result); d != "" {
-				t.Fatal(diff.PrintWantGot(d))
+				t.Fatalf(diff.PrintWantGot(d))
 			}
 		})
 	}
@@ -368,8 +366,7 @@ func TestRunHasTimedOut(t *testing.T) {
 				RunStatusFields: v1alpha1.RunStatusFields{
 					StartTime: &metav1.Time{Time: now},
 				},
-			},
-		},
+			}},
 		expectedValue: false,
 	}, {
 		name: "runWithStartTimeNoTimeout2",
@@ -379,8 +376,7 @@ func TestRunHasTimedOut(t *testing.T) {
 				RunStatusFields: v1alpha1.RunStatusFields{
 					StartTime: &metav1.Time{Time: now.Add(-1 * (apisconfig.DefaultTimeoutMinutes + 1) * time.Minute)},
 				},
-			},
-		},
+			}},
 		expectedValue: true,
 	}, {
 		name: "runWithStartTimeAndTimeout",
@@ -389,8 +385,7 @@ func TestRunHasTimedOut(t *testing.T) {
 			Spec:     v1alpha1.RunSpec{Timeout: &metav1.Duration{Duration: 10 * time.Second}},
 			Status: v1alpha1.RunStatus{RunStatusFields: v1alpha1.RunStatusFields{
 				StartTime: &metav1.Time{Time: now.Add(-1 * (apisconfig.DefaultTimeoutMinutes + 1) * time.Minute)},
-			}},
-		},
+			}}},
 		expectedValue: true,
 	}, {
 		name: "runWithNoStartTimeAndTimeout",
@@ -406,8 +401,7 @@ func TestRunHasTimedOut(t *testing.T) {
 			Spec:     v1alpha1.RunSpec{Timeout: &metav1.Duration{Duration: 10 * time.Second}},
 			Status: v1alpha1.RunStatus{RunStatusFields: v1alpha1.RunStatusFields{
 				StartTime: &metav1.Time{Time: now},
-			}},
-		},
+			}}},
 		expectedValue: false,
 	}}
 
@@ -415,7 +409,7 @@ func TestRunHasTimedOut(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			result := tc.run.HasTimedOut(testClock)
 			if d := cmp.Diff(tc.expectedValue, result); d != "" {
-				t.Fatal(diff.PrintWantGot(d))
+				t.Fatalf(diff.PrintWantGot(d))
 			}
 		})
 	}

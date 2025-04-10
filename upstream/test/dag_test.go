@@ -70,9 +70,9 @@ spec:
   results:
     - name: result
   steps:
-  - image: mirror.gcr.io/busybox
+  - image: busybox
     script: 'echo $(params["text"])'
-  - image: mirror.gcr.io/busybox
+  - image: busybox
     # Sleep for N seconds so that we can check that tasks that
     # should be run in parallel have overlap.
     script: |
