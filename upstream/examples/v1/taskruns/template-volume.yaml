@@ -6,7 +6,7 @@ spec:
   taskSpec:
     steps:
     - name: write
-      image: mirror.gcr.io/ubuntu
+      image: ubuntu
       script: |
         #!/usr/bin/env bash
         echo some stuff > /im/a/custom/mount/path/file
@@ -14,7 +14,7 @@ spec:
       - name: custom
         mountPath: /im/a/custom/mount/path
     - name: read
-      image: mirror.gcr.io/ubuntu
+      image: ubuntu
       script: |
         #!/usr/bin/env bash
         cat /short/and/stout/file
