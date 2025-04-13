@@ -492,8 +492,8 @@ github.com/go-jose/go-jose/v3/cipher
 github.com/go-jose/go-jose/v3/cryptosigner
 github.com/go-jose/go-jose/v3/json
 github.com/go-jose/go-jose/v3/jwt
-# github.com/go-jose/go-jose/v4 v4.0.5
-## explicit; go 1.21
+# github.com/go-jose/go-jose/v4 v4.1.0
+## explicit; go 1.24
 github.com/go-jose/go-jose/v4
 github.com/go-jose/go-jose/v4/cipher
 github.com/go-jose/go-jose/v4/json
@@ -767,7 +767,7 @@ github.com/klauspost/compress/zstd/internal/xxhash
 ## explicit; go 1.11
 github.com/kylelemons/godebug/diff
 github.com/kylelemons/godebug/pretty
-# github.com/letsencrypt/boulder v0.0.0-20250404210133-7b75602bbc06
+# github.com/letsencrypt/boulder v0.0.0-20250411005613-d800055fe666
 ## explicit; go 1.24.0
 github.com/letsencrypt/boulder/core
 github.com/letsencrypt/boulder/core/proto
