@@ -11,7 +11,7 @@ COPY head HEAD
 ENV CHANGESET_REV=$CI_PIPELINE_UPSTREAM_COMMIT
 ENV GODEBUG="http2server=0"
 RUN CGO_ENABLED=0 \
-    go build -ldflags="-X 'knative.dev/pkg/changeset.rev=$(cat HEAD)'" -mod=vendor -tags disable_gcp -v -o /tmp/entrypoint \
+    go build -ldflags="-X 'knative.dev/pkg/changeset.rev=$(cat HEAD)'" -mod=vendor -tags disable_gcp,disable_spire,disable_tls -v -o /tmp/entrypoint \
     ./cmd/entrypoint
 
 FROM $RUNTIME
