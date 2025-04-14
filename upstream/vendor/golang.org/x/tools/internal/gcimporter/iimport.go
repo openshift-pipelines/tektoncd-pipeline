@@ -210,7 +210,6 @@ func iimportCommon(fset *token.FileSet, getPackages GetPackagesFunc, data []byte
 	p := iimporter{
 		version: int(version),
 		ipath:   path,
-		aliases: aliases.Enabled(),
 		shallow: shallow,
 		reportf: reportf,
 
@@ -370,7 +369,6 @@ type iimporter struct {
 	version int
 	ipath   string
 
-	aliases bool
 	shallow bool
 	reportf ReportFunc // if non-nil, used to report bugs
 
@@ -569,7 +567,7 @@ func (r *importReader) obj(name string) {
 		// 	tparams := r.tparamList()
 		// 	alias.SetTypeParams(tparams)
 		// }
-		r.declare(aliases.NewAlias(r.p.aliases, pos, r.currPkg, name, typ))
+		r.declare(aliases.NewAlias(pos, r.currPkg, name, typ))
 
 	case constTag:
 		typ, val := r.value()
