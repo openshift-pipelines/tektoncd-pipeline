@@ -30,7 +30,7 @@ spec:
   - name: output-image
     value: quay.io/redhat-user-workloads/tekton-ecosystem-tenant/1-15/pipeline-sidecarlogresults-rhel8:{{revision}}
   - name: dockerfile
-    value: .konflux/dockerfiles/sidecarlogresults.Dockerfile
+    value: .konflux/dockerfiles/sidecarlogresults.Dockerfile    
   - name: prefetch-input
     value: |
       {"type": "rpm", "path": ".konflux/rpms"}
