@@ -25,12 +25,11 @@ import (
 )
 
 var (
-	ErrWorktreeNotClean                = errors.New("worktree is not clean")
-	ErrSubmoduleNotFound               = errors.New("submodule not found")
-	ErrUnstagedChanges                 = errors.New("worktree contains unstaged changes")
-	ErrGitModulesSymlink               = errors.New(gitmodulesFile + " is a symlink")
-	ErrNonFastForwardUpdate            = errors.New("non-fast-forward update")
-	ErrRestoreWorktreeOnlyNotSupported = errors.New("worktree only is not supported")
+	ErrWorktreeNotClean     = errors.New("worktree is not clean")
+	ErrSubmoduleNotFound    = errors.New("submodule not found")
+	ErrUnstagedChanges      = errors.New("worktree contains unstaged changes")
+	ErrGitModulesSymlink    = errors.New(gitmodulesFile + " is a symlink")
+	ErrNonFastForwardUpdate = errors.New("non-fast-forward update")
 )
 
 // Worktree represents a git worktree.
@@ -140,7 +139,7 @@ func (w *Worktree) PullContext(ctx context.Context, o *PullOptions) error {
 	}
 
 	if o.RecurseSubmodules != NoRecurseSubmodules {
-		return w.updateSubmodules(ctx, &SubmoduleUpdateOptions{
+		return w.updateSubmodules(&SubmoduleUpdateOptions{
 			RecurseSubmodules: o.RecurseSubmodules,
 			Auth:              o.Auth,
 		})
@@ -149,13 +148,13 @@ func (w *Worktree) PullContext(ctx context.Context, o *PullOptions) error {
 	return nil
 }
 
-func (w *Worktree) updateSubmodules(ctx context.Context, o *SubmoduleUpdateOptions) error {
+func (w *Worktree) updateSubmodules(o *SubmoduleUpdateOptions) error {
 	s, err := w.Submodules()
 	if err != nil {
 		return err
 	}
 	o.Init = true
-	return s.UpdateContext(ctx, o)
+	return s.Update(o)
 }
 
 // Checkout switch branches or restore working tree files.
@@ -308,13 +307,13 @@ func (w *Worktree) ResetSparsely(opts *ResetOptions, dirs []string) error {
 	}
 
 	if opts.Mode == MixedReset || opts.Mode == MergeReset || opts.Mode == HardReset {
-		if err := w.resetIndex(t, dirs, opts.Files); err != nil {
+		if err := w.resetIndex(t, dirs); err != nil {
 			return err
 		}
 	}
 
 	if opts.Mode == MergeReset || opts.Mode == HardReset {
-		if err := w.resetWorktree(t, opts.Files); err != nil {
+		if err := w.resetWorktree(t); err != nil {
 			return err
 		}
 	}
@@ -322,52 +321,20 @@ func (w *Worktree) ResetSparsely(opts *ResetOptions, dirs []string) error {
 	return nil
 }
 
-// Restore restores specified files in the working tree or stage with contents from
-// a restore source. If a path is tracked but does not exist in the restore,
-// source, it will be removed to match the source.
-//
-// If Staged and Worktree are true, then the restore source will be the index.
-// If only Staged is true, then the restore source will be HEAD.
-// If only Worktree is true or neither Staged nor Worktree are true, will
-// result in ErrRestoreWorktreeOnlyNotSupported because restoring the working
-// tree while leaving the stage untouched is not currently supported.
-//
-// Restore with no files specified will return ErrNoRestorePaths.
-func (w *Worktree) Restore(o *RestoreOptions) error {
-	if err := o.Validate(); err != nil {
-		return err
-	}
-
-	if o.Staged {
-		opts := &ResetOptions{
-			Files: o.Files,
-		}
-
-		if o.Worktree {
-			// If we are doing both Worktree and Staging then it is a hard reset
-			opts.Mode = HardReset
-		} else {
-			// If we are doing just staging then it is a mixed reset
-			opts.Mode = MixedReset
-		}
-
-		return w.Reset(opts)
-	}
-
-	return ErrRestoreWorktreeOnlyNotSupported
-}
-
 // Reset the worktree to a specified state.
 func (w *Worktree) Reset(opts *ResetOptions) error {
 	return w.ResetSparsely(opts, nil)
 }
 
-func (w *Worktree) resetIndex(t *object.Tree, dirs []string, files []string) error {
+func (w *Worktree) resetIndex(t *object.Tree, dirs []string) error {
 	idx, err := w.r.Storer.Index()
+	if len(dirs) > 0 {
+		idx.SkipUnless(dirs)
+	}
+
 	if err != nil {
 		return err
 	}
-
 	b := newIndexBuilder(idx)
 
 	changes, err := w.diffTreeWithStaging(t, true)
@@ -395,13 +362,6 @@ func (w *Worktree) resetIndex(t *object.Tree, dirs []string, files []string) err
 			name = ch.From.String()
 		}
 
-		if len(files) > 0 {
-			contains := inFiles(files, name)
-			if !contains {
-				continue
-			}
-		}
-
 		b.Remove(name)
 		if e == nil {
 			continue
@@ -416,25 +376,10 @@ func (w *Worktree) resetIndex(t *object.Tree, dirs []string, files []string) err
 	}
 
 	b.Write(idx)
-
-	if len(dirs) > 0 {
-		idx.SkipUnless(dirs)
-	}
-
 	return w.r.Storer.SetIndex(idx)
 }
 
-func inFiles(files []string, v string) bool {
-	for _, s := range files {
-		if s == v {
-			return true
-		}
-	}
-
-	return false
-}
-
-func (w *Worktree) resetWorktree(t *object.Tree, files []string) error {
+func (w *Worktree) resetWorktree(t *object.Tree) error {
 	changes, err := w.diffStagingWithWorktree(true, false)
 	if err != nil {
 		return err
@@ -450,25 +395,6 @@ func (w *Worktree) resetWorktree(t *object.Tree, files []string) error {
 		if err := w.validChange(ch); err != nil {
 			return err
 		}
-
-		if len(files) > 0 {
-			file := ""
-			if ch.From != nil {
-				file = ch.From.String()
-			} else if ch.To != nil {
-				file = ch.To.String()
-			}
-
-			if file == "" {
-				continue
-			}
-
-			contains := inFiles(files, file)
-			if !contains {
-				continue
-			}
-		}
-
 		if err := w.checkoutChange(ch, t, b); err != nil {
 			return err
 		}
@@ -716,7 +642,7 @@ func (w *Worktree) checkoutChangeRegularFile(name string,
 			return err
 		}
 
-		return w.addIndexFromFile(name, e.Hash, f.Mode, idx)
+		return w.addIndexFromFile(name, e.Hash, idx)
 	}
 
 	return nil
@@ -799,9 +725,14 @@ func (w *Worktree) addIndexFromTreeEntry(name string, f *object.TreeEntry, idx *
 	return nil
 }
 
-func (w *Worktree) addIndexFromFile(name string, h plumbing.Hash, mode filemode.FileMode, idx *indexBuilder) error {
+func (w *Worktree) addIndexFromFile(name string, h plumbing.Hash, idx *indexBuilder) error {
 	idx.Remove(name)
 	fi, err := w.Filesystem.Lstat(name)
+	if err != nil {
+		return err
+	}
+
+	mode, err := filemode.NewFromOSFileMode(fi.Mode())
 	if err != nil {
 		return err
 	}
@@ -1127,7 +1058,7 @@ func rmFileAndDirsIfEmpty(fs billy.Filesystem, name string) error {
 	dir := filepath.Dir(name)
 	for {
 		removed, err := removeDirIfEmpty(fs, dir)
-		if err != nil && !os.IsNotExist(err) {
+		if err != nil {
 			return err
 		}
 
