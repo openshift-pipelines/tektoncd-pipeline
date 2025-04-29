@@ -39,6 +39,4 @@ const (
 	ScmTypeParam string = "scmType"
 	// serverURLParam is an optional string to the server URL for the SCM API to connect to
 	ServerURLParam string = "serverURL"
-	// ConfigKeyParam is an optional string to provid which scm configuration to use from git resolver configmap
-	ConfigKeyParam string = "configKey"
 )

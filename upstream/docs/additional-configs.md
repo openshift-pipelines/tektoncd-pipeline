@@ -237,7 +237,7 @@ The example below customizes the following:
 - the default service account from `default` to `tekton`.
 - the default timeout from 60 minutes to 20 minutes.
 - the default `app.kubernetes.io/managed-by` label is applied to all Pods created to execute `TaskRuns`.
-- the default Pod template to include a node selector to select the node where the Pod will be scheduled by default. A list of supported fields is available [here](./podtemplates.md#supported-fields).
+- the default Pod template to include a node selector to select the node where the Pod will be scheduled by default. A list of supported fields is available [here](https://github.com/tektoncd/pipeline/blob/main/docs/podtemplates.md#supported-fields).
   For more information, see [`PodTemplate` in `TaskRuns`](./taskruns.md#specifying-a-pod-template) or [`PodTemplate` in `PipelineRuns`](./pipelineruns.md#specifying-a-pod-template).
 - the default `Workspace` configuration can be set for any `Workspaces` that a Task declares but that a TaskRun does not explicitly provide.
 - the default maximum combinations of `Parameters` in a `Matrix` that can be used to fan out a `PipelineTask`. For
@@ -360,11 +360,6 @@ Defaults to "ignore".
 - `set-security-context`: Set this flag to `true` to set a security context for containers injected by Tekton that will allow TaskRun pods
 to run in namespaces with `restricted` pod security admission. By default, this is set to `false`.
 
-- `set-security-context-read-only-root-filesystem`: Set this flag to `true` to enable `readOnlyRootFilesystem` in the
-  security context for containers injected by Tekton. This makes the root filesystem of the container read-only,
-  enhancing security. Note that this requires `set-security-context` to be enabled. By default, this flag is set
-  to `false`. Note: This feature does not work in windows as it is not supported there, [Comparison with linux](https://kubernetes.io/docs/concepts/windows/intro/#compatibility-linux-similarities). 
-
 ### Alpha Features
 
 Alpha features in the following table are still in development and their syntax is subject to change.
@@ -466,8 +461,7 @@ Out-of-the-box, Tekton Pipelines Controller is configured for relatively small-s
 
 To allow TaskRuns and PipelineRuns to run in namespaces with [restricted pod security standards](https://kubernetes.io/docs/concepts/security/pod-security-standards/),
 set the "set-security-context" feature flag to "true" in the [feature-flags configMap](#customizing-the-pipelines-controller-behavior). This configuration option applies a [SecurityContext](https://kubernetes.io/docs/tasks/configure-pod-container/security-context/)
-to any containers injected into TaskRuns by the Pipelines controller. If the [Affinity Assistants](affinityassistants.md) feature is enabled, the SecurityContext is also applied to those containers.
-This SecurityContext may not be supported in all Kubernetes implementations (for example, OpenShift).
+to any containers injected into TaskRuns by the Pipelines controller. This SecurityContext may not be supported in all Kubernetes implementations (for example, OpenShift).
 
 **Note**: running TaskRuns and PipelineRuns in the "tekton-pipelines" namespace is discouraged.
 

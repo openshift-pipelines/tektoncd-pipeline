@@ -37,7 +37,6 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
-	"k8s.io/apimachinery/pkg/version"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/utils/strings/slices"
 	"knative.dev/pkg/changeset"
@@ -61,8 +60,8 @@ const (
 	// SpiffeCsiDriver is the CSI storage plugin needed for injection of SPIFFE workload api.
 	SpiffeCsiDriver = "csi.spiffe.io"
 
-	// OsSelectorLabel is the label Kubernetes uses for OS-specific workloads (https://kubernetes.io/docs/reference/labels-annotations-taints/#kubernetes-io-os)
-	OsSelectorLabel = "kubernetes.io/os"
+	// osSelectorLabel is the label Kubernetes uses for OS-specific workloads (https://kubernetes.io/docs/reference/labels-annotations-taints/#kubernetes-io-os)
+	osSelectorLabel = "kubernetes.io/os"
 
 	// TerminationReasonTimeoutExceeded indicates a step execution timed out.
 	TerminationReasonTimeoutExceeded = "TimeoutExceeded"
@@ -128,6 +127,27 @@ var (
 
 	// MaxActiveDeadlineSeconds is a maximum permitted value to be used for a task with no timeout
 	MaxActiveDeadlineSeconds = int64(math.MaxInt32)
+
+	// Used in security context of pod init containers
+	allowPrivilegeEscalation = false
+	runAsNonRoot             = true
+
+	// The following security contexts allow init containers to run in namespaces
+	// with "restricted" pod security admission
+	// See https://kubernetes.io/docs/concepts/security/pod-security-standards/#restricted
+	linuxSecurityContext = &corev1.SecurityContext{
+		AllowPrivilegeEscalation: &allowPrivilegeEscalation,
+		Capabilities: &corev1.Capabilities{
+			Drop: []corev1.Capability{"ALL"},
+		},
+		RunAsNonRoot: &runAsNonRoot,
+		SeccompProfile: &corev1.SeccompProfile{
+			Type: corev1.SeccompProfileTypeRuntimeDefault,
+		},
+	}
+	windowsSecurityContext = &corev1.SecurityContext{
+		RunAsNonRoot: &runAsNonRoot,
+	}
 )
 
 // Builder exposes options to configure Pod construction from TaskSpecs/Runs.
@@ -158,7 +178,6 @@ func (b *Builder) Build(ctx context.Context, taskRun *v1.TaskRun, taskSpec v1.Ta
 	sidecarLogsResultsEnabled := config.FromContextOrDefaults(ctx).FeatureFlags.ResultExtractionMethod == config.ResultExtractionMethodSidecarLogs
 	enableKeepPodOnCancel := featureFlags.EnableKeepPodOnCancel
 	setSecurityContext := config.FromContextOrDefaults(ctx).FeatureFlags.SetSecurityContext
-	setSecurityContextReadOnlyRootFilesystem := config.FromContextOrDefaults(ctx).FeatureFlags.SetSecurityContextReadOnlyRootFilesystem
 
 	// Add our implicit volumes first, so they can be overridden by the user if they prefer.
 	volumes = append(volumes, implicitVolumes...)
@@ -193,17 +212,11 @@ func (b *Builder) Build(ctx context.Context, taskRun *v1.TaskRun, taskSpec v1.Ta
 	if taskRun.Spec.ComputeResources != nil {
 		tasklevel.ApplyTaskLevelComputeResources(steps, taskRun.Spec.ComputeResources)
 	}
-
-	securityContextConfig := SecurityContextConfig{
-		SetSecurityContext:        setSecurityContext,
-		SetReadOnlyRootFilesystem: setSecurityContextReadOnlyRootFilesystem,
-	}
-
 	windows := usesWindows(taskRun)
 	if sidecarLogsResultsEnabled {
 		if taskSpec.Results != nil || artifactsPathReferenced(steps) {
 			// create a results sidecar
-			resultsSidecar, err := createResultsSidecar(taskSpec, b.Images.SidecarLogResultsImage, securityContextConfig, windows)
+			resultsSidecar, err := createResultsSidecar(taskSpec, b.Images.SidecarLogResultsImage, setSecurityContext, windows)
 			if err != nil {
 				return nil, err
 			}
@@ -218,15 +231,15 @@ func (b *Builder) Build(ctx context.Context, taskRun *v1.TaskRun, taskSpec v1.Ta
 	}
 
 	initContainers = []corev1.Container{
-		entrypointInitContainer(b.Images.EntrypointImage, steps, securityContextConfig, windows),
+		entrypointInitContainer(b.Images.EntrypointImage, steps, setSecurityContext, windows),
 	}
 
 	// Convert any steps with Script to command+args.
 	// If any are found, append an init container to initialize scripts.
 	if alphaAPIEnabled {
-		scriptsInit, stepContainers, sidecarContainers = convertScripts(b.Images.ShellImage, b.Images.ShellImageWin, steps, sidecars, taskRun.Spec.Debug, securityContextConfig)
+		scriptsInit, stepContainers, sidecarContainers = convertScripts(b.Images.ShellImage, b.Images.ShellImageWin, steps, sidecars, taskRun.Spec.Debug, setSecurityContext)
 	} else {
-		scriptsInit, stepContainers, sidecarContainers = convertScripts(b.Images.ShellImage, "", steps, sidecars, nil, securityContextConfig)
+		scriptsInit, stepContainers, sidecarContainers = convertScripts(b.Images.ShellImage, "", steps, sidecars, nil, setSecurityContext)
 	}
 
 	if scriptsInit != nil {
@@ -237,7 +250,7 @@ func (b *Builder) Build(ctx context.Context, taskRun *v1.TaskRun, taskSpec v1.Ta
 		volumes = append(volumes, debugScriptsVolume, debugInfoVolume)
 	}
 	// Initialize any workingDirs under /workspace.
-	if workingDirInit := workingDirInit(b.Images.WorkingDirInitImage, stepContainers, securityContextConfig, windows); workingDirInit != nil {
+	if workingDirInit := workingDirInit(b.Images.WorkingDirInitImage, stepContainers, setSecurityContext, windows); workingDirInit != nil {
 		initContainers = append(initContainers, *workingDirInit)
 	}
 
@@ -420,6 +433,10 @@ func (b *Builder) Build(ctx context.Context, taskRun *v1.TaskRun, taskSpec v1.Ta
 	mergedPodContainers := stepContainers
 	mergedPodInitContainers := initContainers
 
+	// Check if current k8s version is less than 1.29
+	// Since Kubernetes Major version cannot be 0 and if it's 2 then sidecar will be in
+	// we are only concerned about major version 1 and if the minor is less than 29 then
+	// we need to do the current logic
 	useTektonSidecar := true
 	if config.FromContextOrDefaults(ctx).FeatureFlags.EnableKubernetesSidecar {
 		// Go through the logic for enable-kubernetes feature flag
@@ -429,7 +446,9 @@ func (b *Builder) Build(ctx context.Context, taskRun *v1.TaskRun, taskSpec v1.Ta
 		if err != nil {
 			return nil, err
 		}
-		if IsNativeSidecarSupport(sv) {
+		svMinorInt, _ := strconv.Atoi(sv.Minor)
+		svMajorInt, _ := strconv.Atoi(sv.Major)
+		if svMajorInt >= 1 && svMinorInt >= SidecarK8sMinorVersionCheck {
 			// Add RestartPolicy and Merge into initContainer
 			useTektonSidecar = false
 			for i := range sidecarContainers {
@@ -542,7 +561,6 @@ func makeLabels(s *v1.TaskRun) map[string]string {
 	// NB: Set this *after* passing through TaskRun Labels. If the TaskRun
 	// specifies this label, it should be overridden by this value.
 	labels[pipeline.TaskRunLabelKey] = s.Name
-	labels[pipeline.TaskRunUIDLabelKey] = string(s.UID)
 	return labels
 }
 
@@ -580,7 +598,7 @@ func runVolume(i int) corev1.Volume {
 // This should effectively merge multiple command and volumes together.
 // If setSecurityContext is true, the init container will include a security context
 // allowing it to run in namespaces with restriced pod security admission.
-func entrypointInitContainer(image string, steps []v1.Step, securityContext SecurityContextConfig, windows bool) corev1.Container {
+func entrypointInitContainer(image string, steps []v1.Step, setSecurityContext, windows bool) corev1.Container {
 	// Invoke the entrypoint binary in "cp mode" to copy itself
 	// into the correct location for later steps and initialize steps folder
 	command := []string{"/ko-app/entrypoint", "init", "/ko-app/entrypoint", entrypointBinary}
@@ -588,6 +606,10 @@ func entrypointInitContainer(image string, steps []v1.Step, securityContext Secu
 		command = append(command, StepName(s.Name, i))
 	}
 	volumeMounts := []corev1.VolumeMount{binMount, internalStepsMount}
+	securityContext := linuxSecurityContext
+	if windows {
+		securityContext = windowsSecurityContext
+	}
 
 	// Rewrite steps with entrypoint binary. Append the entrypoint init
 	// container to place the entrypoint binary. Also add timeout flags
@@ -602,8 +624,8 @@ func entrypointInitContainer(image string, steps []v1.Step, securityContext Secu
 		Command:      command,
 		VolumeMounts: volumeMounts,
 	}
-	if securityContext.SetSecurityContext {
-		prepareInitContainer.SecurityContext = securityContext.GetSecurityContext(windows)
+	if setSecurityContext {
+		prepareInitContainer.SecurityContext = securityContext
 	}
 	return prepareInitContainer
 }
@@ -613,7 +635,7 @@ func entrypointInitContainer(image string, steps []v1.Step, securityContext Secu
 // whether it will run on a windows node, and whether the sidecar should include a security context
 // that will allow it to run in namespaces with "restricted" pod security admission.
 // It will also provide arguments to the binary that allow it to surface the step results.
-func createResultsSidecar(taskSpec v1.TaskSpec, image string, securityContext SecurityContextConfig, windows bool) (v1.Sidecar, error) {
+func createResultsSidecar(taskSpec v1.TaskSpec, image string, setSecurityContext, windows bool) (v1.Sidecar, error) {
 	names := make([]string, 0, len(taskSpec.Results))
 	for _, r := range taskSpec.Results {
 		names = append(names, r.Name)
@@ -656,11 +678,13 @@ func createResultsSidecar(taskSpec v1.TaskSpec, image string, securityContext Se
 		Image:   image,
 		Command: command,
 	}
-
-	if securityContext.SetSecurityContext {
-		sidecar.SecurityContext = securityContext.GetSecurityContext(windows)
+	securityContext := linuxSecurityContext
+	if windows {
+		securityContext = windowsSecurityContext
 	}
-
+	if setSecurityContext {
+		sidecar.SecurityContext = securityContext
+	}
 	return sidecar, nil
 }
 
@@ -671,7 +695,7 @@ func usesWindows(tr *v1.TaskRun) bool {
 	if tr.Spec.PodTemplate == nil || tr.Spec.PodTemplate.NodeSelector == nil {
 		return false
 	}
-	osSelector := tr.Spec.PodTemplate.NodeSelector[OsSelectorLabel]
+	osSelector := tr.Spec.PodTemplate.NodeSelector[osSelectorLabel]
 	return osSelector == "windows"
 }
 
@@ -707,19 +731,6 @@ func artifactPathReferencedInStep(step v1.Step) bool {
 		if strings.Contains(e.Value, path) || strings.Contains(e.Value, unresolvedPath) {
 			return true
 		}
-	}
-	return false
-}
-
-// isNativeSidecarSupport returns true if k8s api has native sidecar support
-// based on the k8s version (1.29+).
-// See https://kubernetes.io/docs/concepts/workloads/pods/sidecar-containers/ for more info.
-func IsNativeSidecarSupport(serverVersion *version.Info) bool {
-	minor := strings.TrimSuffix(serverVersion.Minor, "+") // Remove '+' if present
-	majorInt, _ := strconv.Atoi(serverVersion.Major)
-	minorInt, _ := strconv.Atoi(minor)
-	if (majorInt == 1 && minorInt >= SidecarK8sMinorVersionCheck) || majorInt > 1 {
-		return true
 	}
 	return false
 }

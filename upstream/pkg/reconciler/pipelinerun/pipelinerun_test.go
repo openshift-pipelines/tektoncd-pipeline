@@ -244,7 +244,6 @@ func TestReconcile(t *testing.T) {
 metadata:
   name: test-pipeline-run-success
   namespace: foo
-  uid: bar
 spec:
   params:
   - name: bar
@@ -398,8 +397,6 @@ spec:
     name: unit-test-task
     kind: Task
 `)
-	expectedTaskRun.Labels["tekton.dev/pipelineRunUID"] = "bar"
-	expectedTaskRun.OwnerReferences[0].UID = "bar"
 	// ignore IgnoreUnexported ignore both after and before steps fields
 	if d := cmp.Diff(expectedTaskRun, actual, ignoreTypeMeta, ignoreResourceVersion); d != "" {
 		t.Errorf("expected to see TaskRun %v created. Diff %s", expectedTaskRun, diff.PrintWantGot(d))
@@ -430,7 +427,6 @@ func TestReconcile_V1Beta1CustomTask(t *testing.T) {
 	simpleCustomTaskPRYAML := `metadata:
   name: test-pipelinerun
   namespace: namespace
-  uid: bar
 spec:
   pipelineSpec:
     tasks:
@@ -450,7 +446,6 @@ spec:
     tekton.dev/pipeline: test-pipelinerun
     tekton.dev/pipelineRun: test-pipelinerun
     tekton.dev/pipelineTask: custom-task
-    tekton.dev/pipelineRunUID: bar
   name: test-pipelinerun-custom-task
   namespace: namespace
   ownerReferences:
@@ -459,7 +454,6 @@ spec:
     controller: true
     kind: PipelineRun
     name: test-pipelinerun
-    uid: bar
 spec:
   params:
   - name: param1
@@ -2512,7 +2506,24 @@ spec:
 }
 
 func TestReconcileWithTimeoutDisabled(t *testing.T) {
-	ps := []*v1.Pipeline{parse.MustParseV1Pipeline(t, `
+	testCases := []struct {
+		name    string
+		timeout time.Duration
+	}{
+		{
+			name:    "pipeline timeout is 24h",
+			timeout: 24 * time.Hour,
+		},
+		{
+			name:    "pipeline timeout is way longer than 24h",
+			timeout: 360 * time.Hour,
+		},
+	}
+
+	for _, tc := range testCases {
+		startTime := time.Date(2022, time.January, 1, 0, 0, 0, 0, time.UTC).Add(-3 * tc.timeout)
+		t.Run(tc.name, func(t *testing.T) {
+			ps := []*v1.Pipeline{parse.MustParseV1Pipeline(t, `
 metadata:
   name: test-pipeline
   namespace: foo
@@ -2524,22 +2535,8 @@ spec:
   - name: hello-world-2
     taskRef:
       name: hello-world
-`), parse.MustParseV1Pipeline(t, `
-metadata:
-  name: test-pipeline-with-finally
-  namespace: foo
-spec:
-  tasks:
-  - name: hello-world-1
-    taskRef:
-      name: hello-world
-  finally:
-  - name: hello-world-2
-    taskRef:
-      name: hello-world
 `)}
-
-	prs := []*v1.PipelineRun{parse.MustParseV1PipelineRun(t, `
+			prs := []*v1.PipelineRun{parse.MustParseV1PipelineRun(t, `
 metadata:
   name: test-pipeline-run-with-timeout-disabled
   namespace: foo
@@ -2552,108 +2549,32 @@ spec:
     pipeline: 0h0m0s
 status:
   startTime: "2021-12-30T00:00:00Z"
-`), parse.MustParseV1PipelineRun(t, `
-metadata:
-  name:  test-pipeline-run-with-timeout-disabled
-  namespace: foo
-spec:
-  pipelineRef:
-    name: test-pipeline-with-finally
-  taskRunTemplate:
-    serviceAccountName: test-sa
-  timeouts:
-    pipeline: 96h0m0s
-    tasks: 96h0m0s
-status:
-  startTime: "2021-12-30T00:00:00Z"
-  finallyStartTime: "2021-12-30T23:44:59Z"
 `)}
-	ts := []*v1.Task{simpleHelloWorldTask}
+			ts := []*v1.Task{simpleHelloWorldTask}
 
-	trs := []*v1.TaskRun{mustParseTaskRunWithObjectMeta(t, taskRunObjectMeta("test-pipeline-run-with-timeout-hello-world-1", "foo", "test-pipeline-run-with-timeout-disabled",
-		"test-pipeline", "hello-world-1", false), `
-spec:
-  serviceAccountName: test-sa
-  taskRef:
-    name: hello-world
-    kind: Task
-`), mustParseTaskRunWithObjectMeta(t, taskRunObjectMeta("test-pipeline-run-with-timeout-with-finally-hello-world-1", "foo", "test-pipeline-run-with-timeout-disabled",
-		"test-pipeline-with-finally", "hello-world-1", false), `
-spec:
-  startTime: "2021-12-30T00:00:00Z"
-  serviceAccountName: test-sa
-  taskRef:
-    name: hello-world
-    kind: Task
-  conditions:
-  - lastTransitionTime: null
-    status: "True"
-    type: Succeeded
-`), mustParseTaskRunWithObjectMeta(t, taskRunObjectMeta("test-pipeline-run-with-timeout-with-finally-hello-world-2", "foo", "test-pipeline-run-with-timeout-disabled",
-		"test-pipeline-with-finally", "hello-world-2", false), `
+			trs := []*v1.TaskRun{mustParseTaskRunWithObjectMeta(t, taskRunObjectMeta("test-pipeline-run-with-timeout-hello-world-1", "foo", "test-pipeline-run-with-timeout-disabled",
+				"test-pipeline", "hello-world-1", false), `
 spec:
   serviceAccountName: test-sa
   taskRef:
     name: hello-world
     kind: Task
 `)}
-
-	testCases := []struct {
-		name    string
-		timeout time.Duration
-		trs     []*v1.TaskRun
-		ts      []*v1.Task
-		ps      []*v1.Pipeline
-		prs     []*v1.PipelineRun
-	}{
-		{
-			name:    "pipeline timeout is 24h",
-			timeout: 24 * time.Hour,
-			trs:     []*v1.TaskRun{trs[0]},
-			ts:      []*v1.Task{ts[0]},
-			prs:     []*v1.PipelineRun{prs[0]},
-			ps:      []*v1.Pipeline{ps[0]},
-		},
-		{
-			name:    "pipeline timeout is way longer than 24h",
-			timeout: 360 * time.Hour,
-			trs:     []*v1.TaskRun{trs[0]},
-			ts:      []*v1.Task{ts[0]},
-			prs:     []*v1.PipelineRun{prs[0]},
-			ps:      []*v1.Pipeline{ps[0]},
-		},
-		{
-			name:    "pipeline timeout is 24h, and the final task timeout is 0s",
-			timeout: 24 * time.Hour,
-			trs:     []*v1.TaskRun{trs[1], trs[2]},
-			ts:      []*v1.Task{ts[0]},
-			prs:     []*v1.PipelineRun{prs[1]},
-			ps:      []*v1.Pipeline{ps[1]},
-		},
-	}
-
-	for _, tc := range testCases {
-		startTime := time.Date(2022, time.January, 1, 0, 0, 0, 0, time.UTC).Add(-3 * tc.timeout)
-		notAdjustedCreationTimestamp := time.Date(2022, time.January, 1, 0, 0, 0, 0, time.UTC).Add(tc.timeout)
-		t.Run(tc.name, func(t *testing.T) {
 			start := metav1.NewTime(startTime)
-			tc.prs[0].Status.StartTime = &start
-			for i := range tc.trs {
-				tc.trs[i].CreationTimestamp = metav1.Time{Time: notAdjustedCreationTimestamp}
-			}
+			prs[0].Status.StartTime = &start
 
 			d := test.Data{
-				PipelineRuns: tc.prs,
-				Pipelines:    tc.ps,
-				Tasks:        tc.ts,
-				TaskRuns:     tc.trs,
+				PipelineRuns: prs,
+				Pipelines:    ps,
+				Tasks:        ts,
+				TaskRuns:     trs,
 			}
 			prt := newPipelineRunTest(t, d)
 			defer prt.Cancel()
 
 			c := prt.TestAssets.Controller
 			clients := prt.TestAssets.Clients
-			reconcileError := c.Reconciler.Reconcile(prt.TestAssets.Ctx, fmt.Sprintf("%s/%s", "foo", tc.prs[0].Name))
+			reconcileError := c.Reconciler.Reconcile(prt.TestAssets.Ctx, "foo/test-pipeline-run-with-timeout-disabled")
 			if reconcileError == nil {
 				t.Errorf("expected error, but got nil")
 			}
@@ -2663,7 +2584,7 @@ spec:
 				t.Errorf("Expected a positive requeue duration but got %s", requeueDuration.String())
 			}
 			prt.Test.Logf("Getting reconciled run")
-			reconciledRun, err := clients.Pipeline.TektonV1().PipelineRuns("foo").Get(prt.TestAssets.Ctx, tc.prs[0].Name, metav1.GetOptions{})
+			reconciledRun, err := clients.Pipeline.TektonV1().PipelineRuns("foo").Get(prt.TestAssets.Ctx, "test-pipeline-run-with-timeout-disabled", metav1.GetOptions{})
 			if err != nil {
 				prt.Test.Errorf("Somehow had error getting reconciled run out of fake client: %s", err)
 			}
@@ -4317,7 +4238,7 @@ spec:
       operator: in
       values:
       - aResultValue
-# f-task not is skipped
+# f-task is skipped because its parent task e-task is skipped because of missing result reference from a-task
   - name: f-task
     runAfter:
     - e-task
@@ -4371,7 +4292,7 @@ spec:
 
 	wantEvents := []string{
 		"Normal Started",
-		"Normal Running Tasks Completed: 0 \\(Failed: 0, Cancelled 0\\), Incomplete: 3, Skipped: 3",
+		"Normal Running Tasks Completed: 0 \\(Failed: 0, Cancelled 0\\), Incomplete: 2, Skipped: 4",
 	}
 	pipelineRun, clients := prt.reconcileRun("foo", "test-pipeline-run-different-service-accs", wantEvents, false)
 
@@ -4426,21 +4347,24 @@ spec:
 			Values:   []string{"bar"},
 		}},
 	}, {
-		// its when expressions evaluate to false
+		// was attempted, but has missing results references
 		Name:   "e-task",
-		Reason: v1.WhenExpressionsSkip,
+		Reason: v1.MissingResultsSkip,
 		WhenExpressions: v1.WhenExpressions{{
 			Input:    "$(tasks.a-task.results.aResult)",
 			Operator: "in",
 			Values:   []string{"aResultValue"},
 		}},
+	}, {
+		Name:   "f-task",
+		Reason: v1.ParentTasksSkip,
 	}}
 	if d := cmp.Diff(expectedSkippedTasks, actualSkippedTasks); d != "" {
 		t.Errorf("expected to find Skipped Tasks %v. Diff %s", expectedSkippedTasks, diff.PrintWantGot(d))
 	}
 
 	// confirm that there are no taskruns created for the skipped tasks
-	skippedTasks := []string{"a-task", "c-task", "e-task"}
+	skippedTasks := []string{"a-task", "c-task", "e-task", "f-task"}
 	for _, skippedTask := range skippedTasks {
 		labelSelector := fmt.Sprintf("tekton.dev/pipelineTask=%s,tekton.dev/pipelineRun=test-pipeline-run-different-service-accs", skippedTask)
 		actualSkippedTask, err := clients.Pipeline.TektonV1().TaskRuns("foo").List(prt.TestAssets.Ctx, metav1.ListOptions{
@@ -9337,13 +9261,11 @@ func taskRunObjectMeta(trName, ns, prName, pipelineName, pipelineTaskName string
 			APIVersion:         "tekton.dev/v1",
 			Controller:         &trueb,
 			BlockOwnerDeletion: &trueb,
-			UID:                "",
 		}},
 		Labels: map[string]string{
-			pipeline.PipelineLabelKey:       pipelineName,
-			pipeline.PipelineRunLabelKey:    prName,
-			pipeline.PipelineTaskLabelKey:   pipelineTaskName,
-			pipeline.PipelineRunUIDLabelKey: "",
+			pipeline.PipelineLabelKey:     pipelineName,
+			pipeline.PipelineRunLabelKey:  prName,
+			pipeline.PipelineTaskLabelKey: pipelineTaskName,
 		},
 		Annotations: map[string]string{},
 	}
@@ -17680,7 +17602,7 @@ func Test_runNextSchedulableTask(t *testing.T) {
 								ObjectMeta: metav1.ObjectMeta{
 									Name:            "task2",
 									ResourceVersion: "00002",
-									Labels:          map[string]string{"tekton.dev/pipelineRun": "", "tekton.dev/pipelineTask": "task2", "tekton.dev/pipelineRunUID": ""},
+									Labels:          map[string]string{"tekton.dev/pipelineRun": "", "tekton.dev/pipelineTask": "task2"},
 									OwnerReferences: []metav1.OwnerReference{
 										{
 											APIVersion:         "tekton.dev/v1",

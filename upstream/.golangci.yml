@@ -127,8 +127,9 @@ linters:
   - style
   - test
   - unused
-issues:
+output:
   uniq-by-line: false
+issues:
   # Note: path identifiers are regular expressions, hence the \.go suffixes.
   exclude-rules:
   - path: main\.go

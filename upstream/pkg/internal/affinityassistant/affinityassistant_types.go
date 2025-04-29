@@ -17,8 +17,6 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/tektoncd/pipeline/pkg/pod"
-
 	"github.com/tektoncd/pipeline/pkg/apis/config"
 )
 
@@ -55,10 +53,4 @@ func GetAffinityAssistantBehavior(ctx context.Context) (AffinityAssistantBehavio
 	}
 
 	return "", fmt.Errorf("unknown combination of disable-affinity-assistant: %v and coschedule: %v", disableAA, coschedule)
-}
-
-// ContainerConfig defines AffinityAssistant container configuration
-type ContainerConfig struct {
-	Image                 string
-	SecurityContextConfig pod.SecurityContextConfig
 }

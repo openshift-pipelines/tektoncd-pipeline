@@ -196,10 +196,6 @@ var (
 	taskSidecar = &v1.Task{
 		ObjectMeta: objectMeta("test-task-sidecar", "foo"),
 		Spec: v1.TaskSpec{
-			Steps: []v1.Step{{
-				Name:  "step1",
-				Image: "foo",
-			}},
 			Sidecars: []v1.Sidecar{{
 				Name:  "sidecar1",
 				Image: "image-id",
@@ -209,10 +205,6 @@ var (
 	taskMultipleSidecars = &v1.Task{
 		ObjectMeta: objectMeta("test-task-sidecar", "foo"),
 		Spec: v1.TaskSpec{
-			Steps: []v1.Step{{
-				Name:  "step1",
-				Image: "foo",
-			}},
 			Sidecars: []v1.Sidecar{
 				{
 					Name:  "sidecar",
@@ -439,7 +431,6 @@ func TestReconcile_ExplicitDefaultSA(t *testing.T) {
 metadata:
   name: test-taskrun-run-success
   namespace: foo
-  uid: bar
 spec:
   taskRef:
     apiVersion: v1
@@ -449,7 +440,6 @@ spec:
 metadata:
   name: test-taskrun-with-sa-run-success
   namespace: foo
-  uid: bar
 spec:
   serviceAccountName: test-sa
   taskRef:
@@ -479,7 +469,7 @@ spec:
 	}{{
 		name:    "success",
 		taskRun: taskRunSuccess,
-		wantPod: expectedPod("test-taskrun-run-success-pod", "test-task", "test-taskrun-run-success", "bar", "foo", defaultSAName, false, nil, []stepForExpectedPod{{
+		wantPod: expectedPod("test-taskrun-run-success-pod", "test-task", "test-taskrun-run-success", "foo", defaultSAName, false, nil, []stepForExpectedPod{{
 			image: "foo",
 			name:  "simple-step",
 			cmd:   "/mycmd",
@@ -487,7 +477,7 @@ spec:
 	}, {
 		name:    "serviceaccount",
 		taskRun: taskRunWithSaSuccess,
-		wantPod: expectedPod("test-taskrun-with-sa-run-success-pod", "test-with-sa", "test-taskrun-with-sa-run-success", "bar", "foo", "test-sa", false, nil, []stepForExpectedPod{{
+		wantPod: expectedPod("test-taskrun-with-sa-run-success-pod", "test-with-sa", "test-taskrun-with-sa-run-success", "foo", "test-sa", false, nil, []stepForExpectedPod{{
 			image: "foo",
 			name:  "sa-step",
 			cmd:   "/mycmd",
@@ -653,7 +643,6 @@ func TestReconcile(t *testing.T) {
 metadata:
   name: test-taskrun-run-success
   namespace: foo
-  uid: bar
 spec:
   taskRef:
     apiVersion: v1
@@ -663,7 +652,6 @@ spec:
 metadata:
   name: test-taskrun-with-sa-run-success
   namespace: foo
-  uid: bar
 spec:
   serviceAccountName: test-sa
   taskRef:
@@ -674,7 +662,6 @@ spec:
 metadata:
   name: test-taskrun-substitution
   namespace: foo
-  uid: bar
 spec:
   params:
   - name: myarg
@@ -691,7 +678,6 @@ spec:
 metadata:
   name: test-taskrun-with-taskspec
   namespace: foo
-  uid: bar
 spec:
   params:
   - name: myarg
@@ -713,7 +699,6 @@ spec:
 metadata:
   name: test-taskrun-with-cluster-task
   namespace: foo
-  uid: bar
 spec:
   taskRef:
     kind: ClusterTask
@@ -727,7 +712,6 @@ metadata:
     tekton.dev/taskRun: WillNotBeUsed
   name: test-taskrun-with-labels
   namespace: foo
-  uid: bar
 spec:
   taskRef:
     name: test-task
@@ -739,7 +723,6 @@ metadata:
     TaskRunAnnotation: TaskRunValue
   name: test-taskrun-with-annotations
   namespace: foo
-  uid: bar
 spec:
   taskRef:
     name: test-task
@@ -749,7 +732,6 @@ spec:
 metadata:
   name: test-taskrun-with-pod
   namespace: foo
-  uid: bar
 spec:
   taskRef:
     name: test-task
@@ -761,7 +743,6 @@ status:
 metadata:
   name: test-taskrun-with-credentials-variable
   namespace: foo
-  uid: bar
 spec:
   taskSpec:
     steps:
@@ -789,7 +770,6 @@ spec:
 metadata:
   name: test-taskrun-bundle
   namespace: foo
-  uid: bar
 spec:
   taskRef:
     bundle: %s
@@ -820,7 +800,7 @@ spec:
 			"Normal Started ",
 			"Normal Running Not all Steps",
 		},
-		wantPod: expectedPod("test-taskrun-run-success-pod", "test-task", "test-taskrun-run-success", "bar", "foo", config.DefaultServiceAccountValue, false, nil, []stepForExpectedPod{{
+		wantPod: expectedPod("test-taskrun-run-success-pod", "test-task", "test-taskrun-run-success", "foo", config.DefaultServiceAccountValue, false, nil, []stepForExpectedPod{{
 			image: "foo",
 			name:  "simple-step",
 			cmd:   "/mycmd",
@@ -832,7 +812,7 @@ spec:
 			"Normal Started ",
 			"Normal Running Not all Steps",
 		},
-		wantPod: expectedPod("test-taskrun-with-sa-run-success-pod", "test-with-sa", "test-taskrun-with-sa-run-success", "bar", "foo", "test-sa", false, nil, []stepForExpectedPod{{
+		wantPod: expectedPod("test-taskrun-with-sa-run-success-pod", "test-with-sa", "test-taskrun-with-sa-run-success", "foo", "test-sa", false, nil, []stepForExpectedPod{{
 			image: "foo",
 			name:  "sa-step",
 			cmd:   "/mycmd",
@@ -844,7 +824,7 @@ spec:
 			"Normal Started ",
 			"Normal Running Not all Steps",
 		},
-		wantPod: expectedPod("test-taskrun-substitution-pod", "test-task-with-substitution", "test-taskrun-substitution", "bar", "foo", config.DefaultServiceAccountValue, false, []corev1.Volume{{
+		wantPod: expectedPod("test-taskrun-substitution-pod", "test-task-with-substitution", "test-taskrun-substitution", "foo", config.DefaultServiceAccountValue, false, []corev1.Volume{{
 			Name: "volume-configmap",
 			VolumeSource: corev1.VolumeSource{
 				ConfigMap: &corev1.ConfigMapVolumeSource{
@@ -880,7 +860,7 @@ spec:
 			"Normal Started ",
 			"Normal Running Not all Steps",
 		},
-		wantPod: expectedPod("test-taskrun-with-taskspec-pod", "", "test-taskrun-with-taskspec", "bar", "foo", config.DefaultServiceAccountValue, false, nil, []stepForExpectedPod{
+		wantPod: expectedPod("test-taskrun-with-taskspec-pod", "", "test-taskrun-with-taskspec", "foo", config.DefaultServiceAccountValue, false, nil, []stepForExpectedPod{
 			{
 				name:  "mycontainer",
 				image: "myimage",
@@ -894,7 +874,7 @@ spec:
 			"Normal Started ",
 			"Normal Running Not all Steps",
 		},
-		wantPod: expectedPod("test-taskrun-with-cluster-task-pod", "test-cluster-task", "test-taskrun-with-cluster-task", "bar", "foo", config.DefaultServiceAccountValue, true, nil, []stepForExpectedPod{{
+		wantPod: expectedPod("test-taskrun-with-cluster-task-pod", "test-cluster-task", "test-taskrun-with-cluster-task", "foo", config.DefaultServiceAccountValue, true, nil, []stepForExpectedPod{{
 			name:  "simple-step",
 			image: "foo",
 			cmd:   "/mycmd",
@@ -906,7 +886,7 @@ spec:
 			"Normal Started ",
 			"Normal Running Not all Steps",
 		},
-		wantPod: expectedPod("test-taskrun-with-pod-pod", "test-task", "test-taskrun-with-pod", "bar", "foo", config.DefaultServiceAccountValue, false, nil, []stepForExpectedPod{{
+		wantPod: expectedPod("test-taskrun-with-pod-pod", "test-task", "test-taskrun-with-pod", "foo", config.DefaultServiceAccountValue, false, nil, []stepForExpectedPod{{
 			name:  "simple-step",
 			image: "foo",
 			cmd:   "/mycmd",
@@ -918,7 +898,7 @@ spec:
 			"Normal Started ",
 			"Normal Running Not all Steps",
 		},
-		wantPod: expectedPod("test-taskrun-with-credentials-variable-pod", "", "test-taskrun-with-credentials-variable", "bar", "foo", config.DefaultServiceAccountValue, false, nil, []stepForExpectedPod{{
+		wantPod: expectedPod("test-taskrun-with-credentials-variable-pod", "", "test-taskrun-with-credentials-variable", "foo", config.DefaultServiceAccountValue, false, nil, []stepForExpectedPod{{
 			name:  "mycontainer",
 			image: "myimage",
 			cmd:   "/mycmd /tekton/creds",
@@ -930,7 +910,7 @@ spec:
 			"Normal Started ",
 			"Normal Running Not all Steps",
 		},
-		wantPod: expectedPod("test-taskrun-bundle-pod", "test-task", "test-taskrun-bundle", "bar", "foo", config.DefaultServiceAccountValue, false, nil, []stepForExpectedPod{{
+		wantPod: expectedPod("test-taskrun-bundle-pod", "test-task", "test-taskrun-bundle", "foo", config.DefaultServiceAccountValue, false, nil, []stepForExpectedPod{{
 			name:  "simple-step",
 			image: "foo",
 			cmd:   "/mycmd",
@@ -1000,7 +980,6 @@ func TestAlphaReconcile(t *testing.T) {
 metadata:
   name: test-taskrun-with-output-config
   namespace: foo
-  uid: bar
 spec:
   taskSpec:
     steps:
@@ -1016,7 +995,6 @@ spec:
 metadata:
   name: test-taskrun-with-output-config-ws
   namespace: foo
-  uid: bar
 spec:
   workspaces:
     - name: data
@@ -1061,7 +1039,7 @@ spec:
 			"Normal Started ",
 			"Normal Running Not all Steps",
 		},
-		wantPod: expectedPod("test-taskrun-with-output-config-pod", "", "test-taskrun-with-output-config", "bar", "foo", config.DefaultServiceAccountValue, false, nil, []stepForExpectedPod{{
+		wantPod: expectedPod("test-taskrun-with-output-config-pod", "", "test-taskrun-with-output-config", "foo", config.DefaultServiceAccountValue, false, nil, []stepForExpectedPod{{
 			name:       "mycontainer",
 			image:      "myimage",
 			stdoutPath: "stdout.txt",
@@ -1074,7 +1052,7 @@ spec:
 			"Normal Started ",
 			"Normal Running Not all Steps",
 		},
-		wantPod: addVolumeMounts(expectedPod("test-taskrun-with-output-config-ws-pod", "", "test-taskrun-with-output-config-ws", "bar", "foo", config.DefaultServiceAccountValue, false,
+		wantPod: addVolumeMounts(expectedPod("test-taskrun-with-output-config-ws-pod", "", "test-taskrun-with-output-config-ws", "foo", config.DefaultServiceAccountValue, false,
 			[]corev1.Volume{{
 				Name: "ws-d872e",
 				VolumeSource: corev1.VolumeSource{
@@ -1724,28 +1702,28 @@ status:
     podName: "test-taskrun-results-type-mismatched-pod"
     provenance:
       featureFlags:
-        runningInEnvWithInjectedSidecars: true
-        enforceNonfalsifiability: "none"
-        enableAPIFields: "alpha"
-        awaitSidecarReadiness: true
-        verificationNoMatchPolicy: "ignore"
-        enableProvenanceInStatus: true
-        resultExtractionMethod: "termination-message"
-        maxResultSize: 4096
-        coschedule: "workspaces"
-        disableInlineSpec: ""
+        RunningInEnvWithInjectedSidecars: true
+        EnforceNonfalsifiability: "none"
+        EnableAPIFields: "alpha"
+        AwaitSidecarReadiness: true
+        VerificationNoMatchPolicy: "ignore"
+        EnableProvenanceInStatus: true
+        ResultExtractionMethod: "termination-message"
+        MaxResultSize: 4096
+        Coschedule: "workspaces"
+        DisableInlineSpec: ""
   provenance:
     featureFlags:
-      runningInEnvWithInjectedSidecars: true
-      enableAPIFields: "alpha"
-      enforceNonfalsifiability: "none"
-      awaitSidecarReadiness: true
-      verificationNoMatchPolicy: "ignore"
-      enableProvenanceInStatus: true
-      resultExtractionMethod: "termination-message"
-      maxResultSize: 4096
-      coschedule: "workspaces"
-      disableInlineSpec: ""
+      RunningInEnvWithInjectedSidecars: true
+      EnableAPIFields: "alpha"
+      EnforceNonfalsifiability: "none"
+      AwaitSidecarReadiness: true
+      VerificationNoMatchPolicy: "ignore"
+      EnableProvenanceInStatus: true
+      ResultExtractionMethod: "termination-message"
+      MaxResultSize: 4096
+      Coschedule: "workspaces"
+      DisableInlineSpec: ""
 `, pipelineErrors.UserErrorLabel, pipelineErrors.UserErrorLabel))
 		reconciliatonError = errors.New("1 error occurred:\n\t* Provided results don't match declared results; may be invalid JSON or missing result declaration:  \"aResult\": task result is expected to be \"array\" type but was initialized to a different type \"string\"")
 		toBeRetriedTaskRun = parse.MustParseV1TaskRun(t, `
@@ -1790,16 +1768,16 @@ status:
       type: Succeeded
   provenance:
     featureFlags:
-      runningInEnvWithInjectedSidecars: true
-      enableAPIFields: "beta"
-      enforceNonfalsifiability: "none"
-      awaitSidecarReadiness: true
-      verificationNoMatchPolicy: "ignore"
-      enableProvenanceInStatus: true
-      resultExtractionMethod: "termination-message"
-      maxResultSize: 4096
-      coschedule: "workspaces"
-      disableInlineSpec: ""
+      RunningInEnvWithInjectedSidecars: true
+      EnableAPIFields: "beta"
+      EnforceNonfalsifiability: "none"
+      AwaitSidecarReadiness: true
+      VerificationNoMatchPolicy: "ignore"
+      EnableProvenanceInStatus: true
+      ResultExtractionMethod: "termination-message"
+      MaxResultSize: 4096
+      Coschedule: "workspaces"
+      DisableInlineSpec: ""
 `)
 		toBeRetriedWithResultsTaskRun = parse.MustParseV1TaskRun(t, `
 metadata:
@@ -4291,12 +4269,10 @@ func TestReconcile_Single_SidecarState(t *testing.T) {
 	taskRun := parse.MustParseV1TaskRun(t, `
 metadata:
   name: test-taskrun-sidecars
-  namespace: foo
 spec:
   taskRef:
     name: test-task-sidecar
 status:
-  podName: test-taskrun-sidecars
   sidecars:
   - container: sidecar-sidecar
     imageID: image-id
@@ -4305,34 +4281,16 @@ status:
       startedAt: "2022-01-01T00:00:00Z"
 `)
 
-	pod := &corev1.Pod{
-		ObjectMeta: objectMeta("test-taskrun-sidecars", "foo"),
-		Status: corev1.PodStatus{
-			ContainerStatuses: []corev1.ContainerStatus{{
-				Name:    "sidecar-sidecar",
-				ImageID: "image-id",
-				State: corev1.ContainerState{
-					Running: &runningState,
-				},
-			}},
-		},
-	}
-
 	d := test.Data{
 		TaskRuns: []*v1.TaskRun{taskRun},
 		Tasks:    []*v1.Task{taskSidecar},
-		Pods:     []*corev1.Pod{pod},
 	}
 
 	testAssets, cancel := getTaskRunController(t, d)
 	defer cancel()
 	clients := testAssets.Clients
 
-	createServiceAccount(t, testAssets, "default", taskRun.Namespace)
-
-	err := testAssets.Controller.Reconciler.Reconcile(context.Background(), getRunName(taskRun))
-	isRequeued, _ := controller.IsRequeueKey(err)
-	if err != nil && !isRequeued {
+	if err := testAssets.Controller.Reconciler.Reconcile(context.Background(), getRunName(taskRun)); err != nil {
 		t.Errorf("expected no error reconciling valid TaskRun but got %v", err)
 	}
 
@@ -4349,7 +4307,6 @@ status:
 			Running: &runningState,
 		},
 	}
-	t.Logf("status: %v", getTaskRun.Status.Sidecars)
 
 	if c := cmp.Diff(expected, getTaskRun.Status.Sidecars[0]); c != "" {
 		t.Errorf("TestReconcile_Single_SidecarState %s", diff.PrintWantGot(c))
@@ -4362,12 +4319,10 @@ func TestReconcile_Multiple_SidecarStates(t *testing.T) {
 	taskRun := parse.MustParseV1TaskRun(t, `
 metadata:
   name: test-taskrun-sidecars
-  namespace: foo
 spec:
   taskRef:
     name: test-task-sidecar
 status:
-  podName: test-taskrun-sidecars
   sidecars:
   - container: sidecar-sidecar1
     imageID: image-id
@@ -4380,40 +4335,17 @@ status:
     waiting:
       reason: PodInitializing
 `)
-	pod := &corev1.Pod{
-		ObjectMeta: objectMeta("test-taskrun-sidecars", "foo"),
-		Status: corev1.PodStatus{
-			ContainerStatuses: []corev1.ContainerStatus{{
-				Name:    "sidecar-sidecar1",
-				ImageID: "image-id",
-				State: corev1.ContainerState{
-					Running: &runningState,
-				},
-			}, {
-				Name:    "sidecar-sidecar2",
-				ImageID: "image-id",
-				State: corev1.ContainerState{
-					Waiting: &waitingState,
-				},
-			}},
-		},
-	}
 
 	d := test.Data{
 		TaskRuns: []*v1.TaskRun{taskRun},
 		Tasks:    []*v1.Task{taskMultipleSidecars},
-		Pods:     []*corev1.Pod{pod},
 	}
 
 	testAssets, cancel := getTaskRunController(t, d)
 	defer cancel()
 	clients := testAssets.Clients
 
-	createServiceAccount(t, testAssets, "default", taskRun.Namespace)
-
-	err := testAssets.Controller.Reconciler.Reconcile(context.Background(), getRunName(taskRun))
-	isRequeued, _ := controller.IsRequeueKey(err)
-	if err != nil && !isRequeued {
+	if err := testAssets.Controller.Reconciler.Reconcile(context.Background(), getRunName(taskRun)); err != nil {
 		t.Errorf("expected no error reconciling valid TaskRun but got %v", err)
 	}
 
@@ -4441,7 +4373,6 @@ status:
 		},
 	}
 
-	t.Logf("status: %v", getTaskRun.Status.Sidecars)
 	for i, sc := range getTaskRun.Status.Sidecars {
 		if c := cmp.Diff(expected[i], sc); c != "" {
 			t.Errorf("TestReconcile_Multiple_SidecarStates sidecar%d %s", i+1, diff.PrintWantGot(c))
@@ -6011,7 +5942,7 @@ func podArgs(cmd string, stdoutPath string, stderrPath string, additionalArgs []
 	return args
 }
 
-func podObjectMeta(name, taskName, taskRunName, taskRunUID, ns string, isClusterTask bool) metav1.ObjectMeta {
+func podObjectMeta(name, taskName, taskRunName, ns string, isClusterTask bool) metav1.ObjectMeta {
 	trueB := true
 	om := metav1.ObjectMeta{
 		Name:      name,
@@ -6021,7 +5952,6 @@ func podObjectMeta(name, taskName, taskRunName, taskRunUID, ns string, isCluster
 		},
 		Labels: map[string]string{
 			pipeline.TaskRunLabelKey:       taskRunName,
-			pipeline.TaskRunUIDLabelKey:    taskRunUID,
 			"app.kubernetes.io/managed-by": "tekton-pipelines",
 		},
 		OwnerReferences: []metav1.OwnerReference{{
@@ -6030,7 +5960,6 @@ func podObjectMeta(name, taskName, taskRunName, taskRunUID, ns string, isCluster
 			Controller:         &trueB,
 			BlockOwnerDeletion: &trueB,
 			APIVersion:         currentAPIVersion,
-			UID:                types.UID(taskRunUID),
 		}},
 	}
 
@@ -6057,13 +5986,13 @@ type stepForExpectedPod struct {
 	stderrPath      string
 }
 
-func expectedPod(podName, taskName, taskRunName, taskRunUID, ns, saName string, isClusterTask bool, extraVolumes []corev1.Volume, steps []stepForExpectedPod) *corev1.Pod {
+func expectedPod(podName, taskName, taskRunName, ns, saName string, isClusterTask bool, extraVolumes []corev1.Volume, steps []stepForExpectedPod) *corev1.Pod {
 	stepNames := make([]string, 0, len(steps))
 	for _, s := range steps {
 		stepNames = append(stepNames, "step-"+s.name)
 	}
 	p := &corev1.Pod{
-		ObjectMeta: podObjectMeta(podName, taskName, taskRunName, taskRunUID, ns, isClusterTask),
+		ObjectMeta: podObjectMeta(podName, taskName, taskRunName, ns, isClusterTask),
 		Spec: corev1.PodSpec{
 			Volumes: []corev1.Volume{
 				workspaceVolume,

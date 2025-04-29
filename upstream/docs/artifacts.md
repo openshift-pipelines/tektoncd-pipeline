@@ -25,7 +25,6 @@ Artifacts fall into two categories:
 
  - Inputs: Artifacts downloaded and used by the Step/Task.
  - Outputs: Artifacts created and uploaded by the Step/Task.
-
 Example Structure:
 ```json
 {
@@ -499,29 +498,29 @@ Upon resolution and execution of the `TaskRun`, the `Status` will look something
     "podName": "pipelinerun-consume-tasks-a41ee44e4f964e95adfd3aea417d52f90-pod",
     "provenance": {
       "featureFlags": {
-        "awaitSidecarReadiness": true,
-        "coschedule": "workspaces",
-        "disableAffinityAssistant": false,
-        "disableCredsInit": false,
-        "disableInlineSpec": "",
-        "enableAPIFields": "beta",
-        "enableArtifacts": true,
-        "enableCELInWhenExpression": false,
-        "enableConciseResolverSyntax": false,
-        "enableKeepPodOnCancel": false,
-        "enableParamEnum": false,
-        "enableProvenanceInStatus": true,
-        "enableStepActions": true,
-        "enableTektonOCIBundles": false,
-        "enforceNonfalsifiability": "none",
-        "maxResultSize": 4096,
-        "requireGitSSHSecretKnownHosts": false,
-        "resultExtractionMethod": "termination-message",
-        "runningInEnvWithInjectedSidecars": true,
-        "scopeWhenExpressionsToTask": false,
-        "sendCloudEventsForRuns": false,
-        "setSecurityContext": false,
-        "verificationNoMatchPolicy": "ignore"
+        "AwaitSidecarReadiness": true,
+        "Coschedule": "workspaces",
+        "DisableAffinityAssistant": false,
+        "DisableCredsInit": false,
+        "DisableInlineSpec": "",
+        "EnableAPIFields": "beta",
+        "EnableArtifacts": true,
+        "EnableCELInWhenExpression": false,
+        "EnableConciseResolverSyntax": false,
+        "EnableKeepPodOnCancel": false,
+        "EnableParamEnum": false,
+        "EnableProvenanceInStatus": true,
+        "EnableStepActions": true,
+        "EnableTektonOCIBundles": false,
+        "EnforceNonfalsifiability": "none",
+        "MaxResultSize": 4096,
+        "RequireGitSSHSecretKnownHosts": false,
+        "ResultExtractionMethod": "termination-message",
+        "RunningInEnvWithInjectedSidecars": true,
+        "ScopeWhenExpressionsToTask": false,
+        "SendCloudEventsForRuns": false,
+        "SetSecurityContext": false,
+        "VerificationNoMatchPolicy": "ignore"
       }
     },
     "startTime": "2024-05-28T14:10:48Z",

@@ -43,7 +43,7 @@ func Packages(context *generator.Context, arguments *args.GeneratorArgs) generat
 		klog.Fatalf("Wrong CustomArgs type: %T", arguments.CustomArgs)
 	}
 
-	versionPackagePath := filepath.Clean(arguments.OutputPackagePath)
+	versionPackagePath := filepath.Join(arguments.OutputPackagePath)
 
 	var packageList generator.Packages
 
@@ -389,6 +389,8 @@ func versionInformerPackages(basePackage string, groupPkgName string, gv clientg
 	vers := make([]generator.Package, 0, 2*len(typesToGenerate))
 
 	for _, t := range typesToGenerate {
+		// Fix for golang iterator bug.
+		t := t
 		packagePath := packagePath + "/" + strings.ToLower(t.Name.Name)
 		typedInformerPackage := typedInformerPackage(groupPkgName, gv, customArgs.ExternalVersionsInformersPackage)
 
@@ -499,6 +501,7 @@ func versionInformerPackages(basePackage string, groupPkgName string, gv clientg
 				return tags.NeedsInformerInjection()
 			},
 		})
+
 	}
 	return vers
 }
@@ -510,6 +513,8 @@ func reconcilerPackages(basePackage string, groupPkgName string, gv clientgentyp
 	vers := make([]generator.Package, 0, 4*len(typesToGenerate))
 
 	for _, t := range typesToGenerate {
+		// Fix for golang iterator bug.
+		t := t
 		extracted := extractCommentTags(t)
 		reconcilerClasses, hasReconcilerClass := extractReconcilerClassesTag(extracted)
 		nonNamespaced := isNonNamespaced(extracted)
@@ -672,6 +677,7 @@ func versionDuckPackages(basePackage string, groupPkgName string, gv clientgenty
 
 	for _, t := range typesToGenerate {
 		// Fix for golang iterator bug.
+		t := t
 		packagePath := filepath.Join(packagePath, strings.ToLower(t.Name.Name))
 
 		// Impl

@@ -62,7 +62,6 @@ func TestGetTaskRunStatusForPipelineTask(t *testing.T) {
 				Name:             "some-task-run",
 				PipelineTaskName: "some-task",
 			},
-			expectedStatus: &v1.TaskRunStatus{},
 		}, {
 			name: "success",
 			taskRun: parse.MustParseV1TaskRun(t, `
@@ -150,7 +149,6 @@ func TestGetRunStatusForPipelineTask(t *testing.T) {
 				Name:             "some-run",
 				PipelineTaskName: "some-task",
 			},
-			expectedStatus: &v1beta1.CustomRunStatus{},
 		}, {
 			name: "success",
 			run: parse.MustParseCustomRun(t, `
@@ -302,8 +300,7 @@ pr-run-1:
       value: rab
 `),
 			expectedErr: nil,
-		},
-		{
+		}, {
 			name: "missing run",
 			originalPR: parse.MustParseV1PipelineRun(t, `
 metadata:
@@ -340,7 +337,6 @@ pr-task-1:
 			expectedRunStatuses: mustParseRunStatusMap(t, `
 pr-run-1:
   pipelineTaskName: run-1
-  status: {}
 `),
 			expectedErr: nil,
 		},

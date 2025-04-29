@@ -125,7 +125,7 @@ func MakeTaskRunStatus(ctx context.Context, logger *zap.SugaredLogger, tr v1.Tas
 
 	sortPodContainerStatuses(pod.Status.ContainerStatuses, pod.Spec.Containers)
 
-	complete := areContainersCompleted(ctx, pod) || isPodCompleted(pod)
+	complete := areContainersCompleted(ctx, pod) || pod.Status.Phase == corev1.PodSucceeded || pod.Status.Phase == corev1.PodFailed
 
 	if complete {
 		onError, ok := tr.Annotations[v1.PipelineTaskOnErrorAnnotation]
@@ -365,7 +365,7 @@ func setTaskRunStatusBasedOnStepStatus(ctx context.Context, logger *zap.SugaredL
 			}
 		}
 		stepState := v1.StepState{
-			ContainerState:    *state.DeepCopy(),
+			ContainerState:    *state,
 			Name:              TrimStepPrefix(s.Name),
 			Container:         s.Name,
 			ImageID:           s.ImageID,
@@ -633,30 +633,6 @@ func updateIncompleteTaskRunStatus(trs *v1.TaskRunStatus, pod *corev1.Pod) {
 	case corev1.PodSucceeded, corev1.PodFailed, corev1.PodUnknown:
 		// Do nothing; pod has completed or is in an unknown state.
 	}
-}
-
-// isPodCompleted checks if the given pod is completed.
-// A pod is considered completed if its phase is either "Succeeded" or "Failed".
-//
-// If it is foreseeable that the pod will eventually be in a failed state,
-// but it remains in a Running status for a visible period of time, it should be considered completed in advance.
-//
-// For example, when certain steps encounter OOM, only the pods that have timed out will change to a failed state,
-// we should consider them completed in advance.
-func isPodCompleted(pod *corev1.Pod) bool {
-	if pod.Status.Phase == corev1.PodSucceeded || pod.Status.Phase == corev1.PodFailed {
-		return true
-	}
-	for _, s := range pod.Status.ContainerStatuses {
-		if IsContainerStep(s.Name) {
-			if s.State.Terminated != nil {
-				if isOOMKilled(s) {
-					return true
-				}
-			}
-		}
-	}
-	return false
 }
 
 // DidTaskRunFail check the status of pod to decide if related taskrun is failed

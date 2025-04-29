@@ -15,7 +15,6 @@ import (
 	"github.com/aws/smithy-go/middleware"
 	"github.com/aws/smithy-go/ptr"
 	smithytime "github.com/aws/smithy-go/time"
-	"github.com/aws/smithy-go/tracing"
 	smithyhttp "github.com/aws/smithy-go/transport/http"
 	"io"
 	"io/ioutil"
@@ -46,10 +45,6 @@ func (m *awsAwsjson11_deserializeOpCancelKeyDeletion) HandleDeserialize(ctx cont
 		return out, metadata, err
 	}
 
-	_, span := tracing.StartSpan(ctx, "OperationDeserializer")
-	endTimer := startMetricTimer(ctx, "client.call.deserialization_duration")
-	defer endTimer()
-	defer span.End()
 	response, ok := out.RawResponse.(*smithyhttp.Response)
 	if !ok {
 		return out, metadata, &smithy.DeserializationError{Err: fmt.Errorf("unknown transport type %T", out.RawResponse)}
@@ -169,10 +164,6 @@ func (m *awsAwsjson11_deserializeOpConnectCustomKeyStore) HandleDeserialize(ctx 
 		return out, metadata, err
 	}
 
-	_, span := tracing.StartSpan(ctx, "OperationDeserializer")
-	endTimer := startMetricTimer(ctx, "client.call.deserialization_duration")
-	defer endTimer()
-	defer span.End()
 	response, ok := out.RawResponse.(*smithyhttp.Response)
 	if !ok {
 		return out, metadata, &smithy.DeserializationError{Err: fmt.Errorf("unknown transport type %T", out.RawResponse)}
@@ -292,10 +283,6 @@ func (m *awsAwsjson11_deserializeOpCreateAlias) HandleDeserialize(ctx context.Co
 		return out, metadata, err
 	}
 
-	_, span := tracing.StartSpan(ctx, "OperationDeserializer")
-	endTimer := startMetricTimer(ctx, "client.call.deserialization_duration")
-	defer endTimer()
-	defer span.End()
 	response, ok := out.RawResponse.(*smithyhttp.Response)
 	if !ok {
 		return out, metadata, &smithy.DeserializationError{Err: fmt.Errorf("unknown transport type %T", out.RawResponse)}
@@ -399,10 +386,6 @@ func (m *awsAwsjson11_deserializeOpCreateCustomKeyStore) HandleDeserialize(ctx c
 		return out, metadata, err
 	}
 
-	_, span := tracing.StartSpan(ctx, "OperationDeserializer")
-	endTimer := startMetricTimer(ctx, "client.call.deserialization_duration")
-	defer endTimer()
-	defer span.End()
 	response, ok := out.RawResponse.(*smithyhttp.Response)
 	if !ok {
 		return out, metadata, &smithy.DeserializationError{Err: fmt.Errorf("unknown transport type %T", out.RawResponse)}
@@ -558,10 +541,6 @@ func (m *awsAwsjson11_deserializeOpCreateGrant) HandleDeserialize(ctx context.Co
 		return out, metadata, err
 	}
 
-	_, span := tracing.StartSpan(ctx, "OperationDeserializer")
-	endTimer := startMetricTimer(ctx, "client.call.deserialization_duration")
-	defer endTimer()
-	defer span.End()
 	response, ok := out.RawResponse.(*smithyhttp.Response)
 	if !ok {
 		return out, metadata, &smithy.DeserializationError{Err: fmt.Errorf("unknown transport type %T", out.RawResponse)}
@@ -693,10 +672,6 @@ func (m *awsAwsjson11_deserializeOpCreateKey) HandleDeserialize(ctx context.Cont
 		return out, metadata, err
 	}
 
-	_, span := tracing.StartSpan(ctx, "OperationDeserializer")
-	endTimer := startMetricTimer(ctx, "client.call.deserialization_duration")
-	defer endTimer()
-	defer span.End()
 	response, ok := out.RawResponse.(*smithyhttp.Response)
 	if !ok {
 		return out, metadata, &smithy.DeserializationError{Err: fmt.Errorf("unknown transport type %T", out.RawResponse)}
@@ -840,10 +815,6 @@ func (m *awsAwsjson11_deserializeOpDecrypt) HandleDeserialize(ctx context.Contex
 		return out, metadata, err
 	}
 
-	_, span := tracing.StartSpan(ctx, "OperationDeserializer")
-	endTimer := startMetricTimer(ctx, "client.call.deserialization_duration")
-	defer endTimer()
-	defer span.End()
 	response, ok := out.RawResponse.(*smithyhttp.Response)
 	if !ok {
 		return out, metadata, &smithy.DeserializationError{Err: fmt.Errorf("unknown transport type %T", out.RawResponse)}
@@ -981,10 +952,6 @@ func (m *awsAwsjson11_deserializeOpDeleteAlias) HandleDeserialize(ctx context.Co
 		return out, metadata, err
 	}
 
-	_, span := tracing.StartSpan(ctx, "OperationDeserializer")
-	endTimer := startMetricTimer(ctx, "client.call.deserialization_duration")
-	defer endTimer()
-	defer span.End()
 	response, ok := out.RawResponse.(*smithyhttp.Response)
 	if !ok {
 		return out, metadata, &smithy.DeserializationError{Err: fmt.Errorf("unknown transport type %T", out.RawResponse)}
@@ -1079,10 +1046,6 @@ func (m *awsAwsjson11_deserializeOpDeleteCustomKeyStore) HandleDeserialize(ctx c
 		return out, metadata, err
 	}
 
-	_, span := tracing.StartSpan(ctx, "OperationDeserializer")
-	endTimer := startMetricTimer(ctx, "client.call.deserialization_duration")
-	defer endTimer()
-	defer span.End()
 	response, ok := out.RawResponse.(*smithyhttp.Response)
 	if !ok {
 		return out, metadata, &smithy.DeserializationError{Err: fmt.Errorf("unknown transport type %T", out.RawResponse)}
@@ -1199,10 +1162,6 @@ func (m *awsAwsjson11_deserializeOpDeleteImportedKeyMaterial) HandleDeserialize(
 		return out, metadata, err
 	}
 
-	_, span := tracing.StartSpan(ctx, "OperationDeserializer")
-	endTimer := startMetricTimer(ctx, "client.call.deserialization_duration")
-	defer endTimer()
-	defer span.End()
 	response, ok := out.RawResponse.(*smithyhttp.Response)
 	if !ok {
 		return out, metadata, &smithy.DeserializationError{Err: fmt.Errorf("unknown transport type %T", out.RawResponse)}
@@ -1288,141 +1247,6 @@ func awsAwsjson11_deserializeOpErrorDeleteImportedKeyMaterial(response *smithyht
 	}
 }
 
-type awsAwsjson11_deserializeOpDeriveSharedSecret struct {
-}
-
-func (*awsAwsjson11_deserializeOpDeriveSharedSecret) ID() string {
-	return "OperationDeserializer"
-}
-
-func (m *awsAwsjson11_deserializeOpDeriveSharedSecret) HandleDeserialize(ctx context.Context, in middleware.DeserializeInput, next middleware.DeserializeHandler) (
-	out middleware.DeserializeOutput, metadata middleware.Metadata, err error,
-) {
-	out, metadata, err = next.HandleDeserialize(ctx, in)
-	if err != nil {
-		return out, metadata, err
-	}
-
-	_, span := tracing.StartSpan(ctx, "OperationDeserializer")
-	endTimer := startMetricTimer(ctx, "client.call.deserialization_duration")
-	defer endTimer()
-	defer span.End()
-	response, ok := out.RawResponse.(*smithyhttp.Response)
-	if !ok {
-		return out, metadata, &smithy.DeserializationError{Err: fmt.Errorf("unknown transport type %T", out.RawResponse)}
-	}
-
-	if response.StatusCode < 200 || response.StatusCode >= 300 {
-		return out, metadata, awsAwsjson11_deserializeOpErrorDeriveSharedSecret(response, &metadata)
-	}
-	output := &DeriveSharedSecretOutput{}
-	out.Result = output
-
-	var buff [1024]byte
-	ringBuffer := smithyio.NewRingBuffer(buff[:])
-
-	body := io.TeeReader(response.Body, ringBuffer)
-	decoder := json.NewDecoder(body)
-	decoder.UseNumber()
-	var shape interface{}
-	if err := decoder.Decode(&shape); err != nil && err != io.EOF {
-		var snapshot bytes.Buffer
-		io.Copy(&snapshot, ringBuffer)
-		err = &smithy.DeserializationError{
-			Err:      fmt.Errorf("failed to decode response body, %w", err),
-			Snapshot: snapshot.Bytes(),
-		}
-		return out, metadata, err
-	}
-
-	err = awsAwsjson11_deserializeOpDocumentDeriveSharedSecretOutput(&output, shape)
-	if err != nil {
-		var snapshot bytes.Buffer
-		io.Copy(&snapshot, ringBuffer)
-		err = &smithy.DeserializationError{
-			Err:      fmt.Errorf("failed to decode response body, %w", err),
-			Snapshot: snapshot.Bytes(),
-		}
-		return out, metadata, err
-	}
-
-	return out, metadata, err
-}
-
-func awsAwsjson11_deserializeOpErrorDeriveSharedSecret(response *smithyhttp.Response, metadata *middleware.Metadata) error {
-	var errorBuffer bytes.Buffer
-	if _, err := io.Copy(&errorBuffer, response.Body); err != nil {
-		return &smithy.DeserializationError{Err: fmt.Errorf("failed to copy error response body, %w", err)}
-	}
-	errorBody := bytes.NewReader(errorBuffer.Bytes())
-
-	errorCode := "UnknownError"
-	errorMessage := errorCode
-
-	headerCode := response.Header.Get("X-Amzn-ErrorType")
-
-	var buff [1024]byte
-	ringBuffer := smithyio.NewRingBuffer(buff[:])
-
-	body := io.TeeReader(errorBody, ringBuffer)
-	decoder := json.NewDecoder(body)
-	decoder.UseNumber()
-	bodyInfo, err := getProtocolErrorInfo(decoder)
-	if err != nil {
-		var snapshot bytes.Buffer
-		io.Copy(&snapshot, ringBuffer)
-		err = &smithy.DeserializationError{
-			Err:      fmt.Errorf("failed to decode response body, %w", err),
-			Snapshot: snapshot.Bytes(),
-		}
-		return err
-	}
-
-	errorBody.Seek(0, io.SeekStart)
-	if typ, ok := resolveProtocolErrorType(headerCode, bodyInfo); ok {
-		errorCode = restjson.SanitizeErrorCode(typ)
-	}
-	if len(bodyInfo.Message) != 0 {
-		errorMessage = bodyInfo.Message
-	}
-	switch {
-	case strings.EqualFold("DependencyTimeoutException", errorCode):
-		return awsAwsjson11_deserializeErrorDependencyTimeoutException(response, errorBody)
-
-	case strings.EqualFold("DisabledException", errorCode):
-		return awsAwsjson11_deserializeErrorDisabledException(response, errorBody)
-
-	case strings.EqualFold("DryRunOperationException", errorCode):
-		return awsAwsjson11_deserializeErrorDryRunOperationException(response, errorBody)
-
-	case strings.EqualFold("InvalidGrantTokenException", errorCode):
-		return awsAwsjson11_deserializeErrorInvalidGrantTokenException(response, errorBody)
-
-	case strings.EqualFold("InvalidKeyUsageException", errorCode):
-		return awsAwsjson11_deserializeErrorInvalidKeyUsageException(response, errorBody)
-
-	case strings.EqualFold("KMSInternalException", errorCode):
-		return awsAwsjson11_deserializeErrorKMSInternalException(response, errorBody)
-
-	case strings.EqualFold("KMSInvalidStateException", errorCode):
-		return awsAwsjson11_deserializeErrorKMSInvalidStateException(response, errorBody)
-
-	case strings.EqualFold("KeyUnavailableException", errorCode):
-		return awsAwsjson11_deserializeErrorKeyUnavailableException(response, errorBody)
-
-	case strings.EqualFold("NotFoundException", errorCode):
-		return awsAwsjson11_deserializeErrorNotFoundException(response, errorBody)
-
-	default:
-		genericError := &smithy.GenericAPIError{
-			Code:    errorCode,
-			Message: errorMessage,
-		}
-		return genericError
-
-	}
-}
-
 type awsAwsjson11_deserializeOpDescribeCustomKeyStores struct {
 }
 
@@ -1438,10 +1262,6 @@ func (m *awsAwsjson11_deserializeOpDescribeCustomKeyStores) HandleDeserialize(ct
 		return out, metadata, err
 	}
 
-	_, span := tracing.StartSpan(ctx, "OperationDeserializer")
-	endTimer := startMetricTimer(ctx, "client.call.deserialization_duration")
-	defer endTimer()
-	defer span.End()
 	response, ok := out.RawResponse.(*smithyhttp.Response)
 	if !ok {
 		return out, metadata, &smithy.DeserializationError{Err: fmt.Errorf("unknown transport type %T", out.RawResponse)}
@@ -1555,10 +1375,6 @@ func (m *awsAwsjson11_deserializeOpDescribeKey) HandleDeserialize(ctx context.Co
 		return out, metadata, err
 	}
 
-	_, span := tracing.StartSpan(ctx, "OperationDeserializer")
-	endTimer := startMetricTimer(ctx, "client.call.deserialization_duration")
-	defer endTimer()
-	defer span.End()
 	response, ok := out.RawResponse.(*smithyhttp.Response)
 	if !ok {
 		return out, metadata, &smithy.DeserializationError{Err: fmt.Errorf("unknown transport type %T", out.RawResponse)}
@@ -1675,10 +1491,6 @@ func (m *awsAwsjson11_deserializeOpDisableKey) HandleDeserialize(ctx context.Con
 		return out, metadata, err
 	}
 
-	_, span := tracing.StartSpan(ctx, "OperationDeserializer")
-	endTimer := startMetricTimer(ctx, "client.call.deserialization_duration")
-	defer endTimer()
-	defer span.End()
 	response, ok := out.RawResponse.(*smithyhttp.Response)
 	if !ok {
 		return out, metadata, &smithy.DeserializationError{Err: fmt.Errorf("unknown transport type %T", out.RawResponse)}
@@ -1776,10 +1588,6 @@ func (m *awsAwsjson11_deserializeOpDisableKeyRotation) HandleDeserialize(ctx con
 		return out, metadata, err
 	}
 
-	_, span := tracing.StartSpan(ctx, "OperationDeserializer")
-	endTimer := startMetricTimer(ctx, "client.call.deserialization_duration")
-	defer endTimer()
-	defer span.End()
 	response, ok := out.RawResponse.(*smithyhttp.Response)
 	if !ok {
 		return out, metadata, &smithy.DeserializationError{Err: fmt.Errorf("unknown transport type %T", out.RawResponse)}
@@ -1883,10 +1691,6 @@ func (m *awsAwsjson11_deserializeOpDisconnectCustomKeyStore) HandleDeserialize(c
 		return out, metadata, err
 	}
 
-	_, span := tracing.StartSpan(ctx, "OperationDeserializer")
-	endTimer := startMetricTimer(ctx, "client.call.deserialization_duration")
-	defer endTimer()
-	defer span.End()
 	response, ok := out.RawResponse.(*smithyhttp.Response)
 	if !ok {
 		return out, metadata, &smithy.DeserializationError{Err: fmt.Errorf("unknown transport type %T", out.RawResponse)}
@@ -2000,10 +1804,6 @@ func (m *awsAwsjson11_deserializeOpEnableKey) HandleDeserialize(ctx context.Cont
 		return out, metadata, err
 	}
 
-	_, span := tracing.StartSpan(ctx, "OperationDeserializer")
-	endTimer := startMetricTimer(ctx, "client.call.deserialization_duration")
-	defer endTimer()
-	defer span.End()
 	response, ok := out.RawResponse.(*smithyhttp.Response)
 	if !ok {
 		return out, metadata, &smithy.DeserializationError{Err: fmt.Errorf("unknown transport type %T", out.RawResponse)}
@@ -2104,10 +1904,6 @@ func (m *awsAwsjson11_deserializeOpEnableKeyRotation) HandleDeserialize(ctx cont
 		return out, metadata, err
 	}
 
-	_, span := tracing.StartSpan(ctx, "OperationDeserializer")
-	endTimer := startMetricTimer(ctx, "client.call.deserialization_duration")
-	defer endTimer()
-	defer span.End()
 	response, ok := out.RawResponse.(*smithyhttp.Response)
 	if !ok {
 		return out, metadata, &smithy.DeserializationError{Err: fmt.Errorf("unknown transport type %T", out.RawResponse)}
@@ -2211,10 +2007,6 @@ func (m *awsAwsjson11_deserializeOpEncrypt) HandleDeserialize(ctx context.Contex
 		return out, metadata, err
 	}
 
-	_, span := tracing.StartSpan(ctx, "OperationDeserializer")
-	endTimer := startMetricTimer(ctx, "client.call.deserialization_duration")
-	defer endTimer()
-	defer span.End()
 	response, ok := out.RawResponse.(*smithyhttp.Response)
 	if !ok {
 		return out, metadata, &smithy.DeserializationError{Err: fmt.Errorf("unknown transport type %T", out.RawResponse)}
@@ -2346,10 +2138,6 @@ func (m *awsAwsjson11_deserializeOpGenerateDataKey) HandleDeserialize(ctx contex
 		return out, metadata, err
 	}
 
-	_, span := tracing.StartSpan(ctx, "OperationDeserializer")
-	endTimer := startMetricTimer(ctx, "client.call.deserialization_duration")
-	defer endTimer()
-	defer span.End()
 	response, ok := out.RawResponse.(*smithyhttp.Response)
 	if !ok {
 		return out, metadata, &smithy.DeserializationError{Err: fmt.Errorf("unknown transport type %T", out.RawResponse)}
@@ -2481,10 +2269,6 @@ func (m *awsAwsjson11_deserializeOpGenerateDataKeyPair) HandleDeserialize(ctx co
 		return out, metadata, err
 	}
 
-	_, span := tracing.StartSpan(ctx, "OperationDeserializer")
-	endTimer := startMetricTimer(ctx, "client.call.deserialization_duration")
-	defer endTimer()
-	defer span.End()
 	response, ok := out.RawResponse.(*smithyhttp.Response)
 	if !ok {
 		return out, metadata, &smithy.DeserializationError{Err: fmt.Errorf("unknown transport type %T", out.RawResponse)}
@@ -2619,10 +2403,6 @@ func (m *awsAwsjson11_deserializeOpGenerateDataKeyPairWithoutPlaintext) HandleDe
 		return out, metadata, err
 	}
 
-	_, span := tracing.StartSpan(ctx, "OperationDeserializer")
-	endTimer := startMetricTimer(ctx, "client.call.deserialization_duration")
-	defer endTimer()
-	defer span.End()
 	response, ok := out.RawResponse.(*smithyhttp.Response)
 	if !ok {
 		return out, metadata, &smithy.DeserializationError{Err: fmt.Errorf("unknown transport type %T", out.RawResponse)}
@@ -2757,10 +2537,6 @@ func (m *awsAwsjson11_deserializeOpGenerateDataKeyWithoutPlaintext) HandleDeseri
 		return out, metadata, err
 	}
 
-	_, span := tracing.StartSpan(ctx, "OperationDeserializer")
-	endTimer := startMetricTimer(ctx, "client.call.deserialization_duration")
-	defer endTimer()
-	defer span.End()
 	response, ok := out.RawResponse.(*smithyhttp.Response)
 	if !ok {
 		return out, metadata, &smithy.DeserializationError{Err: fmt.Errorf("unknown transport type %T", out.RawResponse)}
@@ -2892,10 +2668,6 @@ func (m *awsAwsjson11_deserializeOpGenerateMac) HandleDeserialize(ctx context.Co
 		return out, metadata, err
 	}
 
-	_, span := tracing.StartSpan(ctx, "OperationDeserializer")
-	endTimer := startMetricTimer(ctx, "client.call.deserialization_duration")
-	defer endTimer()
-	defer span.End()
 	response, ok := out.RawResponse.(*smithyhttp.Response)
 	if !ok {
 		return out, metadata, &smithy.DeserializationError{Err: fmt.Errorf("unknown transport type %T", out.RawResponse)}
@@ -3024,10 +2796,6 @@ func (m *awsAwsjson11_deserializeOpGenerateRandom) HandleDeserialize(ctx context
 		return out, metadata, err
 	}
 
-	_, span := tracing.StartSpan(ctx, "OperationDeserializer")
-	endTimer := startMetricTimer(ctx, "client.call.deserialization_duration")
-	defer endTimer()
-	defer span.End()
 	response, ok := out.RawResponse.(*smithyhttp.Response)
 	if !ok {
 		return out, metadata, &smithy.DeserializationError{Err: fmt.Errorf("unknown transport type %T", out.RawResponse)}
@@ -3147,10 +2915,6 @@ func (m *awsAwsjson11_deserializeOpGetKeyPolicy) HandleDeserialize(ctx context.C
 		return out, metadata, err
 	}
 
-	_, span := tracing.StartSpan(ctx, "OperationDeserializer")
-	endTimer := startMetricTimer(ctx, "client.call.deserialization_duration")
-	defer endTimer()
-	defer span.End()
 	response, ok := out.RawResponse.(*smithyhttp.Response)
 	if !ok {
 		return out, metadata, &smithy.DeserializationError{Err: fmt.Errorf("unknown transport type %T", out.RawResponse)}
@@ -3270,10 +3034,6 @@ func (m *awsAwsjson11_deserializeOpGetKeyRotationStatus) HandleDeserialize(ctx c
 		return out, metadata, err
 	}
 
-	_, span := tracing.StartSpan(ctx, "OperationDeserializer")
-	endTimer := startMetricTimer(ctx, "client.call.deserialization_duration")
-	defer endTimer()
-	defer span.End()
 	response, ok := out.RawResponse.(*smithyhttp.Response)
 	if !ok {
 		return out, metadata, &smithy.DeserializationError{Err: fmt.Errorf("unknown transport type %T", out.RawResponse)}
@@ -3396,10 +3156,6 @@ func (m *awsAwsjson11_deserializeOpGetParametersForImport) HandleDeserialize(ctx
 		return out, metadata, err
 	}
 
-	_, span := tracing.StartSpan(ctx, "OperationDeserializer")
-	endTimer := startMetricTimer(ctx, "client.call.deserialization_duration")
-	defer endTimer()
-	defer span.End()
 	response, ok := out.RawResponse.(*smithyhttp.Response)
 	if !ok {
 		return out, metadata, &smithy.DeserializationError{Err: fmt.Errorf("unknown transport type %T", out.RawResponse)}
@@ -3522,10 +3278,6 @@ func (m *awsAwsjson11_deserializeOpGetPublicKey) HandleDeserialize(ctx context.C
 		return out, metadata, err
 	}
 
-	_, span := tracing.StartSpan(ctx, "OperationDeserializer")
-	endTimer := startMetricTimer(ctx, "client.call.deserialization_duration")
-	defer endTimer()
-	defer span.End()
 	response, ok := out.RawResponse.(*smithyhttp.Response)
 	if !ok {
 		return out, metadata, &smithy.DeserializationError{Err: fmt.Errorf("unknown transport type %T", out.RawResponse)}
@@ -3660,10 +3412,6 @@ func (m *awsAwsjson11_deserializeOpImportKeyMaterial) HandleDeserialize(ctx cont
 		return out, metadata, err
 	}
 
-	_, span := tracing.StartSpan(ctx, "OperationDeserializer")
-	endTimer := startMetricTimer(ctx, "client.call.deserialization_duration")
-	defer endTimer()
-	defer span.End()
 	response, ok := out.RawResponse.(*smithyhttp.Response)
 	if !ok {
 		return out, metadata, &smithy.DeserializationError{Err: fmt.Errorf("unknown transport type %T", out.RawResponse)}
@@ -3798,10 +3546,6 @@ func (m *awsAwsjson11_deserializeOpListAliases) HandleDeserialize(ctx context.Co
 		return out, metadata, err
 	}
 
-	_, span := tracing.StartSpan(ctx, "OperationDeserializer")
-	endTimer := startMetricTimer(ctx, "client.call.deserialization_duration")
-	defer endTimer()
-	defer span.End()
 	response, ok := out.RawResponse.(*smithyhttp.Response)
 	if !ok {
 		return out, metadata, &smithy.DeserializationError{Err: fmt.Errorf("unknown transport type %T", out.RawResponse)}
@@ -3921,10 +3665,6 @@ func (m *awsAwsjson11_deserializeOpListGrants) HandleDeserialize(ctx context.Con
 		return out, metadata, err
 	}
 
-	_, span := tracing.StartSpan(ctx, "OperationDeserializer")
-	endTimer := startMetricTimer(ctx, "client.call.deserialization_duration")
-	defer endTimer()
-	defer span.End()
 	response, ok := out.RawResponse.(*smithyhttp.Response)
 	if !ok {
 		return out, metadata, &smithy.DeserializationError{Err: fmt.Errorf("unknown transport type %T", out.RawResponse)}
@@ -4050,10 +3790,6 @@ func (m *awsAwsjson11_deserializeOpListKeyPolicies) HandleDeserialize(ctx contex
 		return out, metadata, err
 	}
 
-	_, span := tracing.StartSpan(ctx, "OperationDeserializer")
-	endTimer := startMetricTimer(ctx, "client.call.deserialization_duration")
-	defer endTimer()
-	defer span.End()
 	response, ok := out.RawResponse.(*smithyhttp.Response)
 	if !ok {
 		return out, metadata, &smithy.DeserializationError{Err: fmt.Errorf("unknown transport type %T", out.RawResponse)}
@@ -4173,10 +3909,6 @@ func (m *awsAwsjson11_deserializeOpListKeyRotations) HandleDeserialize(ctx conte
 		return out, metadata, err
 	}
 
-	_, span := tracing.StartSpan(ctx, "OperationDeserializer")
-	endTimer := startMetricTimer(ctx, "client.call.deserialization_duration")
-	defer endTimer()
-	defer span.End()
 	response, ok := out.RawResponse.(*smithyhttp.Response)
 	if !ok {
 		return out, metadata, &smithy.DeserializationError{Err: fmt.Errorf("unknown transport type %T", out.RawResponse)}
@@ -4299,10 +4031,6 @@ func (m *awsAwsjson11_deserializeOpListKeys) HandleDeserialize(ctx context.Conte
 		return out, metadata, err
 	}
 
-	_, span := tracing.StartSpan(ctx, "OperationDeserializer")
-	endTimer := startMetricTimer(ctx, "client.call.deserialization_duration")
-	defer endTimer()
-	defer span.End()
 	response, ok := out.RawResponse.(*smithyhttp.Response)
 	if !ok {
 		return out, metadata, &smithy.DeserializationError{Err: fmt.Errorf("unknown transport type %T", out.RawResponse)}
@@ -4416,10 +4144,6 @@ func (m *awsAwsjson11_deserializeOpListResourceTags) HandleDeserialize(ctx conte
 		return out, metadata, err
 	}
 
-	_, span := tracing.StartSpan(ctx, "OperationDeserializer")
-	endTimer := startMetricTimer(ctx, "client.call.deserialization_duration")
-	defer endTimer()
-	defer span.End()
 	response, ok := out.RawResponse.(*smithyhttp.Response)
 	if !ok {
 		return out, metadata, &smithy.DeserializationError{Err: fmt.Errorf("unknown transport type %T", out.RawResponse)}
@@ -4536,10 +4260,6 @@ func (m *awsAwsjson11_deserializeOpListRetirableGrants) HandleDeserialize(ctx co
 		return out, metadata, err
 	}
 
-	_, span := tracing.StartSpan(ctx, "OperationDeserializer")
-	endTimer := startMetricTimer(ctx, "client.call.deserialization_duration")
-	defer endTimer()
-	defer span.End()
 	response, ok := out.RawResponse.(*smithyhttp.Response)
 	if !ok {
 		return out, metadata, &smithy.DeserializationError{Err: fmt.Errorf("unknown transport type %T", out.RawResponse)}
@@ -4659,10 +4379,6 @@ func (m *awsAwsjson11_deserializeOpPutKeyPolicy) HandleDeserialize(ctx context.C
 		return out, metadata, err
 	}
 
-	_, span := tracing.StartSpan(ctx, "OperationDeserializer")
-	endTimer := startMetricTimer(ctx, "client.call.deserialization_duration")
-	defer endTimer()
-	defer span.End()
 	response, ok := out.RawResponse.(*smithyhttp.Response)
 	if !ok {
 		return out, metadata, &smithy.DeserializationError{Err: fmt.Errorf("unknown transport type %T", out.RawResponse)}
@@ -4769,10 +4485,6 @@ func (m *awsAwsjson11_deserializeOpReEncrypt) HandleDeserialize(ctx context.Cont
 		return out, metadata, err
 	}
 
-	_, span := tracing.StartSpan(ctx, "OperationDeserializer")
-	endTimer := startMetricTimer(ctx, "client.call.deserialization_duration")
-	defer endTimer()
-	defer span.End()
 	response, ok := out.RawResponse.(*smithyhttp.Response)
 	if !ok {
 		return out, metadata, &smithy.DeserializationError{Err: fmt.Errorf("unknown transport type %T", out.RawResponse)}
@@ -4910,10 +4622,6 @@ func (m *awsAwsjson11_deserializeOpReplicateKey) HandleDeserialize(ctx context.C
 		return out, metadata, err
 	}
 
-	_, span := tracing.StartSpan(ctx, "OperationDeserializer")
-	endTimer := startMetricTimer(ctx, "client.call.deserialization_duration")
-	defer endTimer()
-	defer span.End()
 	response, ok := out.RawResponse.(*smithyhttp.Response)
 	if !ok {
 		return out, metadata, &smithy.DeserializationError{Err: fmt.Errorf("unknown transport type %T", out.RawResponse)}
@@ -5048,10 +4756,6 @@ func (m *awsAwsjson11_deserializeOpRetireGrant) HandleDeserialize(ctx context.Co
 		return out, metadata, err
 	}
 
-	_, span := tracing.StartSpan(ctx, "OperationDeserializer")
-	endTimer := startMetricTimer(ctx, "client.call.deserialization_duration")
-	defer endTimer()
-	defer span.End()
 	response, ok := out.RawResponse.(*smithyhttp.Response)
 	if !ok {
 		return out, metadata, &smithy.DeserializationError{Err: fmt.Errorf("unknown transport type %T", out.RawResponse)}
@@ -5158,10 +4862,6 @@ func (m *awsAwsjson11_deserializeOpRevokeGrant) HandleDeserialize(ctx context.Co
 		return out, metadata, err
 	}
 
-	_, span := tracing.StartSpan(ctx, "OperationDeserializer")
-	endTimer := startMetricTimer(ctx, "client.call.deserialization_duration")
-	defer endTimer()
-	defer span.End()
 	response, ok := out.RawResponse.(*smithyhttp.Response)
 	if !ok {
 		return out, metadata, &smithy.DeserializationError{Err: fmt.Errorf("unknown transport type %T", out.RawResponse)}
@@ -5265,10 +4965,6 @@ func (m *awsAwsjson11_deserializeOpRotateKeyOnDemand) HandleDeserialize(ctx cont
 		return out, metadata, err
 	}
 
-	_, span := tracing.StartSpan(ctx, "OperationDeserializer")
-	endTimer := startMetricTimer(ctx, "client.call.deserialization_duration")
-	defer endTimer()
-	defer span.End()
 	response, ok := out.RawResponse.(*smithyhttp.Response)
 	if !ok {
 		return out, metadata, &smithy.DeserializationError{Err: fmt.Errorf("unknown transport type %T", out.RawResponse)}
@@ -5400,10 +5096,6 @@ func (m *awsAwsjson11_deserializeOpScheduleKeyDeletion) HandleDeserialize(ctx co
 		return out, metadata, err
 	}
 
-	_, span := tracing.StartSpan(ctx, "OperationDeserializer")
-	endTimer := startMetricTimer(ctx, "client.call.deserialization_duration")
-	defer endTimer()
-	defer span.End()
 	response, ok := out.RawResponse.(*smithyhttp.Response)
 	if !ok {
 		return out, metadata, &smithy.DeserializationError{Err: fmt.Errorf("unknown transport type %T", out.RawResponse)}
@@ -5523,10 +5215,6 @@ func (m *awsAwsjson11_deserializeOpSign) HandleDeserialize(ctx context.Context, 
 		return out, metadata, err
 	}
 
-	_, span := tracing.StartSpan(ctx, "OperationDeserializer")
-	endTimer := startMetricTimer(ctx, "client.call.deserialization_duration")
-	defer endTimer()
-	defer span.End()
 	response, ok := out.RawResponse.(*smithyhttp.Response)
 	if !ok {
 		return out, metadata, &smithy.DeserializationError{Err: fmt.Errorf("unknown transport type %T", out.RawResponse)}
@@ -5658,10 +5346,6 @@ func (m *awsAwsjson11_deserializeOpTagResource) HandleDeserialize(ctx context.Co
 		return out, metadata, err
 	}
 
-	_, span := tracing.StartSpan(ctx, "OperationDeserializer")
-	endTimer := startMetricTimer(ctx, "client.call.deserialization_duration")
-	defer endTimer()
-	defer span.End()
 	response, ok := out.RawResponse.(*smithyhttp.Response)
 	if !ok {
 		return out, metadata, &smithy.DeserializationError{Err: fmt.Errorf("unknown transport type %T", out.RawResponse)}
@@ -5762,10 +5446,6 @@ func (m *awsAwsjson11_deserializeOpUntagResource) HandleDeserialize(ctx context.
 		return out, metadata, err
 	}
 
-	_, span := tracing.StartSpan(ctx, "OperationDeserializer")
-	endTimer := startMetricTimer(ctx, "client.call.deserialization_duration")
-	defer endTimer()
-	defer span.End()
 	response, ok := out.RawResponse.(*smithyhttp.Response)
 	if !ok {
 		return out, metadata, &smithy.DeserializationError{Err: fmt.Errorf("unknown transport type %T", out.RawResponse)}
@@ -5863,10 +5543,6 @@ func (m *awsAwsjson11_deserializeOpUpdateAlias) HandleDeserialize(ctx context.Co
 		return out, metadata, err
 	}
 
-	_, span := tracing.StartSpan(ctx, "OperationDeserializer")
-	endTimer := startMetricTimer(ctx, "client.call.deserialization_duration")
-	defer endTimer()
-	defer span.End()
 	response, ok := out.RawResponse.(*smithyhttp.Response)
 	if !ok {
 		return out, metadata, &smithy.DeserializationError{Err: fmt.Errorf("unknown transport type %T", out.RawResponse)}
@@ -5964,10 +5640,6 @@ func (m *awsAwsjson11_deserializeOpUpdateCustomKeyStore) HandleDeserialize(ctx c
 		return out, metadata, err
 	}
 
-	_, span := tracing.StartSpan(ctx, "OperationDeserializer")
-	endTimer := startMetricTimer(ctx, "client.call.deserialization_duration")
-	defer endTimer()
-	defer span.End()
 	response, ok := out.RawResponse.(*smithyhttp.Response)
 	if !ok {
 		return out, metadata, &smithy.DeserializationError{Err: fmt.Errorf("unknown transport type %T", out.RawResponse)}
@@ -6123,10 +5795,6 @@ func (m *awsAwsjson11_deserializeOpUpdateKeyDescription) HandleDeserialize(ctx c
 		return out, metadata, err
 	}
 
-	_, span := tracing.StartSpan(ctx, "OperationDeserializer")
-	endTimer := startMetricTimer(ctx, "client.call.deserialization_duration")
-	defer endTimer()
-	defer span.End()
 	response, ok := out.RawResponse.(*smithyhttp.Response)
 	if !ok {
 		return out, metadata, &smithy.DeserializationError{Err: fmt.Errorf("unknown transport type %T", out.RawResponse)}
@@ -6224,10 +5892,6 @@ func (m *awsAwsjson11_deserializeOpUpdatePrimaryRegion) HandleDeserialize(ctx co
 		return out, metadata, err
 	}
 
-	_, span := tracing.StartSpan(ctx, "OperationDeserializer")
-	endTimer := startMetricTimer(ctx, "client.call.deserialization_duration")
-	defer endTimer()
-	defer span.End()
 	response, ok := out.RawResponse.(*smithyhttp.Response)
 	if !ok {
 		return out, metadata, &smithy.DeserializationError{Err: fmt.Errorf("unknown transport type %T", out.RawResponse)}
@@ -6328,10 +5992,6 @@ func (m *awsAwsjson11_deserializeOpVerify) HandleDeserialize(ctx context.Context
 		return out, metadata, err
 	}
 
-	_, span := tracing.StartSpan(ctx, "OperationDeserializer")
-	endTimer := startMetricTimer(ctx, "client.call.deserialization_duration")
-	defer endTimer()
-	defer span.End()
 	response, ok := out.RawResponse.(*smithyhttp.Response)
 	if !ok {
 		return out, metadata, &smithy.DeserializationError{Err: fmt.Errorf("unknown transport type %T", out.RawResponse)}
@@ -6466,10 +6126,6 @@ func (m *awsAwsjson11_deserializeOpVerifyMac) HandleDeserialize(ctx context.Cont
 		return out, metadata, err
 	}
 
-	_, span := tracing.StartSpan(ctx, "OperationDeserializer")
-	endTimer := startMetricTimer(ctx, "client.call.deserialization_duration")
-	defer endTimer()
-	defer span.End()
 	response, ok := out.RawResponse.(*smithyhttp.Response)
 	if !ok {
 		return out, metadata, &smithy.DeserializationError{Err: fmt.Errorf("unknown transport type %T", out.RawResponse)}
@@ -8412,7 +8068,7 @@ func awsAwsjson11_deserializeDocumentAlreadyExistsException(v **types.AlreadyExi
 
 	for key, value := range shape {
 		switch key {
-		case "message", "Message":
+		case "message":
 			if value != nil {
 				jtv, ok := value.(string)
 				if !ok {
@@ -8452,7 +8108,7 @@ func awsAwsjson11_deserializeDocumentCloudHsmClusterInUseException(v **types.Clo
 
 	for key, value := range shape {
 		switch key {
-		case "message", "Message":
+		case "message":
 			if value != nil {
 				jtv, ok := value.(string)
 				if !ok {
@@ -8492,7 +8148,7 @@ func awsAwsjson11_deserializeDocumentCloudHsmClusterInvalidConfigurationExceptio
 
 	for key, value := range shape {
 		switch key {
-		case "message", "Message":
+		case "message":
 			if value != nil {
 				jtv, ok := value.(string)
 				if !ok {
@@ -8532,7 +8188,7 @@ func awsAwsjson11_deserializeDocumentCloudHsmClusterNotActiveException(v **types
 
 	for key, value := range shape {
 		switch key {
-		case "message", "Message":
+		case "message":
 			if value != nil {
 				jtv, ok := value.(string)
 				if !ok {
@@ -8572,7 +8228,7 @@ func awsAwsjson11_deserializeDocumentCloudHsmClusterNotFoundException(v **types.
 
 	for key, value := range shape {
 		switch key {
-		case "message", "Message":
+		case "message":
 			if value != nil {
 				jtv, ok := value.(string)
 				if !ok {
@@ -8612,7 +8268,7 @@ func awsAwsjson11_deserializeDocumentCloudHsmClusterNotRelatedException(v **type
 
 	for key, value := range shape {
 		switch key {
-		case "message", "Message":
+		case "message":
 			if value != nil {
 				jtv, ok := value.(string)
 				if !ok {
@@ -8652,7 +8308,7 @@ func awsAwsjson11_deserializeDocumentConflictException(v **types.ConflictExcepti
 
 	for key, value := range shape {
 		switch key {
-		case "message", "Message":
+		case "message":
 			if value != nil {
 				jtv, ok := value.(string)
 				if !ok {
@@ -8692,7 +8348,7 @@ func awsAwsjson11_deserializeDocumentCustomKeyStoreHasCMKsException(v **types.Cu
 
 	for key, value := range shape {
 		switch key {
-		case "message", "Message":
+		case "message":
 			if value != nil {
 				jtv, ok := value.(string)
 				if !ok {
@@ -8732,7 +8388,7 @@ func awsAwsjson11_deserializeDocumentCustomKeyStoreInvalidStateException(v **typ
 
 	for key, value := range shape {
 		switch key {
-		case "message", "Message":
+		case "message":
 			if value != nil {
 				jtv, ok := value.(string)
 				if !ok {
@@ -8772,7 +8428,7 @@ func awsAwsjson11_deserializeDocumentCustomKeyStoreNameInUseException(v **types.
 
 	for key, value := range shape {
 		switch key {
-		case "message", "Message":
+		case "message":
 			if value != nil {
 				jtv, ok := value.(string)
 				if !ok {
@@ -8812,7 +8468,7 @@ func awsAwsjson11_deserializeDocumentCustomKeyStoreNotFoundException(v **types.C
 
 	for key, value := range shape {
 		switch key {
-		case "message", "Message":
+		case "message":
 			if value != nil {
 				jtv, ok := value.(string)
 				if !ok {
@@ -9001,7 +8657,7 @@ func awsAwsjson11_deserializeDocumentDependencyTimeoutException(v **types.Depend
 
 	for key, value := range shape {
 		switch key {
-		case "message", "Message":
+		case "message":
 			if value != nil {
 				jtv, ok := value.(string)
 				if !ok {
@@ -9041,7 +8697,7 @@ func awsAwsjson11_deserializeDocumentDisabledException(v **types.DisabledExcepti
 
 	for key, value := range shape {
 		switch key {
-		case "message", "Message":
+		case "message":
 			if value != nil {
 				jtv, ok := value.(string)
 				if !ok {
@@ -9081,7 +8737,7 @@ func awsAwsjson11_deserializeDocumentDryRunOperationException(v **types.DryRunOp
 
 	for key, value := range shape {
 		switch key {
-		case "message", "Message":
+		case "message":
 			if value != nil {
 				jtv, ok := value.(string)
 				if !ok {
@@ -9193,7 +8849,7 @@ func awsAwsjson11_deserializeDocumentExpiredImportTokenException(v **types.Expir
 
 	for key, value := range shape {
 		switch key {
-		case "message", "Message":
+		case "message":
 			if value != nil {
 				jtv, ok := value.(string)
 				if !ok {
@@ -9455,7 +9111,7 @@ func awsAwsjson11_deserializeDocumentIncorrectKeyException(v **types.IncorrectKe
 
 	for key, value := range shape {
 		switch key {
-		case "message", "Message":
+		case "message":
 			if value != nil {
 				jtv, ok := value.(string)
 				if !ok {
@@ -9495,7 +9151,7 @@ func awsAwsjson11_deserializeDocumentIncorrectKeyMaterialException(v **types.Inc
 
 	for key, value := range shape {
 		switch key {
-		case "message", "Message":
+		case "message":
 			if value != nil {
 				jtv, ok := value.(string)
 				if !ok {
@@ -9535,7 +9191,7 @@ func awsAwsjson11_deserializeDocumentIncorrectTrustAnchorException(v **types.Inc
 
 	for key, value := range shape {
 		switch key {
-		case "message", "Message":
+		case "message":
 			if value != nil {
 				jtv, ok := value.(string)
 				if !ok {
@@ -9575,7 +9231,7 @@ func awsAwsjson11_deserializeDocumentInvalidAliasNameException(v **types.Invalid
 
 	for key, value := range shape {
 		switch key {
-		case "message", "Message":
+		case "message":
 			if value != nil {
 				jtv, ok := value.(string)
 				if !ok {
@@ -9615,7 +9271,7 @@ func awsAwsjson11_deserializeDocumentInvalidArnException(v **types.InvalidArnExc
 
 	for key, value := range shape {
 		switch key {
-		case "message", "Message":
+		case "message":
 			if value != nil {
 				jtv, ok := value.(string)
 				if !ok {
@@ -9655,7 +9311,7 @@ func awsAwsjson11_deserializeDocumentInvalidCiphertextException(v **types.Invali
 
 	for key, value := range shape {
 		switch key {
-		case "message", "Message":
+		case "message":
 			if value != nil {
 				jtv, ok := value.(string)
 				if !ok {
@@ -9695,7 +9351,7 @@ func awsAwsjson11_deserializeDocumentInvalidGrantIdException(v **types.InvalidGr
 
 	for key, value := range shape {
 		switch key {
-		case "message", "Message":
+		case "message":
 			if value != nil {
 				jtv, ok := value.(string)
 				if !ok {
@@ -9735,7 +9391,7 @@ func awsAwsjson11_deserializeDocumentInvalidGrantTokenException(v **types.Invali
 
 	for key, value := range shape {
 		switch key {
-		case "message", "Message":
+		case "message":
 			if value != nil {
 				jtv, ok := value.(string)
 				if !ok {
@@ -9775,7 +9431,7 @@ func awsAwsjson11_deserializeDocumentInvalidImportTokenException(v **types.Inval
 
 	for key, value := range shape {
 		switch key {
-		case "message", "Message":
+		case "message":
 			if value != nil {
 				jtv, ok := value.(string)
 				if !ok {
@@ -9815,7 +9471,7 @@ func awsAwsjson11_deserializeDocumentInvalidKeyUsageException(v **types.InvalidK
 
 	for key, value := range shape {
 		switch key {
-		case "message", "Message":
+		case "message":
 			if value != nil {
 				jtv, ok := value.(string)
 				if !ok {
@@ -9855,7 +9511,7 @@ func awsAwsjson11_deserializeDocumentInvalidMarkerException(v **types.InvalidMar
 
 	for key, value := range shape {
 		switch key {
-		case "message", "Message":
+		case "message":
 			if value != nil {
 				jtv, ok := value.(string)
 				if !ok {
@@ -9870,42 +9526,6 @@ func awsAwsjson11_deserializeDocumentInvalidMarkerException(v **types.InvalidMar
 		}
 	}
 	*v = sv
-	return nil
-}
-
-func awsAwsjson11_deserializeDocumentKeyAgreementAlgorithmSpecList(v *[]types.KeyAgreementAlgorithmSpec, value interface{}) error {
-	if v == nil {
-		return fmt.Errorf("unexpected nil of type %T", v)
-	}
-	if value == nil {
-		return nil
-	}
-
-	shape, ok := value.([]interface{})
-	if !ok {
-		return fmt.Errorf("unexpected JSON type %v", value)
-	}
-
-	var cv []types.KeyAgreementAlgorithmSpec
-	if *v == nil {
-		cv = []types.KeyAgreementAlgorithmSpec{}
-	} else {
-		cv = *v
-	}
-
-	for _, value := range shape {
-		var col types.KeyAgreementAlgorithmSpec
-		if value != nil {
-			jtv, ok := value.(string)
-			if !ok {
-				return fmt.Errorf("expected KeyAgreementAlgorithmSpec to be of type string, got %T instead", value)
-			}
-			col = types.KeyAgreementAlgorithmSpec(jtv)
-		}
-		cv = append(cv, col)
-
-	}
-	*v = cv
 	return nil
 }
 
@@ -10123,11 +9743,6 @@ func awsAwsjson11_deserializeDocumentKeyMetadata(v **types.KeyMetadata, value in
 				sv.ExpirationModel = types.ExpirationModelType(jtv)
 			}
 
-		case "KeyAgreementAlgorithms":
-			if err := awsAwsjson11_deserializeDocumentKeyAgreementAlgorithmSpecList(&sv.KeyAgreementAlgorithms, value); err != nil {
-				return err
-			}
-
 		case "KeyId":
 			if value != nil {
 				jtv, ok := value.(string)
@@ -10271,7 +9886,7 @@ func awsAwsjson11_deserializeDocumentKeyUnavailableException(v **types.KeyUnavai
 
 	for key, value := range shape {
 		switch key {
-		case "message", "Message":
+		case "message":
 			if value != nil {
 				jtv, ok := value.(string)
 				if !ok {
@@ -10311,7 +9926,7 @@ func awsAwsjson11_deserializeDocumentKMSInternalException(v **types.KMSInternalE
 
 	for key, value := range shape {
 		switch key {
-		case "message", "Message":
+		case "message":
 			if value != nil {
 				jtv, ok := value.(string)
 				if !ok {
@@ -10351,7 +9966,7 @@ func awsAwsjson11_deserializeDocumentKMSInvalidMacException(v **types.KMSInvalid
 
 	for key, value := range shape {
 		switch key {
-		case "message", "Message":
+		case "message":
 			if value != nil {
 				jtv, ok := value.(string)
 				if !ok {
@@ -10391,7 +10006,7 @@ func awsAwsjson11_deserializeDocumentKMSInvalidSignatureException(v **types.KMSI
 
 	for key, value := range shape {
 		switch key {
-		case "message", "Message":
+		case "message":
 			if value != nil {
 				jtv, ok := value.(string)
 				if !ok {
@@ -10431,7 +10046,7 @@ func awsAwsjson11_deserializeDocumentKMSInvalidStateException(v **types.KMSInval
 
 	for key, value := range shape {
 		switch key {
-		case "message", "Message":
+		case "message":
 			if value != nil {
 				jtv, ok := value.(string)
 				if !ok {
@@ -10471,7 +10086,7 @@ func awsAwsjson11_deserializeDocumentLimitExceededException(v **types.LimitExcee
 
 	for key, value := range shape {
 		switch key {
-		case "message", "Message":
+		case "message":
 			if value != nil {
 				jtv, ok := value.(string)
 				if !ok {
@@ -10547,7 +10162,7 @@ func awsAwsjson11_deserializeDocumentMalformedPolicyDocumentException(v **types.
 
 	for key, value := range shape {
 		switch key {
-		case "message", "Message":
+		case "message":
 			if value != nil {
 				jtv, ok := value.(string)
 				if !ok {
@@ -10720,7 +10335,7 @@ func awsAwsjson11_deserializeDocumentNotFoundException(v **types.NotFoundExcepti
 
 	for key, value := range shape {
 		switch key {
-		case "message", "Message":
+		case "message":
 			if value != nil {
 				jtv, ok := value.(string)
 				if !ok {
@@ -10980,7 +10595,7 @@ func awsAwsjson11_deserializeDocumentTagException(v **types.TagException, value 
 
 	for key, value := range shape {
 		switch key {
-		case "message", "Message":
+		case "message":
 			if value != nil {
 				jtv, ok := value.(string)
 				if !ok {
@@ -11054,7 +10669,7 @@ func awsAwsjson11_deserializeDocumentUnsupportedOperationException(v **types.Uns
 
 	for key, value := range shape {
 		switch key {
-		case "message", "Message":
+		case "message":
 			if value != nil {
 				jtv, ok := value.(string)
 				if !ok {
@@ -11094,7 +10709,7 @@ func awsAwsjson11_deserializeDocumentXksKeyAlreadyInUseException(v **types.XksKe
 
 	for key, value := range shape {
 		switch key {
-		case "message", "Message":
+		case "message":
 			if value != nil {
 				jtv, ok := value.(string)
 				if !ok {
@@ -11174,7 +10789,7 @@ func awsAwsjson11_deserializeDocumentXksKeyInvalidConfigurationException(v **typ
 
 	for key, value := range shape {
 		switch key {
-		case "message", "Message":
+		case "message":
 			if value != nil {
 				jtv, ok := value.(string)
 				if !ok {
@@ -11214,7 +10829,7 @@ func awsAwsjson11_deserializeDocumentXksKeyNotFoundException(v **types.XksKeyNot
 
 	for key, value := range shape {
 		switch key {
-		case "message", "Message":
+		case "message":
 			if value != nil {
 				jtv, ok := value.(string)
 				if !ok {
@@ -11330,7 +10945,7 @@ func awsAwsjson11_deserializeDocumentXksProxyIncorrectAuthenticationCredentialEx
 
 	for key, value := range shape {
 		switch key {
-		case "message", "Message":
+		case "message":
 			if value != nil {
 				jtv, ok := value.(string)
 				if !ok {
@@ -11370,7 +10985,7 @@ func awsAwsjson11_deserializeDocumentXksProxyInvalidConfigurationException(v **t
 
 	for key, value := range shape {
 		switch key {
-		case "message", "Message":
+		case "message":
 			if value != nil {
 				jtv, ok := value.(string)
 				if !ok {
@@ -11410,7 +11025,7 @@ func awsAwsjson11_deserializeDocumentXksProxyInvalidResponseException(v **types.
 
 	for key, value := range shape {
 		switch key {
-		case "message", "Message":
+		case "message":
 			if value != nil {
 				jtv, ok := value.(string)
 				if !ok {
@@ -11450,7 +11065,7 @@ func awsAwsjson11_deserializeDocumentXksProxyUriEndpointInUseException(v **types
 
 	for key, value := range shape {
 		switch key {
-		case "message", "Message":
+		case "message":
 			if value != nil {
 				jtv, ok := value.(string)
 				if !ok {
@@ -11490,7 +11105,7 @@ func awsAwsjson11_deserializeDocumentXksProxyUriInUseException(v **types.XksProx
 
 	for key, value := range shape {
 		switch key {
-		case "message", "Message":
+		case "message":
 			if value != nil {
 				jtv, ok := value.(string)
 				if !ok {
@@ -11530,7 +11145,7 @@ func awsAwsjson11_deserializeDocumentXksProxyUriUnreachableException(v **types.X
 
 	for key, value := range shape {
 		switch key {
-		case "message", "Message":
+		case "message":
 			if value != nil {
 				jtv, ok := value.(string)
 				if !ok {
@@ -11570,7 +11185,7 @@ func awsAwsjson11_deserializeDocumentXksProxyVpcEndpointServiceInUseException(v 
 
 	for key, value := range shape {
 		switch key {
-		case "message", "Message":
+		case "message":
 			if value != nil {
 				jtv, ok := value.(string)
 				if !ok {
@@ -11610,7 +11225,7 @@ func awsAwsjson11_deserializeDocumentXksProxyVpcEndpointServiceInvalidConfigurat
 
 	for key, value := range shape {
 		switch key {
-		case "message", "Message":
+		case "message":
 			if value != nil {
 				jtv, ok := value.(string)
 				if !ok {
@@ -11650,7 +11265,7 @@ func awsAwsjson11_deserializeDocumentXksProxyVpcEndpointServiceNotFoundException
 
 	for key, value := range shape {
 		switch key {
-		case "message", "Message":
+		case "message":
 			if value != nil {
 				jtv, ok := value.(string)
 				if !ok {
@@ -11961,90 +11576,6 @@ func awsAwsjson11_deserializeOpDocumentDeleteCustomKeyStoreOutput(v **DeleteCust
 
 	for key, value := range shape {
 		switch key {
-		default:
-			_, _ = key, value
-
-		}
-	}
-	*v = sv
-	return nil
-}
-
-func awsAwsjson11_deserializeOpDocumentDeriveSharedSecretOutput(v **DeriveSharedSecretOutput, value interface{}) error {
-	if v == nil {
-		return fmt.Errorf("unexpected nil of type %T", v)
-	}
-	if value == nil {
-		return nil
-	}
-
-	shape, ok := value.(map[string]interface{})
-	if !ok {
-		return fmt.Errorf("unexpected JSON type %v", value)
-	}
-
-	var sv *DeriveSharedSecretOutput
-	if *v == nil {
-		sv = &DeriveSharedSecretOutput{}
-	} else {
-		sv = *v
-	}
-
-	for key, value := range shape {
-		switch key {
-		case "CiphertextForRecipient":
-			if value != nil {
-				jtv, ok := value.(string)
-				if !ok {
-					return fmt.Errorf("expected CiphertextType to be []byte, got %T instead", value)
-				}
-				dv, err := base64.StdEncoding.DecodeString(jtv)
-				if err != nil {
-					return fmt.Errorf("failed to base64 decode CiphertextType, %w", err)
-				}
-				sv.CiphertextForRecipient = dv
-			}
-
-		case "KeyAgreementAlgorithm":
-			if value != nil {
-				jtv, ok := value.(string)
-				if !ok {
-					return fmt.Errorf("expected KeyAgreementAlgorithmSpec to be of type string, got %T instead", value)
-				}
-				sv.KeyAgreementAlgorithm = types.KeyAgreementAlgorithmSpec(jtv)
-			}
-
-		case "KeyId":
-			if value != nil {
-				jtv, ok := value.(string)
-				if !ok {
-					return fmt.Errorf("expected KeyIdType to be of type string, got %T instead", value)
-				}
-				sv.KeyId = ptr.String(jtv)
-			}
-
-		case "KeyOrigin":
-			if value != nil {
-				jtv, ok := value.(string)
-				if !ok {
-					return fmt.Errorf("expected OriginType to be of type string, got %T instead", value)
-				}
-				sv.KeyOrigin = types.OriginType(jtv)
-			}
-
-		case "SharedSecret":
-			if value != nil {
-				jtv, ok := value.(string)
-				if !ok {
-					return fmt.Errorf("expected PlaintextType to be []byte, got %T instead", value)
-				}
-				dv, err := base64.StdEncoding.DecodeString(jtv)
-				if err != nil {
-					return fmt.Errorf("failed to base64 decode PlaintextType, %w", err)
-				}
-				sv.SharedSecret = dv
-			}
-
 		default:
 			_, _ = key, value
 
@@ -12922,11 +12453,6 @@ func awsAwsjson11_deserializeOpDocumentGetPublicKeyOutput(v **GetPublicKeyOutput
 
 		case "EncryptionAlgorithms":
 			if err := awsAwsjson11_deserializeDocumentEncryptionAlgorithmSpecList(&sv.EncryptionAlgorithms, value); err != nil {
-				return err
-			}
-
-		case "KeyAgreementAlgorithms":
-			if err := awsAwsjson11_deserializeDocumentKeyAgreementAlgorithmSpecList(&sv.KeyAgreementAlgorithms, value); err != nil {
 				return err
 			}
 

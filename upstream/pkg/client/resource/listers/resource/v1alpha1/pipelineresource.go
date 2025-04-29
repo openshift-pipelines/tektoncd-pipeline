@@ -20,8 +20,8 @@ package v1alpha1
 
 import (
 	v1alpha1 "github.com/tektoncd/pipeline/pkg/apis/resource/v1alpha1"
+	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/labels"
-	"k8s.io/client-go/listers"
 	"k8s.io/client-go/tools/cache"
 )
 
@@ -38,17 +38,25 @@ type PipelineResourceLister interface {
 
 // pipelineResourceLister implements the PipelineResourceLister interface.
 type pipelineResourceLister struct {
-	listers.ResourceIndexer[*v1alpha1.PipelineResource]
+	indexer cache.Indexer
 }
 
 // NewPipelineResourceLister returns a new PipelineResourceLister.
 func NewPipelineResourceLister(indexer cache.Indexer) PipelineResourceLister {
-	return &pipelineResourceLister{listers.New[*v1alpha1.PipelineResource](indexer, v1alpha1.Resource("pipelineresource"))}
+	return &pipelineResourceLister{indexer: indexer}
+}
+
+// List lists all PipelineResources in the indexer.
+func (s *pipelineResourceLister) List(selector labels.Selector) (ret []*v1alpha1.PipelineResource, err error) {
+	err = cache.ListAll(s.indexer, selector, func(m interface{}) {
+		ret = append(ret, m.(*v1alpha1.PipelineResource))
+	})
+	return ret, err
 }
 
 // PipelineResources returns an object that can list and get PipelineResources.
 func (s *pipelineResourceLister) PipelineResources(namespace string) PipelineResourceNamespaceLister {
-	return pipelineResourceNamespaceLister{listers.NewNamespaced[*v1alpha1.PipelineResource](s.ResourceIndexer, namespace)}
+	return pipelineResourceNamespaceLister{indexer: s.indexer, namespace: namespace}
 }
 
 // PipelineResourceNamespaceLister helps list and get PipelineResources.
@@ -66,5 +74,26 @@ type PipelineResourceNamespaceLister interface {
 // pipelineResourceNamespaceLister implements the PipelineResourceNamespaceLister
 // interface.
 type pipelineResourceNamespaceLister struct {
-	listers.ResourceIndexer[*v1alpha1.PipelineResource]
+	indexer   cache.Indexer
+	namespace string
+}
+
+// List lists all PipelineResources in the indexer for a given namespace.
+func (s pipelineResourceNamespaceLister) List(selector labels.Selector) (ret []*v1alpha1.PipelineResource, err error) {
+	err = cache.ListAllByNamespace(s.indexer, s.namespace, selector, func(m interface{}) {
+		ret = append(ret, m.(*v1alpha1.PipelineResource))
+	})
+	return ret, err
+}
+
+// Get retrieves the PipelineResource from the indexer for a given namespace and name.
+func (s pipelineResourceNamespaceLister) Get(name string) (*v1alpha1.PipelineResource, error) {
+	obj, exists, err := s.indexer.GetByKey(s.namespace + "/" + name)
+	if err != nil {
+		return nil, err
+	}
+	if !exists {
+		return nil, errors.NewNotFound(v1alpha1.Resource("pipelineresource"), name)
+	}
+	return obj.(*v1alpha1.PipelineResource), nil
 }

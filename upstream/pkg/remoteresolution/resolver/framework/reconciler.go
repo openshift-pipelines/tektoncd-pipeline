@@ -118,18 +118,9 @@ func (r *Reconciler) resolve(ctx context.Context, key string, rr *v1beta1.Resolu
 	errChan := make(chan error)
 	resourceChan := make(chan framework.ResolvedResource)
 
-	paramsMap := make(map[string]string)
-	for _, p := range rr.Spec.Params {
-		paramsMap[p.Name] = p.Value.StringVal
-	}
-
 	timeoutDuration := defaultMaximumResolutionDuration
 	if timed, ok := r.resolver.(framework.TimedResolution); ok {
-		var err error
-		timeoutDuration, err = timed.GetResolutionTimeout(ctx, defaultMaximumResolutionDuration, paramsMap)
-		if err != nil {
-			return err
-		}
+		timeoutDuration = timed.GetResolutionTimeout(ctx, defaultMaximumResolutionDuration)
 	}
 
 	// A new context is created for resolution so that timeouts can

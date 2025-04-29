@@ -47,7 +47,7 @@ bash ${REPO_ROOT_DIR}/hack/generate-groups.sh "deepcopy,client,informer,lister" 
   github.com/tektoncd/pipeline/pkg/client github.com/tektoncd/pipeline/pkg/apis \
   "pipeline:v1alpha1,v1beta1,v1" \
   --go-header-file ${REPO_ROOT_DIR}/hack/boilerplate/boilerplate.go.txt
-# This generates deepcopy,client,informer and lister for the resolution package (v1alpha1, v1beta1)
+# This generates deepcopy,client,informer and lister for the resolution package (v1alpha1)
 bash ${REPO_ROOT_DIR}/hack/generate-groups.sh "deepcopy,client,informer,lister" \
   github.com/tektoncd/pipeline/pkg/client/resolution github.com/tektoncd/pipeline/pkg/apis \
   "resolution:v1alpha1,v1beta1" \
@@ -55,29 +55,29 @@ bash ${REPO_ROOT_DIR}/hack/generate-groups.sh "deepcopy,client,informer,lister" 
 
 # Depends on generate-groups.sh to install bin/deepcopy-gen
 ${PREFIX}/deepcopy-gen \
-  --output-file zz_generated.deepcopy.go \
+  -O zz_generated.deepcopy \
   --go-header-file ${REPO_ROOT_DIR}/hack/boilerplate/boilerplate.go.txt \
-  github.com/tektoncd/pipeline/pkg/apis/config
+  -i github.com/tektoncd/pipeline/pkg/apis/config
 
 ${PREFIX}/deepcopy-gen \
-  --output-file zz_generated.deepcopy.go \
+  -O zz_generated.deepcopy \
   --go-header-file ${REPO_ROOT_DIR}/hack/boilerplate/boilerplate.go.txt \
-  github.com/tektoncd/pipeline/pkg/spire/config
+  -i github.com/tektoncd/pipeline/pkg/spire/config
 
 ${PREFIX}/deepcopy-gen \
-  --output-file zz_generated.deepcopy.go \
+  -O zz_generated.deepcopy \
   --go-header-file ${REPO_ROOT_DIR}/hack/boilerplate/boilerplate.go.txt \
-  github.com/tektoncd/pipeline/pkg/apis/config/resolver
+  -i github.com/tektoncd/pipeline/pkg/apis/config/resolver
 
 ${PREFIX}/deepcopy-gen \
-  --output-file zz_generated.deepcopy.go \
+  -O zz_generated.deepcopy \
   --go-header-file ${REPO_ROOT_DIR}/hack/boilerplate/boilerplate.go.txt \
-  github.com/tektoncd/pipeline/pkg/apis/pipeline/pod
+-i github.com/tektoncd/pipeline/pkg/apis/pipeline/pod
 
 ${PREFIX}/deepcopy-gen \
-  --output-file zz_generated.deepcopy.go \
+  -O zz_generated.deepcopy \
   --go-header-file ${REPO_ROOT_DIR}/hack/boilerplate/boilerplate.go.txt \
-  github.com/tektoncd/pipeline/pkg/apis/run/v1alpha1
+-i github.com/tektoncd/pipeline/pkg/apis/run/v1alpha1
 
 # Knative Injection
 
@@ -109,6 +109,3 @@ ${REPO_ROOT_DIR}/hack/update-openapigen.sh
 
 # Make sure the generated API reference docs are up-to-date
 ${REPO_ROOT_DIR}/hack/update-reference-docs.sh
-
-# Make sure the CRD's structural OpenAPI schema are up-to-date
-${REPO_ROOT_DIR}/hack/update-schemas.sh

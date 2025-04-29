@@ -21,8 +21,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"log/slog"
-
 	"log"
 	"os"
 	"os/exec"
@@ -33,13 +31,18 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/google/cel-go/cel"
 	"github.com/tektoncd/pipeline/internal/artifactref"
-	v1 "github.com/tektoncd/pipeline/pkg/apis/pipeline/v1/types"
-	"github.com/tektoncd/pipeline/pkg/entrypoint/pipeline"
+	"github.com/tektoncd/pipeline/pkg/apis/config"
+	"github.com/tektoncd/pipeline/pkg/apis/pipeline"
+	v1 "github.com/tektoncd/pipeline/pkg/apis/pipeline/v1"
 	"github.com/tektoncd/pipeline/pkg/internal/resultref"
+	"github.com/tektoncd/pipeline/pkg/pod"
 	"github.com/tektoncd/pipeline/pkg/result"
+	"github.com/tektoncd/pipeline/pkg/spire"
 	"github.com/tektoncd/pipeline/pkg/termination"
+
+	"github.com/google/cel-go/cel"
+	"go.uber.org/zap"
 )
 
 // RFC3339 with millisecond
@@ -47,41 +50,6 @@ const (
 	timeFormat      = "2006-01-02T15:04:05.000Z07:00"
 	ContinueOnError = "continue"
 	FailOnError     = "stopAndFail"
-)
-
-const (
-	breakpointExitSuffix                     = ".breakpointexit"
-	breakpointBeforeStepSuffix               = ".beforestepexit"
-	ResultExtractionMethodTerminationMessage = "termination-message"
-	TerminationReasonSkipped                 = "Skipped"
-	TerminationReasonCancelled               = "Cancelled"
-	TerminationReasonTimeoutExceeded         = "TimeoutExceeded"
-	// DownwardMountCancelFile is cancellation file mount to step, entrypoint will check this file to cancel the step.
-	downwardMountPoint      = "/tekton/downward"
-	downwardMountCancelFile = "cancel"
-	stepPrefix              = "step-"
-)
-const (
-	// CredsDir is the directory where credentials are placed to meet the legacy credentials
-	// helpers image (aka "creds-init") contract
-	CredsDir = "/tekton/creds" // #nosec
-)
-
-var DownwardMountCancelFile string
-
-func init() {
-	DownwardMountCancelFile = filepath.Join(downwardMountPoint, downwardMountCancelFile)
-}
-
-// DebugBeforeStepError is an error means mark before step breakpoint failure
-type DebugBeforeStepError string
-
-func (e DebugBeforeStepError) Error() string {
-	return string(e)
-}
-
-var (
-	errDebugBeforeStep = DebugBeforeStepError("before step breakpoint error file, user decided to skip the current step execution")
 )
 
 // ScriptDir for testing
@@ -154,8 +122,6 @@ type Entrypointer struct {
 	Timeout *time.Duration
 	// BreakpointOnFailure helps determine if entrypoint execution needs to adapt debugging requirements
 	BreakpointOnFailure bool
-	// DebugBeforeStep help user attach container before execution
-	DebugBeforeStep bool
 	// OnError defines exiting behavior of the entrypoint
 	// set it to "stopAndFail" to indicate the entrypoint to exit the taskRun if the container exits with non zero exit code
 	// set it to "continue" to indicate the entrypoint to continue executing the rest of the steps irrespective of the container exit code
@@ -163,7 +129,7 @@ type Entrypointer struct {
 	// StepMetadataDir is the directory for a step where the step related metadata can be stored
 	StepMetadataDir string
 	// SpireWorkloadAPI connects to spire and does obtains SVID based on taskrun
-	SpireWorkloadAPI EntrypointerAPIClient
+	SpireWorkloadAPI spire.EntrypointerAPIClient
 	// ResultsDirectory is the directory to find results, defaults to pipeline.DefaultResultPath
 	ResultsDirectory string
 	// ResultExtractionMethod is the method using which the controller extracts the results from the task pod.
@@ -196,11 +162,15 @@ type PostWriter interface {
 // Go optionally waits for a file, runs the command, and writes a
 // post file.
 func (e Entrypointer) Go() error {
+	prod, _ := zap.NewProduction()
+	logger := prod.Sugar()
+
 	output := []result.RunResult{}
 	defer func() {
 		if wErr := termination.WriteMessage(e.TerminationPath, output); wErr != nil {
-			log.Fatalf("Error while writing message: %s", wErr)
+			logger.Fatalf("Error while writing message: %s", wErr)
 		}
+		_ = logger.Sync()
 	}()
 
 	if err := os.MkdirAll(filepath.Join(e.StepMetadataDir, "results"), os.ModePerm); err != nil {
@@ -224,16 +194,11 @@ func (e Entrypointer) Go() error {
 			})
 
 			if errors.Is(err, ErrSkipPreviousStepFailed) {
-				output = append(output, e.outputRunResult(TerminationReasonSkipped))
+				output = append(output, e.outputRunResult(pod.TerminationReasonSkipped))
 			}
 
 			return err
 		}
-	}
-
-	var err error
-	if e.DebugBeforeStep {
-		err = e.waitBeforeStepDebug()
 	}
 
 	output = append(output, result.RunResult{
@@ -242,6 +207,7 @@ func (e Entrypointer) Go() error {
 		ResultType: result.InternalTektonResultType,
 	})
 
+	var err error
 	if e.Timeout != nil && *e.Timeout < time.Duration(0) {
 		err = errors.New("negative timeout specified")
 	}
@@ -249,10 +215,10 @@ func (e Entrypointer) Go() error {
 	var cancel context.CancelFunc
 	if err == nil {
 		if err := e.applyStepResultSubstitutions(pipeline.StepsDir); err != nil {
-			slog.Error("Error while substituting step results:", slog.Any("error", err))
+			logger.Error("Error while substituting step results: ", err)
 		}
 		if err := e.applyStepArtifactSubstitutions(pipeline.StepsDir); err != nil {
-			slog.Error("Error while substituting step artifacts:", slog.Any("error", err))
+			logger.Error("Error while substituting step artifacts: ", err)
 		}
 
 		ctx, cancel = context.WithCancel(ctx)
@@ -263,7 +229,7 @@ func (e Entrypointer) Go() error {
 		// start a goroutine to listen for cancellation file
 		go func() {
 			if err := e.waitingCancellation(ctx, cancel); err != nil && (!IsContextCanceledError(err) && !IsContextDeadlineError(err)) {
-				slog.Error("Error while waiting for cancellation", slog.Any("error", err))
+				logger.Error("Error while waiting for cancellation", zap.Error(err))
 			}
 		}()
 		allowExec, err1 := e.allowExec()
@@ -274,8 +240,8 @@ func (e Entrypointer) Go() error {
 		case allowExec:
 			err = e.Runner.Run(ctx, e.Command...)
 		default:
-			slog.Info("Step was skipped due to when expressions were evaluated to false.")
-			output = append(output, e.outputRunResult(TerminationReasonSkipped))
+			logger.Info("Step was skipped due to when expressions were evaluated to false.")
+			output = append(output, e.outputRunResult(pod.TerminationReasonSkipped))
 			e.WritePostFile(e.PostFile, nil)
 			e.WriteExitCodeFile(e.StepMetadataDir, "0")
 			return nil
@@ -284,18 +250,16 @@ func (e Entrypointer) Go() error {
 
 	var ee *exec.ExitError
 	switch {
-	case err != nil && errors.Is(err, errDebugBeforeStep):
-		e.WritePostFile(e.PostFile, err)
 	case err != nil && errors.Is(err, ErrContextCanceled):
-		slog.Info("Step was canceling")
-		output = append(output, e.outputRunResult(TerminationReasonCancelled))
+		logger.Info("Step was canceling")
+		output = append(output, e.outputRunResult(pod.TerminationReasonCancelled))
 		e.WritePostFile(e.PostFile, ErrContextCanceled)
 		e.WriteExitCodeFile(e.StepMetadataDir, syscall.SIGKILL.String())
 	case errors.Is(err, ErrContextDeadlineExceeded):
 		e.WritePostFile(e.PostFile, err)
-		output = append(output, e.outputRunResult(TerminationReasonTimeoutExceeded))
+		output = append(output, e.outputRunResult(pod.TerminationReasonTimeoutExceeded))
 	case err != nil && e.BreakpointOnFailure:
-		slog.Info("Skipping writing to PostFile")
+		logger.Info("Skipping writing to PostFile")
 	case e.OnError == ContinueOnError && errors.As(err, &ee):
 		// with continue on error and an ExitError, write non-zero exit code and a post file
 		exitCode := strconv.Itoa(ee.ExitCode())
@@ -323,8 +287,7 @@ func (e Entrypointer) Go() error {
 			resultPath = e.ResultsDirectory
 		}
 		if err := e.readResultsFromDisk(ctx, resultPath, result.TaskRunResultType); err != nil {
-			slog.Error("Error while substituting step artifacts:", slog.Any("error", err))
-			return err
+			logger.Fatalf("Error while handling results: %s", err)
 		}
 	}
 	if len(e.StepResults) >= 1 && e.StepResults[0] != "" {
@@ -333,13 +296,30 @@ func (e Entrypointer) Go() error {
 			stepResultPath = e.ResultsDirectory
 		}
 		if err := e.readResultsFromDisk(ctx, stepResultPath, result.StepResultType); err != nil {
-			slog.Error("Error while substituting step artifacts:", slog.Any("error", err))
-			return err
+			logger.Fatalf("Error while handling step results: %s", err)
 		}
 	}
 
-	if e.ResultExtractionMethod == ResultExtractionMethodTerminationMessage {
-		e.appendArtifactOutputs(&output)
+	if e.ResultExtractionMethod == config.ResultExtractionMethodTerminationMessage {
+		// step artifacts
+		fp := filepath.Join(e.StepMetadataDir, "artifacts", "provenance.json")
+		artifacts, err := readArtifacts(fp, result.StepArtifactsResultType)
+		if err != nil {
+			logger.Fatalf("Error while handling step artifacts: %s", err)
+		}
+		output = append(output, artifacts...)
+
+		artifactsDir := pipeline.ArtifactsDir
+		// task artifacts
+		if e.ArtifactsDirectory != "" {
+			artifactsDir = e.ArtifactsDirectory
+		}
+		fp = filepath.Join(artifactsDir, "provenance.json")
+		artifacts, err = readArtifacts(fp, result.TaskRunArtifactsResultType)
+		if err != nil {
+			logger.Fatalf("Error while handling task artifacts: %s", err)
+		}
+		output = append(output, artifacts...)
 	}
 
 	return err
@@ -354,28 +334,6 @@ func readArtifacts(fp string, resultType result.ResultType) ([]result.RunResult,
 		return nil, err
 	}
 	return []result.RunResult{{Key: fp, Value: string(file), ResultType: resultType}}, nil
-}
-
-func (e Entrypointer) appendArtifactOutputs(output *[]result.RunResult) {
-	// step artifacts
-	fp := filepath.Join(e.StepMetadataDir, "artifacts", "provenance.json")
-	artifacts, err := readArtifacts(fp, result.StepArtifactsResultType)
-	if err != nil {
-		log.Fatalf("Error while handling step artifacts: %s", err)
-	}
-	*output = append(*output, artifacts...)
-
-	artifactsDir := pipeline.ArtifactsDir
-	// task artifacts
-	if e.ArtifactsDirectory != "" {
-		artifactsDir = e.ArtifactsDirectory
-	}
-	fp = filepath.Join(artifactsDir, "provenance.json")
-	artifacts, err = readArtifacts(fp, result.TaskRunArtifactsResultType)
-	if err != nil {
-		log.Fatalf("Error while handling task artifacts: %s", err)
-	}
-	*output = append(*output, artifacts...)
 }
 
 func (e Entrypointer) allowExec() (bool, error) {
@@ -422,18 +380,6 @@ func (e Entrypointer) allowExec() (bool, error) {
 	return when.AllowsExecution(m), nil
 }
 
-func (e Entrypointer) waitBeforeStepDebug() error {
-	log.Println(`debug before step breakpoint has taken effect, waiting for user's decision:
-1) continue, use cmd: /tekton/debug/scripts/debug-beforestep-continue
-2) fail-continue, use cmd: /tekton/debug/scripts/debug-beforestep-fail-continue`)
-	breakpointBeforeStepPostFile := e.PostFile + breakpointBeforeStepSuffix
-	if waitErr := e.Waiter.Wait(context.Background(), breakpointBeforeStepPostFile, false, false); waitErr != nil {
-		log.Println("error occurred while waiting for " + breakpointBeforeStepPostFile + " : " + errDebugBeforeStep.Error())
-		return errDebugBeforeStep
-	}
-	return nil
-}
-
 func (e Entrypointer) readResultsFromDisk(ctx context.Context, resultDir string, resultType result.ResultType) error {
 	output := []result.RunResult{}
 	results := e.Results
@@ -458,14 +404,16 @@ func (e Entrypointer) readResultsFromDisk(ctx context.Context, resultDir string,
 		})
 	}
 
-	signed, err := signResults(ctx, e.SpireWorkloadAPI, output)
-	if err != nil {
-		return err
+	if e.SpireWorkloadAPI != nil {
+		signed, err := e.SpireWorkloadAPI.Sign(ctx, output)
+		if err != nil {
+			return err
+		}
+		output = append(output, signed...)
 	}
-	output = append(output, signed...)
 
 	// push output to termination path
-	if e.ResultExtractionMethod == ResultExtractionMethodTerminationMessage && len(output) != 0 {
+	if e.ResultExtractionMethod == config.ResultExtractionMethodTerminationMessage && len(output) != 0 {
 		if err := termination.WriteMessage(e.TerminationPath, output); err != nil {
 			return err
 		}
@@ -503,44 +451,17 @@ func (e Entrypointer) WriteExitCodeFile(stepPath, content string) {
 
 // waitingCancellation waiting cancellation file, if no error occurs, call cancelFunc to cancel the context
 func (e Entrypointer) waitingCancellation(ctx context.Context, cancel context.CancelFunc) error {
-	if err := e.Waiter.Wait(ctx, DownwardMountCancelFile, true, false); err != nil {
+	if err := e.Waiter.Wait(ctx, pod.DownwardMountCancelFile, true, false); err != nil {
 		return err
 	}
 	cancel()
 	return nil
 }
 
-// CheckForBreakpointOnFailure if step up breakpoint on failure
-// waiting breakpointExitPostFile to be written
-func (e Entrypointer) CheckForBreakpointOnFailure() {
-	if e.BreakpointOnFailure {
-		log.Println(`debug onFailure breakpoint has taken effect, waiting for user's decision:
-1) continue, use cmd: /tekton/debug/scripts/debug-continue
-2) fail-continue, use cmd: /tekton/debug/scripts/debug-fail-continue`)
-		breakpointExitPostFile := e.PostFile + breakpointExitSuffix
-		if waitErr := e.Waiter.Wait(context.Background(), breakpointExitPostFile, false, false); waitErr != nil {
-			log.Println("error occurred while waiting for " + breakpointExitPostFile + " : " + waitErr.Error())
-		}
-		// get exitcode from .breakpointexit
-		exitCode, readErr := e.BreakpointExitCode(breakpointExitPostFile)
-		// if readErr exists, the exitcode with default to 0 as we would like
-		// to encourage to continue running the next steps in the taskRun
-		if readErr != nil {
-			log.Println("error occurred while reading breakpoint exit code : " + readErr.Error())
-		}
-		os.Exit(exitCode)
-	}
-}
-
-// GetContainerName prefixes the input name with "step-"
-func GetContainerName(name string) string {
-	return fmt.Sprintf("%s%s", stepPrefix, name)
-}
-
 // loadStepResult reads the step result file and returns the string, array or object result value.
 func loadStepResult(stepDir string, stepName string, resultName string) (v1.ResultValue, error) {
 	v := v1.ResultValue{}
-	fp := getStepResultPath(stepDir, GetContainerName(stepName), resultName)
+	fp := getStepResultPath(stepDir, pod.GetContainerName(stepName), resultName)
 	fileContents, err := os.ReadFile(fp)
 	if err != nil {
 		return v, err

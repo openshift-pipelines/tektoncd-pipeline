@@ -157,8 +157,7 @@ func TestTaskRunConversion(t *testing.T) {
 				Spec: v1beta1.TaskRunSpec{
 					Debug: &v1beta1.TaskRunDebug{
 						Breakpoints: &v1beta1.TaskBreakpoints{
-							OnFailure:   "enabled",
-							BeforeSteps: []string{"step-1", "step-2"},
+							OnFailure: "enabled",
 						},
 					},
 					Params: v1beta1.Params{{
@@ -239,17 +238,21 @@ func TestTaskRunConversion(t *testing.T) {
 							},
 						},
 					},
-					StepOverrides: []v1beta1.TaskRunStepOverride{{
-						Name: "task-1",
-						Resources: corev1.ResourceRequirements{
-							Requests: corev1.ResourceList{corev1.ResourceMemory: corev1resources.MustParse("1Gi")},
-						}},
+					StepOverrides: []v1beta1.TaskRunStepOverride{
+						{
+							Name: "task-1",
+							Resources: corev1.ResourceRequirements{
+								Requests: corev1.ResourceList{corev1.ResourceMemory: corev1resources.MustParse("1Gi")},
+							},
+						},
 					},
-					SidecarOverrides: []v1beta1.TaskRunSidecarOverride{{
-						Name: "task-1",
-						Resources: corev1.ResourceRequirements{
-							Requests: corev1.ResourceList{corev1.ResourceMemory: corev1resources.MustParse("1Gi")},
-						}},
+					SidecarOverrides: []v1beta1.TaskRunSidecarOverride{
+						{
+							Name: "task-1",
+							Resources: corev1.ResourceRequirements{
+								Requests: corev1.ResourceList{corev1.ResourceMemory: corev1resources.MustParse("1Gi")},
+							},
+						},
 					},
 					ComputeResources: &corev1.ResourceRequirements{
 						Requests: corev1.ResourceList{
@@ -277,7 +280,9 @@ func TestTaskRunConversion(t *testing.T) {
 							ContainerState: corev1.ContainerState{
 								Terminated: &corev1.ContainerStateTerminated{
 									ExitCode: 123,
-								}},
+								},
+							},
+
 							Name:          "failure",
 							ContainerName: "step-failure",
 							ImageID:       "image-id",
@@ -288,6 +293,7 @@ func TestTaskRunConversion(t *testing.T) {
 									ExitCode: 123,
 								},
 							},
+
 							Name:          "failure",
 							ContainerName: "step-failure",
 							ImageID:       "image-id",

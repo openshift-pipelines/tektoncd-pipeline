@@ -277,7 +277,6 @@ const (
 	GrantOperationGenerateDataKeyPairWithoutPlaintext GrantOperation = "GenerateDataKeyPairWithoutPlaintext"
 	GrantOperationGenerateMac                         GrantOperation = "GenerateMac"
 	GrantOperationVerifyMac                           GrantOperation = "VerifyMac"
-	GrantOperationDeriveSharedSecret                  GrantOperation = "DeriveSharedSecret"
 )
 
 // Values returns all known values for GrantOperation. Note that this can be
@@ -302,24 +301,6 @@ func (GrantOperation) Values() []GrantOperation {
 		"GenerateDataKeyPairWithoutPlaintext",
 		"GenerateMac",
 		"VerifyMac",
-		"DeriveSharedSecret",
-	}
-}
-
-type KeyAgreementAlgorithmSpec string
-
-// Enum values for KeyAgreementAlgorithmSpec
-const (
-	KeyAgreementAlgorithmSpecEcdh KeyAgreementAlgorithmSpec = "ECDH"
-)
-
-// Values returns all known values for KeyAgreementAlgorithmSpec. Note that this
-// can be expanded in the future, and so it is only as up to date as the client.
-//
-// The ordering of this slice is not guaranteed to be stable across updates.
-func (KeyAgreementAlgorithmSpec) Values() []KeyAgreementAlgorithmSpec {
-	return []KeyAgreementAlgorithmSpec{
-		"ECDH",
 	}
 }
 
@@ -438,7 +419,6 @@ const (
 	KeyUsageTypeSignVerify        KeyUsageType = "SIGN_VERIFY"
 	KeyUsageTypeEncryptDecrypt    KeyUsageType = "ENCRYPT_DECRYPT"
 	KeyUsageTypeGenerateVerifyMac KeyUsageType = "GENERATE_VERIFY_MAC"
-	KeyUsageTypeKeyAgreement      KeyUsageType = "KEY_AGREEMENT"
 )
 
 // Values returns all known values for KeyUsageType. Note that this can be
@@ -450,7 +430,6 @@ func (KeyUsageType) Values() []KeyUsageType {
 		"SIGN_VERIFY",
 		"ENCRYPT_DECRYPT",
 		"GENERATE_VERIFY_MAC",
-		"KEY_AGREEMENT",
 	}
 }
 

@@ -22,6 +22,7 @@ import (
 	"fmt"
 	"reflect"
 	"slices"
+	"strconv"
 	"strings"
 	"time"
 
@@ -152,6 +153,10 @@ func (c *Reconciler) ReconcileKind(ctx context.Context, tr *v1.TaskRun) pkgrecon
 		// and may not have had all of the assumed default specified.
 		tr.SetDefaults(ctx)
 
+		// Check if current k8s version is less than 1.29
+		// Since Kubernetes Major version cannot be 0 and if it's 2 then sidecar will be in
+		// we are only concerned about major version 1 and if the minor is less than 29 then
+		// we need to do the current logic
 		useTektonSidecar := true
 		if config.FromContextOrDefaults(ctx).FeatureFlags.EnableKubernetesSidecar {
 			dc := c.KubeClientSet.Discovery()
@@ -159,7 +164,9 @@ func (c *Reconciler) ReconcileKind(ctx context.Context, tr *v1.TaskRun) pkgrecon
 			if err != nil {
 				return err
 			}
-			if podconvert.IsNativeSidecarSupport(sv) {
+			svMajorInt, _ := strconv.Atoi(sv.Major)
+			svMinorInt, _ := strconv.Atoi(sv.Minor)
+			if svMajorInt >= 1 && svMinorInt >= 29 {
 				useTektonSidecar = false
 				logger.Infof("Using Kubernetes Native Sidecars \n")
 			}
@@ -841,7 +848,6 @@ func terminateStepsInPod(tr *v1.TaskRun, taskRunReason v1.TaskRunReason) {
 		if step.Waiting != nil {
 			step.Terminated = &corev1.ContainerStateTerminated{
 				ExitCode:   1,
-				StartedAt:  tr.CreationTimestamp, // startedAt cannot be null due to CRD schema validation
 				FinishedAt: *tr.Status.CompletionTime,
 				// TODO(#7385): replace with more pod/container termination reason instead of overloading taskRunReason
 				Reason:  taskRunReason.String(),
@@ -1054,7 +1060,7 @@ func storeTaskSpecAndMergeMeta(ctx context.Context, tr *v1.TaskRun, ts *v1.TaskS
 		// Propagate labels from Task to TaskRun. TaskRun labels take precedences over Task.
 		tr.ObjectMeta.Labels = kmap.Union(meta.Labels, tr.ObjectMeta.Labels)
 		if tr.Spec.TaskRef != nil {
-			if tr.Spec.TaskRef.Kind == v1.ClusterTaskRefKind {
+			if tr.Spec.TaskRef.Kind == "ClusterTask" {
 				tr.ObjectMeta.Labels[pipeline.ClusterTaskLabelKey] = meta.Name
 			} else {
 				tr.ObjectMeta.Labels[pipeline.TaskLabelKey] = meta.Name

@@ -16,7 +16,7 @@ kind: TaskRun
 metadata:
   name: step-action-run
 spec:
-  taskSpec:
+  TaskSpec:
     results:
       - name: step-result
         value: $(steps.action-runner.results.result1)

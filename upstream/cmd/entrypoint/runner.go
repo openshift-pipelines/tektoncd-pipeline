@@ -31,10 +31,7 @@ import (
 	"syscall"
 
 	"github.com/tektoncd/pipeline/pkg/entrypoint"
-)
-
-const (
-	TektonHermeticEnvVar = "TEKTON_HERMETIC"
+	"github.com/tektoncd/pipeline/pkg/pod"
 )
 
 // TODO(jasonhall): Test that original exit code is propagated and that
@@ -114,7 +111,7 @@ func (rr *realRunner) Run(ctx context.Context, args ...string) error {
 	// main process and all children
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 
-	if os.Getenv("TEKTON_RESOURCE_NAME") == "" && os.Getenv(TektonHermeticEnvVar) == "1" {
+	if os.Getenv("TEKTON_RESOURCE_NAME") == "" && os.Getenv(pod.TektonHermeticEnvVar) == "1" {
 		dropNetworking(cmd)
 	}
 

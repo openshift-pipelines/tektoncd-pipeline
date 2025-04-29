@@ -17,6 +17,7 @@ limitations under the License.
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"flag"
@@ -28,13 +29,17 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/containerd/containerd/platforms"
 	"github.com/tektoncd/pipeline/cmd/entrypoint/subcommands"
-	v1 "github.com/tektoncd/pipeline/pkg/apis/pipeline/v1/types"
+	featureFlags "github.com/tektoncd/pipeline/pkg/apis/config"
+	"github.com/tektoncd/pipeline/pkg/apis/pipeline"
+	v1 "github.com/tektoncd/pipeline/pkg/apis/pipeline/v1"
+	"github.com/tektoncd/pipeline/pkg/credentials"
 	"github.com/tektoncd/pipeline/pkg/credentials/dockercreds"
 	"github.com/tektoncd/pipeline/pkg/credentials/gitcreds"
-	credwriter "github.com/tektoncd/pipeline/pkg/credentials/writer"
 	"github.com/tektoncd/pipeline/pkg/entrypoint"
-	"github.com/tektoncd/pipeline/pkg/platforms"
+	"github.com/tektoncd/pipeline/pkg/spire"
+	"github.com/tektoncd/pipeline/pkg/spire/config"
 	"github.com/tektoncd/pipeline/pkg/termination"
 )
 
@@ -51,17 +56,34 @@ var (
 	stdoutPath          = flag.String("stdout_path", "", "If specified, file to copy stdout to")
 	stderrPath          = flag.String("stderr_path", "", "If specified, file to copy stderr to")
 	breakpointOnFailure = flag.Bool("breakpoint_on_failure", false, "If specified, expect steps to not skip on failure")
-	debugBeforeStep     = flag.Bool("debug_before_step", false, "If specified, wait for a debugger to attach before executing the step")
 	onError             = flag.String("on_error", "", "Set to \"continue\" to ignore an error and continue when a container terminates with a non-zero exit code."+
 		" Set to \"stopAndFail\" to declare a failure with a step error and stop executing the rest of the steps.")
 	stepMetadataDir        = flag.String("step_metadata_dir", "", "If specified, create directory to store the step metadata e.g. /tekton/steps/<step-name>/")
-	resultExtractionMethod = flag.String("result_from", entrypoint.ResultExtractionMethodTerminationMessage, "The method using which to extract results from tasks. Default is using the termination message.")
+	enableSpire            = flag.Bool("enable_spire", false, "If specified by configmap, this enables spire signing and verification")
+	socketPath             = flag.String("spire_socket_path", "unix:///spiffe-workload-api/spire-agent.sock", "Experimental: The SPIRE agent socket for SPIFFE workload API.")
+	resultExtractionMethod = flag.String("result_from", featureFlags.ResultExtractionMethodTerminationMessage, "The method using which to extract results from tasks. Default is using the termination message.")
 )
 
 const (
 	defaultWaitPollingInterval = time.Second
-	TektonPlatformCommandsEnv  = "TEKTON_PLATFORM_COMMANDS"
+	breakpointExitSuffix       = ".breakpointexit"
 )
+
+func checkForBreakpointOnFailure(e entrypoint.Entrypointer, breakpointExitPostFile string) {
+	if e.BreakpointOnFailure {
+		if waitErr := e.Waiter.Wait(context.Background(), breakpointExitPostFile, false, false); waitErr != nil {
+			log.Println("error occurred while waiting for " + breakpointExitPostFile + " : " + waitErr.Error())
+		}
+		// get exitcode from .breakpointexit
+		exitCode, readErr := e.BreakpointExitCode(breakpointExitPostFile)
+		// if readErr exists, the exitcode with default to 0 as we would like
+		// to encourage to continue running the next steps in the taskRun
+		if readErr != nil {
+			log.Println("error occurred while reading breakpoint exit code : " + readErr.Error())
+		}
+		os.Exit(exitCode)
+	}
+}
 
 func main() {
 	// Add credential flags originally introduced with our legacy credentials helper
@@ -91,9 +113,9 @@ func main() {
 	// from secret volume mounts to /tekton/creds. This is done to support the expansion
 	// of a variable, $(credentials.path), that resolves to a single place with all the
 	// stored credentials.
-	builders := []credwriter.Writer{dockercreds.NewBuilder(), gitcreds.NewBuilder()}
+	builders := []credentials.Builder{dockercreds.NewBuilder(), gitcreds.NewBuilder()}
 	for _, c := range builders {
-		if err := c.Write(entrypoint.CredsDir); err != nil {
+		if err := c.Write(pipeline.CredsDir); err != nil {
 			log.Printf("Error initializing credentials: %s", err)
 		}
 	}
@@ -102,7 +124,7 @@ func main() {
 	if *ep != "" {
 		cmd = []string{*ep}
 	} else {
-		env := os.Getenv(TektonPlatformCommandsEnv)
+		env := os.Getenv("TEKTON_PLATFORM_COMMANDS")
 		var cmds map[string][]string
 		if err := json.Unmarshal([]byte(env), &cmds); err != nil {
 			log.Fatal(err)
@@ -111,7 +133,7 @@ func main() {
 		// It doesn't include osversion, which is necessary to
 		// disambiguate two images both for e.g., Windows, that only
 		// differ by osversion.
-		plat := platforms.NewPlatform().Format()
+		plat := platforms.DefaultString()
 		var err error
 		cmd, err = selectCommandForPlatform(cmds, plat)
 		if err != nil {
@@ -125,7 +147,13 @@ func main() {
 		}
 	}
 
-	spireWorkloadAPI := initializeSpireAPI()
+	var spireWorkloadAPI spire.EntrypointerAPIClient
+	if enableSpire != nil && *enableSpire && socketPath != nil && *socketPath != "" {
+		spireConfig := config.SpireConfig{
+			SocketPath: *socketPath,
+		}
+		spireWorkloadAPI = spire.NewEntrypointerAPIClient(&spireConfig)
+	}
 
 	e := entrypoint.Entrypointer{
 		Command:         append(cmd, commandArgs...),
@@ -144,7 +172,6 @@ func main() {
 		Timeout:                timeout,
 		StepWhenExpressions:    when,
 		BreakpointOnFailure:    *breakpointOnFailure,
-		DebugBeforeStep:        *debugBeforeStep,
 		OnError:                *onError,
 		StepMetadataDir:        *stepMetadataDir,
 		SpireWorkloadAPI:       spireWorkloadAPI,
@@ -153,15 +180,13 @@ func main() {
 
 	// Copy any creds injected by the controller into the $HOME directory of the current
 	// user so that they're discoverable by git / ssh.
-	if err := credwriter.CopyCredsToHome(credwriter.CredsInitCredentials); err != nil {
+	if err := credentials.CopyCredsToHome(credentials.CredsInitCredentials); err != nil {
 		log.Printf("non-fatal error copying credentials: %q", err)
 	}
 
 	if err := e.Go(); err != nil {
+		breakpointExitPostFile := e.PostFile + breakpointExitSuffix
 		switch t := err.(type) { //nolint:errorlint // checking for multiple types with errors.As is ugly.
-		case entrypoint.DebugBeforeStepError:
-			log.Println("Skipping execute step script because before step breakpoint fail-continue")
-			os.Exit(1)
 		case entrypoint.SkipError:
 			log.Print("Skipping step because a previous step failed")
 			os.Exit(1)
@@ -185,7 +210,7 @@ func main() {
 			// in both cases has an ExitStatus() method with the
 			// same signature.
 			if status, ok := t.Sys().(syscall.WaitStatus); ok {
-				e.CheckForBreakpointOnFailure()
+				checkForBreakpointOnFailure(e, breakpointExitPostFile)
 				// ignore a step error i.e. do not exit if a container terminates with a non-zero exit code when onError is set to "continue"
 				if e.OnError != entrypoint.ContinueOnError {
 					os.Exit(status.ExitStatus())
@@ -196,7 +221,7 @@ func main() {
 				log.Fatalf("Error executing command (ExitError): %v", err)
 			}
 		default:
-			e.CheckForBreakpointOnFailure()
+			checkForBreakpointOnFailure(e, breakpointExitPostFile)
 			log.Fatalf("Error executing command: %v", err)
 		}
 	}

@@ -17,7 +17,6 @@ import (
 
 	"github.com/go-git/go-git/v5/plumbing"
 	"github.com/go-git/go-git/v5/plumbing/protocol/packp"
-	"github.com/go-git/go-git/v5/plumbing/protocol/packp/capability"
 	"github.com/go-git/go-git/v5/plumbing/transport"
 	"github.com/go-git/go-git/v5/utils/ioutil"
 	"github.com/golang/groupcache/lru"
@@ -25,7 +24,7 @@ import (
 
 // it requires a bytes.Buffer, because we need to know the length
 func applyHeadersToRequest(req *http.Request, content *bytes.Buffer, host string, requestType string) {
-	req.Header.Add("User-Agent", capability.DefaultAgent())
+	req.Header.Add("User-Agent", "git/1.0")
 	req.Header.Add("Host", host) // host:port
 
 	if content == nil {
@@ -431,11 +430,11 @@ func NewErr(r *http.Response) error {
 
 	switch r.StatusCode {
 	case http.StatusUnauthorized:
-		return fmt.Errorf("%w: %s", transport.ErrAuthenticationRequired, reason)
+		return transport.ErrAuthenticationRequired
 	case http.StatusForbidden:
-		return fmt.Errorf("%w: %s", transport.ErrAuthorizationFailed, reason)
+		return transport.ErrAuthorizationFailed
 	case http.StatusNotFound:
-		return fmt.Errorf("%w: %s", transport.ErrRepositoryNotFound, reason)
+		return transport.ErrRepositoryNotFound
 	}
 
 	return plumbing.NewUnexpectedError(&Err{r, reason})

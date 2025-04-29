@@ -20,8 +20,8 @@ package v1alpha1
 
 import (
 	v1alpha1 "github.com/tektoncd/pipeline/pkg/apis/pipeline/v1alpha1"
+	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/labels"
-	"k8s.io/client-go/listers"
 	"k8s.io/client-go/tools/cache"
 )
 
@@ -38,17 +38,25 @@ type RunLister interface {
 
 // runLister implements the RunLister interface.
 type runLister struct {
-	listers.ResourceIndexer[*v1alpha1.Run]
+	indexer cache.Indexer
 }
 
 // NewRunLister returns a new RunLister.
 func NewRunLister(indexer cache.Indexer) RunLister {
-	return &runLister{listers.New[*v1alpha1.Run](indexer, v1alpha1.Resource("run"))}
+	return &runLister{indexer: indexer}
+}
+
+// List lists all Runs in the indexer.
+func (s *runLister) List(selector labels.Selector) (ret []*v1alpha1.Run, err error) {
+	err = cache.ListAll(s.indexer, selector, func(m interface{}) {
+		ret = append(ret, m.(*v1alpha1.Run))
+	})
+	return ret, err
 }
 
 // Runs returns an object that can list and get Runs.
 func (s *runLister) Runs(namespace string) RunNamespaceLister {
-	return runNamespaceLister{listers.NewNamespaced[*v1alpha1.Run](s.ResourceIndexer, namespace)}
+	return runNamespaceLister{indexer: s.indexer, namespace: namespace}
 }
 
 // RunNamespaceLister helps list and get Runs.
@@ -66,5 +74,26 @@ type RunNamespaceLister interface {
 // runNamespaceLister implements the RunNamespaceLister
 // interface.
 type runNamespaceLister struct {
-	listers.ResourceIndexer[*v1alpha1.Run]
+	indexer   cache.Indexer
+	namespace string
+}
+
+// List lists all Runs in the indexer for a given namespace.
+func (s runNamespaceLister) List(selector labels.Selector) (ret []*v1alpha1.Run, err error) {
+	err = cache.ListAllByNamespace(s.indexer, s.namespace, selector, func(m interface{}) {
+		ret = append(ret, m.(*v1alpha1.Run))
+	})
+	return ret, err
+}
+
+// Get retrieves the Run from the indexer for a given namespace and name.
+func (s runNamespaceLister) Get(name string) (*v1alpha1.Run, error) {
+	obj, exists, err := s.indexer.GetByKey(s.namespace + "/" + name)
+	if err != nil {
+		return nil, err
+	}
+	if !exists {
+		return nil, errors.NewNotFound(v1alpha1.Resource("run"), name)
+	}
+	return obj.(*v1alpha1.Run), nil
 }

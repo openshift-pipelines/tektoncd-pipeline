@@ -1451,46 +1451,6 @@ func TestMakeTaskRunStatus(t *testing.T) {
 			},
 		},
 	}, {
-		desc: "oom occurred in the pod",
-		podStatus: corev1.PodStatus{
-			Phase: corev1.PodRunning,
-			ContainerStatuses: []corev1.ContainerStatus{{
-				Name: "step-one",
-				State: corev1.ContainerState{
-					Terminated: &corev1.ContainerStateTerminated{
-						Reason:   oomKilled,
-						ExitCode: 137,
-					},
-				},
-			}, {
-				Name:  "step-two",
-				State: corev1.ContainerState{},
-			}},
-		},
-		want: v1.TaskRunStatus{
-			Status: statusFailure(v1.TaskRunReasonFailed.String(), "\"step-one\" exited with code 137"),
-			TaskRunStatusFields: v1.TaskRunStatusFields{
-				Steps: []v1.StepState{{
-					ContainerState: corev1.ContainerState{
-						Terminated: &corev1.ContainerStateTerminated{
-							Reason:   oomKilled,
-							ExitCode: 137,
-						},
-					},
-					Name:      "one",
-					Container: "step-one",
-				}, {
-					ContainerState: corev1.ContainerState{},
-					Name:           "two",
-					Container:      "step-two",
-				}},
-				Sidecars:  []v1.SidecarState{},
-				Artifacts: &v1.Artifacts{},
-				// We don't actually care about the time, just that it's not nil
-				CompletionTime: &metav1.Time{Time: time.Now()},
-			},
-		},
-	}, {
 		desc: "the failed task show task results",
 		podStatus: corev1.PodStatus{
 			Phase: corev1.PodFailed,

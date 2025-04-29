@@ -289,8 +289,7 @@ func (c *Reconciler) ReconcileKind(ctx context.Context, pr *v1.PipelineRun) pkgr
 			if taskTimeout.Duration == config.NoTimeoutDuration {
 				waitTime = time.Duration(config.FromContextOrDefaults(ctx).Defaults.DefaultTimeoutMinutes) * time.Minute
 			}
-		} else if pr.Status.FinallyStartTime != nil && pr.FinallyTimeout() != nil &&
-			pr.FinallyTimeout().Duration != config.NoTimeoutDuration {
+		} else if pr.Status.FinallyStartTime != nil && pr.FinallyTimeout() != nil {
 			finallyWaitTime := pr.FinallyTimeout().Duration - c.Clock.Since(pr.Status.FinallyStartTime.Time)
 			if finallyWaitTime < waitTime {
 				waitTime = finallyWaitTime
@@ -1367,7 +1366,6 @@ func getTaskrunLabels(pr *v1.PipelineRun, pipelineTaskName string, includePipeli
 		}
 	}
 	labels[pipeline.PipelineRunLabelKey] = pr.Name
-	labels[pipeline.PipelineRunUIDLabelKey] = string(pr.UID)
 	if pipelineTaskName != "" {
 		labels[pipeline.PipelineTaskLabelKey] = pipelineTaskName
 	}
