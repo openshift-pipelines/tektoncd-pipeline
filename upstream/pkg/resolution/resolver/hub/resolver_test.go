@@ -29,7 +29,7 @@ import (
 
 	"github.com/google/go-cmp/cmp"
 	pipelinev1 "github.com/tektoncd/pipeline/pkg/apis/pipeline/v1"
-	resolutioncommon "github.com/tektoncd/pipeline/pkg/resolution/common"
+	common "github.com/tektoncd/pipeline/pkg/resolution/common"
 	"github.com/tektoncd/pipeline/pkg/resolution/resolver/framework"
 	frtesting "github.com/tektoncd/pipeline/pkg/resolution/resolver/framework/testing"
 	"github.com/tektoncd/pipeline/test/diff"
@@ -38,7 +38,7 @@ import (
 func TestGetSelector(t *testing.T) {
 	resolver := Resolver{}
 	sel := resolver.GetSelector(context.Background())
-	if typ, has := sel[resolutioncommon.LabelKeyResolverType]; !has {
+	if typ, has := sel[common.LabelKeyResolverType]; !has {
 		t.Fatalf("unexpected selector: %v", sel)
 	} else if typ != LabelValueHubResolverType {
 		t.Fatalf("unexpected type: %q", typ)
@@ -346,7 +346,7 @@ func TestResolveConstraint(t *testing.T) {
 					ret = tt.resultTask
 				}
 				output, _ := json.Marshal(ret)
-				fmt.Fprintf(w, string(output))
+				fmt.Fprint(w, string(output))
 			}))
 
 			resolver := &Resolver{
@@ -582,7 +582,7 @@ func TestResolve(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			svr := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				fmt.Fprintf(w, tc.input)
+				fmt.Fprint(w, tc.input)
 			}))
 
 			resolver := &Resolver{

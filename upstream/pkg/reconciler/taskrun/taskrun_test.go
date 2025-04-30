@@ -314,6 +314,13 @@ var (
 			EmptyDir: &corev1.EmptyDirVolumeSource{},
 		},
 	}
+
+	artifactsVolume = corev1.Volume{
+		Name: "tekton-internal-artifacts",
+		VolumeSource: corev1.VolumeSource{
+			EmptyDir: &corev1.EmptyDirVolumeSource{},
+		},
+	}
 	downwardVolume = corev1.Volume{
 		Name: "tekton-internal-downward",
 		VolumeSource: corev1.VolumeSource{
@@ -620,7 +627,7 @@ spec:
 
 	err = k8sevent.CheckEventsOrdered(t, testAssets.Recorder.Events, "reconcile-cloud-events", wantEvents)
 	if !(err == nil) {
-		t.Errorf(err.Error())
+		t.Error(err.Error())
 	}
 
 	wantCloudEvents := []string{
@@ -961,7 +968,7 @@ spec:
 
 			err = k8sevent.CheckEventsOrdered(t, testAssets.Recorder.Events, tc.name, tc.wantEvents)
 			if err != nil {
-				t.Errorf(err.Error())
+				t.Error(err.Error())
 			}
 		})
 	}
@@ -1115,7 +1122,7 @@ spec:
 
 			err = k8sevent.CheckEventsOrdered(t, testAssets.Recorder.Events, tc.name, tc.wantEvents)
 			if err != nil {
-				t.Errorf(err.Error())
+				t.Error(err.Error())
 			}
 		})
 	}
@@ -1195,7 +1202,7 @@ spec:
           spec:
             steps:
             - name: step1
-              image: ubuntu
+              image: docker.io/library/ubuntu
               script: |
                 echo "hello world!"
         `)
@@ -1454,7 +1461,7 @@ spec:
 
 			err := k8sevent.CheckEventsOrdered(t, testAssets.Recorder.Events, tc.name, tc.wantEvents)
 			if !(err == nil) {
-				t.Errorf(err.Error())
+				t.Error(err.Error())
 			}
 
 			newTr, err := testAssets.Clients.Pipeline.TektonV1().TaskRuns(tc.taskRun.Namespace).Get(testAssets.Ctx, tc.taskRun.Name, metav1.GetOptions{})
@@ -1696,7 +1703,6 @@ status:
     provenance:
       featureFlags:
         RunningInEnvWithInjectedSidecars: true
-        EnableTektonOCIBundles: true
         EnforceNonfalsifiability: "none"
         EnableAPIFields: "alpha"
         AwaitSidecarReadiness: true
@@ -1709,7 +1715,6 @@ status:
   provenance:
     featureFlags:
       RunningInEnvWithInjectedSidecars: true
-      EnableTektonOCIBundles: true
       EnableAPIFields: "alpha"
       EnforceNonfalsifiability: "none"
       AwaitSidecarReadiness: true
@@ -1966,38 +1971,46 @@ spec:
 		Tasks:        []*v1.Task{simpleTask},
 		ClusterTasks: []*v1beta1.ClusterTask{},
 	}
-	testAssets, cancel := getTaskRunController(t, d)
-	defer cancel()
-	c := testAssets.Controller
-	clients := testAssets.Clients
-	createServiceAccount(t, testAssets, "default", tr.Namespace)
+	for _, v := range []error{
+		errors.New("etcdserver: leader changed"),
+		context.DeadlineExceeded,
+		apierrors.NewConflict(pipeline.TaskRunResource, "", nil),
+		apierrors.NewServerTimeout(pipeline.TaskRunResource, "", 0),
+		apierrors.NewTimeoutError("", 0),
+	} {
+		testAssets, cancel := getTaskRunController(t, d)
+		defer cancel()
+		c := testAssets.Controller
+		clients := testAssets.Clients
+		createServiceAccount(t, testAssets, "default", tr.Namespace)
 
-	failingReactorActivated := true
-	clients.Pipeline.PrependReactor("*", "tasks", func(action ktesting.Action) (handled bool, ret runtime.Object, err error) {
-		return failingReactorActivated, &v1.Task{}, errors.New("etcdserver: leader changed")
-	})
-	err := c.Reconciler.Reconcile(testAssets.Ctx, getRunName(tr))
-	if err == nil {
-		t.Error("Wanted a wrapped error, but got nil.")
-	}
-	if controller.IsPermanentError(err) {
-		t.Errorf("Unexpected permanent error %v", err)
-	}
-
-	failingReactorActivated = false
-	err = c.Reconciler.Reconcile(testAssets.Ctx, getRunName(tr))
-	if err != nil {
-		if ok, _ := controller.IsRequeueKey(err); !ok {
-			t.Errorf("unexpected error in TaskRun reconciliation: %v", err)
+		failingReactorActivated := true
+		clients.Pipeline.PrependReactor("*", "tasks", func(action ktesting.Action) (handled bool, ret runtime.Object, err error) {
+			return failingReactorActivated, &v1.Task{}, v
+		})
+		err := c.Reconciler.Reconcile(testAssets.Ctx, getRunName(tr))
+		if err == nil {
+			t.Error("Wanted a wrapped error, but got nil.")
 		}
-	}
-	reconciledRun, err := clients.Pipeline.TektonV1().TaskRuns("foo").Get(testAssets.Ctx, tr.Name, metav1.GetOptions{})
-	if err != nil {
-		t.Fatalf("Somehow had error getting reconciled run out of fake client: %s", err)
-	}
-	condition := reconciledRun.Status.GetCondition(apis.ConditionSucceeded)
-	if !condition.IsUnknown() {
-		t.Errorf("Expected TaskRun to still be running but succeeded condition is %v", condition.Status)
+		if controller.IsPermanentError(err) {
+			t.Errorf("Unexpected permanent error %v", err)
+		}
+
+		failingReactorActivated = false
+		err = c.Reconciler.Reconcile(testAssets.Ctx, getRunName(tr))
+		if err != nil {
+			if ok, _ := controller.IsRequeueKey(err); !ok {
+				t.Errorf("unexpected error in TaskRun reconciliation: %v", err)
+			}
+		}
+		reconciledRun, err := clients.Pipeline.TektonV1().TaskRuns("foo").Get(testAssets.Ctx, tr.Name, metav1.GetOptions{})
+		if err != nil {
+			t.Fatalf("Somehow had error getting reconciled run out of fake client: %s", err)
+		}
+		condition := reconciledRun.Status.GetCondition(apis.ConditionSucceeded)
+		if !condition.IsUnknown() {
+			t.Errorf("Expected TaskRun to still be running but succeeded condition is %v", condition.Status)
+		}
 	}
 }
 
@@ -2100,7 +2113,7 @@ spec:
           resolver: bar
 `)
 
-	stepAction := parse.MustParseV1alpha1StepAction(t, `
+	stepAction := parse.MustParseV1beta1StepAction(t, `
 metadata:
   name: stepAction
   namespace: foo
@@ -2135,7 +2148,7 @@ spec:
 	clients := testAssets.Clients
 	err = c.Reconciler.Reconcile(testAssets.Ctx, fmt.Sprintf("%s/%s", tr.Namespace, tr.Name))
 	if controller.IsPermanentError(err) {
-		t.Errorf("Not expected permanent error but got %t", err)
+		t.Errorf("Not expected permanent error but got %v", err)
 	}
 	reconciledRun, err := clients.Pipeline.TektonV1().TaskRuns(tr.Namespace).Get(testAssets.Ctx, tr.Name, metav1.GetOptions{})
 	if err != nil {
@@ -2160,7 +2173,7 @@ spec:
           resolver: bar
 `)}
 
-	stepAction := parse.MustParseV1alpha1StepAction(t, `
+	stepAction := parse.MustParseV1beta1StepAction(t, `
 metadata:
   name: stepAction
   namespace: foo
@@ -2305,7 +2318,7 @@ status:
 	// Check actions
 	actions := clients.Kube.Actions()
 	if len(actions) != 2 || !actions[0].Matches("list", "configmaps") || !actions[1].Matches("watch", "configmaps") {
-		t.Errorf("expected 2 actions (list configmaps, and watch configmaps) created by the reconciler,"+
+		t.Errorf("expected 3 actions (list configmaps, and watch configmaps) created by the reconciler,"+
 			" got %d. Actions: %#v", len(actions), actions)
 	}
 
@@ -2474,7 +2487,7 @@ status:
 	}
 	err = k8sevent.CheckEventsOrdered(t, testAssets.Recorder.Events, "test-reconcile-pod-updateStatus", wantEvents)
 	if !(err == nil) {
-		t.Errorf(err.Error())
+		t.Error(err.Error())
 	}
 }
 
@@ -2573,7 +2586,7 @@ status:
 	}
 	err = k8sevent.CheckEventsOrdered(t, testAssets.Recorder.Events, "test-reconcile-on-cancelled-taskrun", wantEvents)
 	if !(err == nil) {
-		t.Errorf(err.Error())
+		t.Error(err.Error())
 	}
 
 	// reconcile the completed TaskRun again without the pod as that was deleted
@@ -2646,7 +2659,7 @@ status:
 	}
 	err = k8sevent.CheckEventsOrdered(t, testAssets.Recorder.Events, "test-reconcile-on-timedout-taskrun", wantEvents)
 	if !(err == nil) {
-		t.Errorf(err.Error())
+		t.Error(err.Error())
 	}
 
 	// reconcile the completed TaskRun again without the pod as that was deleted
@@ -2750,7 +2763,7 @@ metadata:
 spec:
   taskSpec:
     sidecars:
-    - image: ubuntu
+    - image: docker.io/library/ubuntu:24.04
     - image: whatever
     steps:
     - image: alpine
@@ -2879,7 +2892,7 @@ status:
 				}
 				err = k8sevent.CheckEventsOrdered(t, testAssets.Recorder.Events, taskRun.Name, wantEvents)
 				if err != nil {
-					t.Errorf(err.Error())
+					t.Error(err.Error())
 				}
 			}
 		})
@@ -3084,7 +3097,7 @@ status:
 			}
 			err = k8sevent.CheckEventsOrdered(t, testAssets.Recorder.Events, tc.taskRun.Name, tc.wantEvents)
 			if !(err == nil) {
-				t.Errorf(err.Error())
+				t.Error(err.Error())
 			}
 		})
 	}
@@ -3550,7 +3563,7 @@ spec:
       - name: inlined-step
         image: "inlined-image"
 `)
-	stepAction := parse.MustParseV1alpha1StepAction(t, `
+	stepAction := parse.MustParseV1beta1StepAction(t, `
 metadata:
   name: stepAction
   namespace: foo
@@ -3560,7 +3573,7 @@ spec:
   securityContext:
     privileged: true
 `)
-	stepAction2 := parse.MustParseV1alpha1StepAction(t, `
+	stepAction2 := parse.MustParseV1beta1StepAction(t, `
 metadata:
   name: stepAction2
   namespace: foo
@@ -3570,7 +3583,7 @@ spec:
 `)
 	d := test.Data{
 		TaskRuns:    []*v1.TaskRun{taskRun},
-		StepActions: []*v1alpha1.StepAction{stepAction, stepAction2},
+		StepActions: []*v1beta1.StepAction{stepAction, stepAction2},
 		ConfigMaps: []*corev1.ConfigMap{
 			{
 				ObjectMeta: metav1.ObjectMeta{Name: config.GetFeatureFlagsConfigName(), Namespace: system.Namespace()},
@@ -3660,7 +3673,7 @@ func TestStepActionRefParams(t *testing.T) {
 	tests := []struct {
 		name       string
 		taskRun    *v1.TaskRun
-		stepAction *v1alpha1.StepAction
+		stepAction *v1beta1.StepAction
 		want       []v1.Step
 	}{{
 		name: "params propagated from taskrun",
@@ -3690,7 +3703,7 @@ spec:
           - name: object-param
             value: $(params.objectparam[*])
 `),
-		stepAction: parse.MustParseV1alpha1StepAction(t, `
+		stepAction: parse.MustParseV1beta1StepAction(t, `
 metadata:
   name: stepAction
   namespace: foo
@@ -3735,7 +3748,7 @@ spec:
           - name: stringparam
             value: "step string param"
 `),
-		stepAction: parse.MustParseV1alpha1StepAction(t, `
+		stepAction: parse.MustParseV1beta1StepAction(t, `
 metadata:
   name: stepAction
   namespace: foo
@@ -3768,7 +3781,7 @@ spec:
           name: stepAction
         name: step1
 `),
-		stepAction: parse.MustParseV1alpha1StepAction(t, `
+		stepAction: parse.MustParseV1beta1StepAction(t, `
 metadata:
   name: stepAction
   namespace: foo
@@ -3799,7 +3812,7 @@ spec:
           name: stepAction
         name: step1
 `),
-		stepAction: parse.MustParseV1alpha1StepAction(t, `
+		stepAction: parse.MustParseV1beta1StepAction(t, `
 metadata:
   name: stepAction
   namespace: foo
@@ -3845,7 +3858,7 @@ spec:
           - name: object-param
             value: $(params.objectparam[*])
 `),
-		stepAction: parse.MustParseV1alpha1StepAction(t, `
+		stepAction: parse.MustParseV1beta1StepAction(t, `
 metadata:
   name: stepAction
   namespace: foo
@@ -3882,7 +3895,7 @@ spec:
           name: stepAction
         name: step1
 `),
-		stepAction: parse.MustParseV1alpha1StepAction(t, `
+		stepAction: parse.MustParseV1beta1StepAction(t, `
 metadata:
   name: stepAction
   namespace: foo
@@ -3919,7 +3932,7 @@ spec:
 		t.Run(tt.name, func(t *testing.T) {
 			d := test.Data{
 				TaskRuns:    []*v1.TaskRun{tt.taskRun},
-				StepActions: []*v1alpha1.StepAction{tt.stepAction},
+				StepActions: []*v1beta1.StepAction{tt.stepAction},
 				ConfigMaps: []*corev1.ConfigMap{
 					{
 						ObjectMeta: metav1.ObjectMeta{Name: config.GetFeatureFlagsConfigName(), Namespace: system.Namespace()},
@@ -5218,7 +5231,7 @@ status:
 				t.Fatal(err)
 			}
 			if d := cmp.Diff(&tc.expectedStatus, tc.taskRun.Status.GetCondition(apis.ConditionSucceeded), ignoreLastTransitionTime); d != "" {
-				t.Fatalf(diff.PrintWantGot(d))
+				t.Fatal(diff.PrintWantGot(d))
 			}
 
 			if tc.expectedStepStates != nil {
@@ -5322,7 +5335,7 @@ spec:
 				t.Errorf("storePipelineSpec() error = %v", err)
 			}
 			if d := cmp.Diff(tc.wantTaskRun, tr); d != "" {
-				t.Fatalf(diff.PrintWantGot(d))
+				t.Fatal(diff.PrintWantGot(d))
 			}
 
 			// mock second reconcile
@@ -5330,7 +5343,7 @@ spec:
 				t.Errorf("storePipelineSpec() error = %v", err)
 			}
 			if d := cmp.Diff(tc.wantTaskRun, tr); d != "" {
-				t.Fatalf(diff.PrintWantGot(d))
+				t.Fatal(diff.PrintWantGot(d))
 			}
 		})
 	}
@@ -5355,10 +5368,10 @@ func Test_storeTaskSpec_metadata(t *testing.T) {
 		t.Errorf("storeTaskSpecAndMergeMeta error = %v", err)
 	}
 	if d := cmp.Diff(wantedlabels, tr.ObjectMeta.Labels); d != "" {
-		t.Fatalf(diff.PrintWantGot(d))
+		t.Fatal(diff.PrintWantGot(d))
 	}
 	if d := cmp.Diff(wantedannotations, tr.ObjectMeta.Annotations); d != "" {
-		t.Fatalf(diff.PrintWantGot(d))
+		t.Fatal(diff.PrintWantGot(d))
 	}
 }
 
@@ -5852,7 +5865,7 @@ func podVolumeMounts(idx, totalSteps int) []corev1.VolumeMount {
 		MountPath: "/tekton/bin",
 		ReadOnly:  true,
 	})
-	for i := 0; i < totalSteps; i++ {
+	for i := range totalSteps {
 		mnts = append(mnts, corev1.VolumeMount{
 			Name:      fmt.Sprintf("tekton-internal-run-%d", i),
 			MountPath: filepath.Join("/tekton/run", strconv.Itoa(i)),
@@ -5886,6 +5899,10 @@ func podVolumeMounts(idx, totalSteps int) []corev1.VolumeMount {
 		Name:      "tekton-internal-steps",
 		MountPath: "/tekton/steps",
 		ReadOnly:  true,
+	})
+	mnts = append(mnts, corev1.VolumeMount{
+		Name:      "tekton-internal-artifacts",
+		MountPath: "/tekton/artifacts",
 	})
 
 	return mnts
@@ -5981,6 +5998,7 @@ func expectedPod(podName, taskName, taskRunName, ns, saName string, isClusterTas
 				workspaceVolume,
 				homeVolume,
 				resultsVolume,
+				artifactsVolume,
 				stepsVolume,
 				binVolume,
 				downwardVolume,
@@ -7040,7 +7058,7 @@ func TestIsConcurrentModificationError(t *testing.T) {
 // the ResolutionRequest's name is generated by resolverName, namespace and runName.
 func getResolvedResolutionRequest(t *testing.T, resolverName string, resourceBytes []byte, namespace string, runName string) resolutionv1beta1.ResolutionRequest {
 	t.Helper()
-	name, err := remoteresource.GenerateDeterministicName(resolverName, namespace+"/"+runName, nil)
+	name, err := remoteresource.GenerateDeterministicNameFromSpec(resolverName, namespace+"/"+runName, &resolutionv1beta1.ResolutionRequestSpec{})
 	if err != nil {
 		t.Errorf("error generating name for %s/%s/%s: %v", resolverName, namespace, runName, err)
 	}

@@ -47,8 +47,8 @@ const (
 )
 
 var (
-	alphaFeatureFlags = []string{"enable-param-enum", "enable-step-actions", "keep-pod-enabled-cancel", "enable-cel-in-whenexpression", "enable-artifacts"}
-	betaFeatureFlags  = []string{}
+	alphaFeatureFlags = []string{"enable-param-enum", "keep-pod-enabled-cancel", "enable-cel-in-whenexpression", "enable-artifacts"}
+	betaFeatureFlags  = []string{"enable-step-actions"}
 	perFeatureFlags   = map[string][]string{
 		"alpha": alphaFeatureFlags,
 		"beta":  betaFeatureFlags,
@@ -152,9 +152,9 @@ spec:
   results:
   - name: result
   steps:
-  - image: busybox
+  - image: mirror.gcr.io/busybox
     script: 'echo $(params["text"])'
-  - image: busybox
+  - image: mirror.gcr.io/busybox
     # Sleep for N seconds so that we can check that tasks that
     # should be run in parallel have overlap.
     script: |
@@ -269,7 +269,7 @@ spec:
         - name: result1
         steps:
         - name: failing-step
-          image: busybox
+          image: mirror.gcr.io/busybox
           script: 'echo -n 123 | tee $(results.result1.path); exit 1'
     finally:
     - name: finaltask1
@@ -280,7 +280,7 @@ spec:
         params:
         - name: param1
         steps:
-        - image: busybox
+        - image: mirror.gcr.io/busybox
           script: 'echo $(params.param1);exit 0'
 `, helpers.ObjectNameForTest(t)))
 
@@ -356,14 +356,14 @@ spec:
       taskSpec:
         steps:
         - name: echo
-          image: ubuntu
+          image: mirror.gcr.io/ubuntu
           script: echo $(params.HELLO)
     finally:
     - name: echo-hello-finally
       taskSpec:
         steps:
         - name: echo
-          image: ubuntu
+          image: mirror.gcr.io/ubuntu
           script: echo $(params.HELLO)
 `, namespace))
 
@@ -397,14 +397,14 @@ spec:
         taskSpec:
           steps:
             - name: echo
-              image: ubuntu
+              image: mirror.gcr.io/ubuntu
               script: echo $(params.HELLO)
     finally:
       - name: echo-hello-finally
         taskSpec:
           steps:
             - name: echo
-              image: ubuntu
+              image: mirror.gcr.io/ubuntu
               script: echo $(params.HELLO)
 status:
   pipelineSpec:
@@ -413,14 +413,14 @@ status:
         taskSpec:
           steps:
             - name: echo
-              image: ubuntu
+              image: mirror.gcr.io/ubuntu
               script: echo Hello World!
     finally:
       - name: echo-hello-finally
         taskSpec:
           steps:
             - name: echo
-              image: ubuntu
+              image: mirror.gcr.io/ubuntu
               script: echo Hello World!
 `, namespace))
 
@@ -443,7 +443,7 @@ spec:
   taskSpec:
     steps:
       - name: echo
-        image: ubuntu
+        image: mirror.gcr.io/ubuntu
         script: echo Hello World!
 status:
    podName: propagated-parameters-fully-echo-hello-pod
@@ -453,7 +453,7 @@ status:
    taskSpec:
      steps:
        - name: echo
-         image: ubuntu
+         image: mirror.gcr.io/ubuntu
          script: echo Hello World!
 `, namespace))
 
@@ -466,7 +466,7 @@ spec:
   taskSpec:
     steps:
       - name: echo
-        image: ubuntu
+        image: mirror.gcr.io/ubuntu
         script: echo Hello World!
 status:
    podName: propagated-parameters-fully-echo-hello-finally-pod
@@ -476,7 +476,7 @@ status:
    taskSpec:
      steps:
        - name: echo
-         image: ubuntu
+         image: mirror.gcr.io/ubuntu
          script: echo Hello World!
 `, namespace))
 

@@ -105,6 +105,7 @@ const (
 type Recorder struct {
 	mutex       sync.Mutex
 	initialized bool
+	cfg         *config.Metrics
 
 	insertTag func(pipeline,
 		pipelinerun string) []tag.Mutator
@@ -177,6 +178,12 @@ func viewRegister(cfg *config.Metrics) error {
 		}
 	}
 
+	prCountViewTags := []tag.Key{statusTag}
+	if cfg.CountWithReason {
+		prCountViewTags = append(prCountViewTags, reasonTag)
+		prunTag = append(prunTag, reasonTag)
+	}
+
 	prDurationView = &view.View{
 		Description: prDuration.Description(),
 		Measure:     prDuration,
@@ -184,10 +191,6 @@ func viewRegister(cfg *config.Metrics) error {
 		TagKeys:     append([]tag.Key{statusTag, namespaceTag}, prunTag...),
 	}
 
-	prCountViewTags := []tag.Key{statusTag}
-	if cfg.CountWithReason {
-		prCountViewTags = append(prCountViewTags, reasonTag)
-	}
 	prCountView = &view.View{
 		Description: prCount.Description(),
 		Measure:     prCount,
@@ -259,8 +262,8 @@ func viewUnregister() {
 		runningPRsWaitingOnTaskResolutionView)
 }
 
-// MetricsOnStore returns a function that checks if metrics are configured for a config.Store, and registers it if so
-func MetricsOnStore(logger *zap.SugaredLogger) func(name string,
+// OnStore returns a function that checks if metrics are configured for a config.Store, and registers it if so
+func OnStore(logger *zap.SugaredLogger, r *Recorder) func(name string,
 	value interface{}) {
 	return func(name string, value interface{}) {
 		if name == config.GetMetricsConfigName() {
@@ -269,6 +272,8 @@ func MetricsOnStore(logger *zap.SugaredLogger) func(name string,
 				logger.Error("Failed to do type insertion for extracting metrics config")
 				return
 			}
+			r.updateConfig(cfg)
+			// Update metrics according to configuration
 			viewUnregister()
 			err := viewRegister(cfg)
 			if err != nil {
@@ -280,8 +285,10 @@ func MetricsOnStore(logger *zap.SugaredLogger) func(name string,
 }
 
 func pipelinerunInsertTag(pipeline, pipelinerun string) []tag.Mutator {
-	return []tag.Mutator{tag.Insert(pipelineTag, pipeline),
-		tag.Insert(pipelinerunTag, pipelinerun)}
+	return []tag.Mutator{
+		tag.Insert(pipelineTag, pipeline),
+		tag.Insert(pipelinerunTag, pipelinerun),
+	}
 }
 
 func pipelineInsertTag(pipeline, pipelinerun string) []tag.Mutator {
@@ -308,6 +315,13 @@ func getPipelineTagName(pr *v1.PipelineRun) string {
 	}
 
 	return pipelineName
+}
+
+func (r *Recorder) updateConfig(cfg *config.Metrics) {
+	r.mutex.Lock()
+	defer r.mutex.Unlock()
+
+	r.cfg = cfg
 }
 
 // DurationAndCount logs the duration of PipelineRun execution and
@@ -349,8 +363,10 @@ func (r *Recorder) DurationAndCount(pr *v1.PipelineRun, beforeCondition *apis.Co
 
 	ctx, err := tag.New(
 		context.Background(),
-		append([]tag.Mutator{tag.Insert(namespaceTag, pr.Namespace),
-			tag.Insert(statusTag, status), tag.Insert(reasonTag, reason)}, r.insertTag(pipelineName, pr.Name)...)...)
+		append([]tag.Mutator{
+			tag.Insert(namespaceTag, pr.Namespace),
+			tag.Insert(statusTag, status), tag.Insert(reasonTag, reason),
+		}, r.insertTag(pipelineName, pr.Name)...)...)
 	if err != nil {
 		return err
 	}

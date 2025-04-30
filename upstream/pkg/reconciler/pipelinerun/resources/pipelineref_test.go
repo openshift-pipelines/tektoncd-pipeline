@@ -34,15 +34,18 @@ import (
 	v1 "github.com/tektoncd/pipeline/pkg/apis/pipeline/v1"
 	"github.com/tektoncd/pipeline/pkg/apis/pipeline/v1alpha1"
 	"github.com/tektoncd/pipeline/pkg/apis/pipeline/v1beta1"
+	resolutionV1beta1 "github.com/tektoncd/pipeline/pkg/apis/resolution/v1beta1"
 	"github.com/tektoncd/pipeline/pkg/client/clientset/versioned/fake"
 	clientset "github.com/tektoncd/pipeline/pkg/client/clientset/versioned/fake"
 	"github.com/tektoncd/pipeline/pkg/reconciler/apiserver"
 	"github.com/tektoncd/pipeline/pkg/reconciler/pipelinerun/resources"
 	ttesting "github.com/tektoncd/pipeline/pkg/reconciler/testing"
+	"github.com/tektoncd/pipeline/pkg/remoteresolution/resource"
 	"github.com/tektoncd/pipeline/pkg/trustedresources"
 	"github.com/tektoncd/pipeline/test"
 	"github.com/tektoncd/pipeline/test/diff"
 	"github.com/tektoncd/pipeline/test/parse"
+	resolution "github.com/tektoncd/pipeline/test/remoteresolution"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -344,8 +347,8 @@ func TestGetPipelineFunc_RemoteResolution(t *testing.T) {
 	}}
 	for _, tc := range testcases {
 		t.Run(tc.name, func(t *testing.T) {
-			resolved := test.NewResolvedResource([]byte(tc.pipelineYAML), nil /* annotations */, sampleRefSource.DeepCopy(), nil /* data error */)
-			requester := test.NewRequester(resolved, nil)
+			resolved := resolution.NewResolvedResource([]byte(tc.pipelineYAML), nil /* annotations */, sampleRefSource.DeepCopy(), nil /* data error */)
+			requester := resolution.NewRequester(resolved, nil, resource.ResolverPayload{})
 			fn := resources.GetPipelineFunc(ctx, nil, clients, requester, &v1.PipelineRun{
 				ObjectMeta: metav1.ObjectMeta{Namespace: "default"},
 				Spec: v1.PipelineRunSpec{
@@ -399,8 +402,8 @@ func TestGetPipelineFunc_RemoteResolution_ValidationFailure(t *testing.T) {
 	}}
 	for _, tc := range testcases {
 		t.Run(tc.name, func(t *testing.T) {
-			resolved := test.NewResolvedResource([]byte(tc.pipelineYAML), nil /* annotations */, sampleRefSource.DeepCopy(), nil /* data error */)
-			requester := test.NewRequester(resolved, nil)
+			resolved := resolution.NewResolvedResource([]byte(tc.pipelineYAML), nil /* annotations */, sampleRefSource.DeepCopy(), nil /* data error */)
+			requester := resolution.NewRequester(resolved, nil, resource.ResolverPayload{})
 			fn := resources.GetPipelineFunc(ctx, nil, clients, requester, &v1.PipelineRun{
 				ObjectMeta: metav1.ObjectMeta{Namespace: "default"},
 				Spec: v1.PipelineRunSpec{
@@ -435,6 +438,7 @@ func TestGetPipelineFunc_RemoteResolution_ReplacedParams(t *testing.T) {
 	ctx = config.ToContext(ctx, cfg)
 	pipeline := parse.MustParseV1PipelineAndSetDefaults(t, pipelineYAMLString)
 	pipelineRef := &v1.PipelineRef{
+		Name: "https://foo/bar",
 		ResolverRef: v1.ResolverRef{
 			Resolver: "git",
 			Params: []v1.Param{{
@@ -452,16 +456,21 @@ func TestGetPipelineFunc_RemoteResolution_ReplacedParams(t *testing.T) {
 		pipelineYAMLString,
 	}, "\n")
 
-	resolved := test.NewResolvedResource([]byte(pipelineYAML), nil, sampleRefSource.DeepCopy(), nil)
-	requester := &test.Requester{
+	resolved := resolution.NewResolvedResource([]byte(pipelineYAML), nil, sampleRefSource.DeepCopy(), nil)
+	requester := &resolution.Requester{
 		ResolvedResource: resolved,
-		Params: v1.Params{{
-			Name:  "foo",
-			Value: *v1.NewStructuredValues("bar"),
-		}, {
-			Name:  "bar",
-			Value: *v1.NewStructuredValues("test-pipeline"),
-		}},
+		ResolverPayload: resource.ResolverPayload{
+			ResolutionSpec: &resolutionV1beta1.ResolutionRequestSpec{
+				Params: v1.Params{{
+					Name:  "foo",
+					Value: *v1.NewStructuredValues("bar"),
+				}, {
+					Name:  "bar",
+					Value: *v1.NewStructuredValues("test-pipeline"),
+				}},
+				URL: "https://foo/bar",
+			},
+		},
 	}
 	fn := resources.GetPipelineFunc(ctx, nil, clients, requester, &v1.PipelineRun{
 		ObjectMeta: metav1.ObjectMeta{
@@ -538,8 +547,8 @@ func TestGetPipelineFunc_RemoteResolutionInvalidData(t *testing.T) {
 	ctx = config.ToContext(ctx, cfg)
 	pipelineRef := &v1.PipelineRef{ResolverRef: v1.ResolverRef{Resolver: "git"}}
 	resolvesTo := []byte("INVALID YAML")
-	resource := test.NewResolvedResource(resolvesTo, nil, nil, nil)
-	requester := test.NewRequester(resource, nil)
+	res := resolution.NewResolvedResource(resolvesTo, nil, nil, nil)
+	requester := resolution.NewRequester(res, nil, resource.ResolverPayload{})
 	fn := resources.GetPipelineFunc(ctx, nil, clients, requester, &v1.PipelineRun{
 		ObjectMeta: metav1.ObjectMeta{Namespace: "default"},
 		Spec: v1.PipelineRunSpec{
@@ -554,7 +563,6 @@ func TestGetPipelineFunc_RemoteResolutionInvalidData(t *testing.T) {
 	}
 }
 
-//nolint:musttag
 func TestGetPipelineFunc_V1beta1Pipeline_VerifyNoError(t *testing.T) {
 	ctx := context.Background()
 	signer, _, k8sclient, vps := test.SetupVerificationPolicies(t)
@@ -577,8 +585,8 @@ func TestGetPipelineFunc_V1beta1Pipeline_VerifyNoError(t *testing.T) {
 		},
 		EntryPoint: "foo/bar",
 	}
-	resolvedUnmatched := test.NewResolvedResource(unsignedPipelineBytes, nil, noMatchPolicyRefSource, nil)
-	requesterUnmatched := test.NewRequester(resolvedUnmatched, nil)
+	resolvedUnmatched := resolution.NewResolvedResource(unsignedPipelineBytes, nil, noMatchPolicyRefSource, nil)
+	requesterUnmatched := resolution.NewRequester(resolvedUnmatched, nil, resource.ResolverPayload{})
 
 	signedPipeline, err := test.GetSignedV1beta1Pipeline(unsignedPipeline, signer, "signed")
 	if err != nil {
@@ -600,8 +608,8 @@ func TestGetPipelineFunc_V1beta1Pipeline_VerifyNoError(t *testing.T) {
 		},
 		EntryPoint: "foo/bar",
 	}
-	resolvedMatched := test.NewResolvedResource(signedPipelineBytes, nil, matchPolicyRefSource, nil)
-	requesterMatched := test.NewRequester(resolvedMatched, nil)
+	resolvedMatched := resolution.NewResolvedResource(signedPipelineBytes, nil, matchPolicyRefSource, nil)
+	requesterMatched := resolution.NewRequester(resolvedMatched, nil, resource.ResolverPayload{})
 
 	pipelineRef := &v1.PipelineRef{
 		Name: signedPipeline.Name,
@@ -647,12 +655,12 @@ func TestGetPipelineFunc_V1beta1Pipeline_VerifyNoError(t *testing.T) {
 	warnPolicyRefSource := &v1.RefSource{
 		URI: "	warnVP",
 	}
-	resolvedUnsignedMatched := test.NewResolvedResource(unsignedPipelineBytes, nil, warnPolicyRefSource, nil)
-	requesterUnsignedMatched := test.NewRequester(resolvedUnsignedMatched, nil)
+	resolvedUnsignedMatched := resolution.NewResolvedResource(unsignedPipelineBytes, nil, warnPolicyRefSource, nil)
+	requesterUnsignedMatched := resolution.NewRequester(resolvedUnsignedMatched, nil, resource.ResolverPayload{})
 
 	testcases := []struct {
 		name                       string
-		requester                  *test.Requester
+		requester                  *resolution.Requester
 		verificationNoMatchPolicy  string
 		pipelinerun                v1.PipelineRun
 		policies                   []*v1alpha1.VerificationPolicy
@@ -733,7 +741,7 @@ func TestGetPipelineFunc_V1beta1Pipeline_VerifyNoError(t *testing.T) {
 	}
 	for _, tc := range testcases {
 		t.Run(tc.name, func(t *testing.T) {
-			ctx = test.SetupTrustedResourceConfig(ctx, tc.verificationNoMatchPolicy)
+			ctx := test.SetupTrustedResourceConfig(context.Background(), tc.verificationNoMatchPolicy)
 			fn := resources.GetPipelineFunc(ctx, k8sclient, tektonclient, tc.requester, &tc.pipelinerun, tc.policies)
 
 			gotResolvedPipeline, gotSource, gotVerificationResult, err := fn(ctx, pipelineRef.Name)
@@ -759,9 +767,7 @@ func TestGetPipelineFunc_V1beta1Pipeline_VerifyNoError(t *testing.T) {
 	}
 }
 
-//nolint:musttag
 func TestGetPipelineFunc_V1beta1Pipeline_VerifyError(t *testing.T) {
-	ctx := context.Background()
 	tektonclient := fake.NewSimpleClientset()
 	signer, _, k8sclient, vps := test.SetupVerificationPolicies(t)
 
@@ -778,8 +784,8 @@ func TestGetPipelineFunc_V1beta1Pipeline_VerifyError(t *testing.T) {
 		EntryPoint: "foo/bar",
 	}
 
-	resolvedUnsigned := test.NewResolvedResource(unsignedPipelineBytes, nil, matchPolicyRefSource, nil)
-	requesterUnsigned := test.NewRequester(resolvedUnsigned, nil)
+	resolvedUnsigned := resolution.NewResolvedResource(unsignedPipelineBytes, nil, matchPolicyRefSource, nil)
+	requesterUnsigned := resolution.NewRequester(resolvedUnsigned, nil, resource.ResolverPayload{})
 
 	signedPipeline, err := test.GetSignedV1beta1Pipeline(unsignedPipeline, signer, "signed")
 	if err != nil {
@@ -797,8 +803,8 @@ func TestGetPipelineFunc_V1beta1Pipeline_VerifyError(t *testing.T) {
 		},
 		EntryPoint: "foo/bar",
 	}
-	resolvedUnmatched := test.NewResolvedResource(signedPipelineBytes, nil, noMatchPolicyRefSource, nil)
-	requesterUnmatched := test.NewRequester(resolvedUnmatched, nil)
+	resolvedUnmatched := resolution.NewResolvedResource(signedPipelineBytes, nil, noMatchPolicyRefSource, nil)
+	requesterUnmatched := resolution.NewRequester(resolvedUnmatched, nil, resource.ResolverPayload{})
 
 	modifiedPipeline := signedPipeline.DeepCopy()
 	modifiedPipeline.Annotations["random"] = "attack"
@@ -806,14 +812,14 @@ func TestGetPipelineFunc_V1beta1Pipeline_VerifyError(t *testing.T) {
 	if err != nil {
 		t.Fatal("fail to marshal pipeline", err)
 	}
-	resolvedModified := test.NewResolvedResource(modifiedPipelineBytes, nil, matchPolicyRefSource, nil)
-	requesterModified := test.NewRequester(resolvedModified, nil)
+	resolvedModified := resolution.NewResolvedResource(modifiedPipelineBytes, nil, matchPolicyRefSource, nil)
+	requesterModified := resolution.NewRequester(resolvedModified, nil, resource.ResolverPayload{})
 
 	pipelineRef := &v1.PipelineRef{ResolverRef: v1.ResolverRef{Resolver: "git"}}
 
 	testcases := []struct {
 		name                       string
-		requester                  *test.Requester
+		requester                  *resolution.Requester
 		verificationNoMatchPolicy  string
 		expectedVerificationResult *trustedresources.VerificationResult
 	}{
@@ -856,7 +862,7 @@ func TestGetPipelineFunc_V1beta1Pipeline_VerifyError(t *testing.T) {
 	}
 	for _, tc := range testcases {
 		t.Run(tc.name, func(t *testing.T) {
-			ctx = test.SetupTrustedResourceConfig(ctx, tc.verificationNoMatchPolicy)
+			ctx := test.SetupTrustedResourceConfig(context.Background(), tc.verificationNoMatchPolicy)
 			pr := &v1.PipelineRun{
 				ObjectMeta: metav1.ObjectMeta{Namespace: "trusted-resources"},
 				Spec: v1.PipelineRunSpec{
@@ -879,7 +885,6 @@ func TestGetPipelineFunc_V1beta1Pipeline_VerifyError(t *testing.T) {
 	}
 }
 
-//nolint:musttag
 func TestGetPipelineFunc_V1Pipeline_VerifyNoError(t *testing.T) {
 	ctx := context.Background()
 	signer, _, k8sclient, vps := test.SetupVerificationPolicies(t)
@@ -906,8 +911,8 @@ func TestGetPipelineFunc_V1Pipeline_VerifyNoError(t *testing.T) {
 		},
 		EntryPoint: "foo/bar",
 	}
-	resolvedUnmatched := test.NewResolvedResource(unsignedPipelineBytes, nil, noMatchPolicyRefSource, nil)
-	requesterUnmatched := test.NewRequester(resolvedUnmatched, nil)
+	resolvedUnmatched := resolution.NewResolvedResource(unsignedPipelineBytes, nil, noMatchPolicyRefSource, nil)
+	requesterUnmatched := resolution.NewRequester(resolvedUnmatched, nil, resource.ResolverPayload{})
 
 	signedPipeline, err := getSignedV1Pipeline(unsignedV1Pipeline, signer, "signed")
 	if err != nil {
@@ -935,8 +940,8 @@ func TestGetPipelineFunc_V1Pipeline_VerifyNoError(t *testing.T) {
 		},
 		EntryPoint: "foo/bar",
 	}
-	resolvedMatched := test.NewResolvedResource(signedPipelineBytes, nil, matchPolicyRefSource, nil)
-	requesterMatched := test.NewRequester(resolvedMatched, nil)
+	resolvedMatched := resolution.NewResolvedResource(signedPipelineBytes, nil, matchPolicyRefSource, nil)
+	requesterMatched := resolution.NewRequester(resolvedMatched, nil, resource.ResolverPayload{})
 
 	pipelineRef := &v1.PipelineRef{
 		Name: signedPipeline.Name,
@@ -980,12 +985,12 @@ func TestGetPipelineFunc_V1Pipeline_VerifyNoError(t *testing.T) {
 	warnPolicyRefSource := &v1.RefSource{
 		URI: "	warnVP",
 	}
-	resolvedUnsignedMatched := test.NewResolvedResource(unsignedPipelineBytes, nil, warnPolicyRefSource, nil)
-	requesterUnsignedMatched := test.NewRequester(resolvedUnsignedMatched, nil)
+	resolvedUnsignedMatched := resolution.NewResolvedResource(unsignedPipelineBytes, nil, warnPolicyRefSource, nil)
+	requesterUnsignedMatched := resolution.NewRequester(resolvedUnsignedMatched, nil, resource.ResolverPayload{})
 
 	testcases := []struct {
 		name                       string
-		requester                  *test.Requester
+		requester                  *resolution.Requester
 		verificationNoMatchPolicy  string
 		pipelinerun                v1.PipelineRun
 		policies                   []*v1alpha1.VerificationPolicy
@@ -1066,7 +1071,7 @@ func TestGetPipelineFunc_V1Pipeline_VerifyNoError(t *testing.T) {
 	}
 	for _, tc := range testcases {
 		t.Run(tc.name, func(t *testing.T) {
-			ctx = test.SetupTrustedResourceConfig(ctx, tc.verificationNoMatchPolicy)
+			ctx := test.SetupTrustedResourceConfig(context.Background(), tc.verificationNoMatchPolicy)
 			fn := resources.GetPipelineFunc(ctx, k8sclient, tektonclient, tc.requester, &tc.pipelinerun, tc.policies)
 
 			gotResolvedPipeline, gotSource, gotVerificationResult, err := fn(ctx, pipelineRef.Name)
@@ -1092,9 +1097,7 @@ func TestGetPipelineFunc_V1Pipeline_VerifyNoError(t *testing.T) {
 	}
 }
 
-//nolint:musttag
 func TestGetPipelineFunc_V1Pipeline_VerifyError(t *testing.T) {
-	ctx := context.Background()
 	tektonclient := fake.NewSimpleClientset()
 	signer, _, k8sclient, vps := test.SetupVerificationPolicies(t)
 
@@ -1110,8 +1113,8 @@ func TestGetPipelineFunc_V1Pipeline_VerifyError(t *testing.T) {
 		EntryPoint: "foo/bar",
 	}
 
-	resolvedUnsigned := test.NewResolvedResource(unsignedPipelineBytes, nil, matchPolicyRefSource, nil)
-	requesterUnsigned := test.NewRequester(resolvedUnsigned, nil)
+	resolvedUnsigned := resolution.NewResolvedResource(unsignedPipelineBytes, nil, matchPolicyRefSource, nil)
+	requesterUnsigned := resolution.NewRequester(resolvedUnsigned, nil, resource.ResolverPayload{})
 
 	signedPipeline, err := getSignedV1Pipeline(unsignedV1Pipeline, signer, "signed")
 	if err != nil {
@@ -1129,8 +1132,8 @@ func TestGetPipelineFunc_V1Pipeline_VerifyError(t *testing.T) {
 		},
 		EntryPoint: "foo/bar",
 	}
-	resolvedUnmatched := test.NewResolvedResource(signedPipelineBytes, nil, noMatchPolicyRefSource, nil)
-	requesterUnmatched := test.NewRequester(resolvedUnmatched, nil)
+	resolvedUnmatched := resolution.NewResolvedResource(signedPipelineBytes, nil, noMatchPolicyRefSource, nil)
+	requesterUnmatched := resolution.NewRequester(resolvedUnmatched, nil, resource.ResolverPayload{})
 
 	modifiedPipeline := signedPipeline.DeepCopy()
 	modifiedPipeline.Annotations["random"] = "attack"
@@ -1138,14 +1141,14 @@ func TestGetPipelineFunc_V1Pipeline_VerifyError(t *testing.T) {
 	if err != nil {
 		t.Fatal("fail to marshal pipeline", err)
 	}
-	resolvedModified := test.NewResolvedResource(modifiedPipelineBytes, nil, matchPolicyRefSource, nil)
-	requesterModified := test.NewRequester(resolvedModified, nil)
+	resolvedModified := resolution.NewResolvedResource(modifiedPipelineBytes, nil, matchPolicyRefSource, nil)
+	requesterModified := resolution.NewRequester(resolvedModified, nil, resource.ResolverPayload{})
 
 	pipelineRef := &v1.PipelineRef{ResolverRef: v1.ResolverRef{Resolver: "git"}}
 
 	testcases := []struct {
 		name                       string
-		requester                  *test.Requester
+		requester                  *resolution.Requester
 		verificationNoMatchPolicy  string
 		expectedVerificationResult *trustedresources.VerificationResult
 	}{
@@ -1188,7 +1191,7 @@ func TestGetPipelineFunc_V1Pipeline_VerifyError(t *testing.T) {
 	}
 	for _, tc := range testcases {
 		t.Run(tc.name, func(t *testing.T) {
-			ctx = test.SetupTrustedResourceConfig(ctx, tc.verificationNoMatchPolicy)
+			ctx := test.SetupTrustedResourceConfig(context.Background(), tc.verificationNoMatchPolicy)
 			pr := &v1.PipelineRun{
 				ObjectMeta: metav1.ObjectMeta{Namespace: "trusted-resources"},
 				Spec: v1.PipelineRunSpec{
@@ -1209,9 +1212,7 @@ func TestGetPipelineFunc_V1Pipeline_VerifyError(t *testing.T) {
 	}
 }
 
-//nolint:musttag
 func TestGetPipelineFunc_GetFuncError(t *testing.T) {
-	ctx := context.Background()
 	tektonclient := fake.NewSimpleClientset()
 	_, k8sclient, vps := test.SetupMatchAllVerificationPolicies(t, "trusted-resources")
 
@@ -1221,8 +1222,8 @@ func TestGetPipelineFunc_GetFuncError(t *testing.T) {
 		t.Fatal("fail to marshal pipeline", err)
 	}
 
-	resolvedUnsigned := test.NewResolvedResource(unsignedPipelineBytes, nil, sampleRefSource.DeepCopy(), nil)
-	requesterUnsigned := test.NewRequester(resolvedUnsigned, nil)
+	resolvedUnsigned := resolution.NewResolvedResource(unsignedPipelineBytes, nil, sampleRefSource.DeepCopy(), nil)
+	requesterUnsigned := resolution.NewRequester(resolvedUnsigned, nil, resource.ResolverPayload{})
 	resolvedUnsigned.DataErr = errors.New("resolution error")
 
 	prResolutionError := &v1.PipelineRun{
@@ -1242,7 +1243,7 @@ func TestGetPipelineFunc_GetFuncError(t *testing.T) {
 
 	testcases := []struct {
 		name        string
-		requester   *test.Requester
+		requester   *resolution.Requester
 		pipelinerun v1.PipelineRun
 		expectedErr error
 	}{
@@ -1255,6 +1256,7 @@ func TestGetPipelineFunc_GetFuncError(t *testing.T) {
 	}
 	for _, tc := range testcases {
 		t.Run(tc.name, func(t *testing.T) {
+			ctx := context.Background()
 			store := config.NewStore(logging.FromContext(ctx).Named("config-store"))
 			featureflags := &corev1.ConfigMap{
 				ObjectMeta: metav1.ObjectMeta{
@@ -1332,7 +1334,7 @@ spec:
           - "bar"
       steps:
       - name: step1
-        image: ubuntu
+        image: docker.io/library/ubuntu
         script: |
           echo "hello world!"
 `
@@ -1360,7 +1362,7 @@ spec:
     taskSpec:
       steps:
       - name: step1
-        image: ubuntu
+        image: docker.io/library/ubuntu
         script: |
           echo "hello world!"
 `
