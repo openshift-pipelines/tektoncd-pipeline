@@ -52,7 +52,8 @@ import (
 	tresources "github.com/tektoncd/pipeline/pkg/reconciler/taskrun/resources"
 	"github.com/tektoncd/pipeline/pkg/reconciler/volumeclaim"
 	"github.com/tektoncd/pipeline/pkg/remote"
-	resolution "github.com/tektoncd/pipeline/pkg/resolution/resource"
+	resolution "github.com/tektoncd/pipeline/pkg/remoteresolution/resource"
+	resolutioncommon "github.com/tektoncd/pipeline/pkg/resolution/common"
 	"github.com/tektoncd/pipeline/pkg/substitution"
 	"github.com/tektoncd/pipeline/pkg/trustedresources"
 	"github.com/tektoncd/pipeline/pkg/workspace"
@@ -338,7 +339,8 @@ func (c *Reconciler) resolvePipelineState(
 	tasks []v1.PipelineTask,
 	pipelineMeta *metav1.ObjectMeta,
 	pr *v1.PipelineRun,
-	pst resources.PipelineRunState) (resources.PipelineRunState, error) {
+	pst resources.PipelineRunState,
+) (resources.PipelineRunState, error) {
 	ctx, span := c.tracerProvider.Tracer(TracerName).Start(ctx, "resolvePipelineState")
 	defer span.End()
 	// Resolve each task individually because they each could have a different reference context (remote or local).
@@ -373,7 +375,7 @@ func (c *Reconciler) resolvePipelineState(
 			pst,
 		)
 		if err != nil {
-			if tresources.IsErrTransient(err) {
+			if resolutioncommon.IsErrTransient(err) {
 				return nil, err
 			}
 			if errors.Is(err, remote.ErrRequestInProgress) {
@@ -487,8 +489,8 @@ func (c *Reconciler) reconcile(ctx context.Context, pr *v1.PipelineRun, getPipel
 	if err := resources.ValidateRequiredParametersProvided(&pipelineSpec.Params, &pr.Spec.Params); err != nil {
 		// This Run has failed, so we need to mark it as failed and stop reconciling it
 		pr.Status.MarkFailed(v1.PipelineRunReasonParameterMissing.String(),
-			"PipelineRun %s parameters is missing some parameters required by Pipeline %s's parameters: %s",
-			pr.Namespace, pr.Name, err)
+			"PipelineRun %s/%s is missing some parameters required by Pipeline %s/%s: %s",
+			pr.Namespace, pr.Name, pr.Namespace, pipelineMeta.Name, err)
 		return controller.NewPermanentError(err)
 	}
 
@@ -899,6 +901,13 @@ func (c *Reconciler) runNextSchedulableTask(ctx context.Context, pr *v1.Pipeline
 
 		// propagate previous task results
 		resources.PropagateResults(rpt, pipelineRunFacts.State)
+
+		// propagate previous task artifacts
+		err = resources.PropagateArtifacts(rpt, pipelineRunFacts.State)
+		if err != nil {
+			logger.Errorf("Failed to propagate artifacts due to error: %v", err)
+			return controller.NewPermanentError(err)
+		}
 
 		// Validate parameter types in matrix after apply substitutions from Task Results
 		if rpt.PipelineTask.IsMatrixed() {
@@ -1316,6 +1325,11 @@ func propagatePipelineNameLabelToPipelineRun(pr *v1.PipelineRun) error {
 	if pr.ObjectMeta.Labels == nil {
 		pr.ObjectMeta.Labels = make(map[string]string)
 	}
+
+	if _, ok := pr.ObjectMeta.Labels[pipeline.PipelineLabelKey]; ok {
+		return nil
+	}
+
 	switch {
 	case pr.Spec.PipelineRef != nil && pr.Spec.PipelineRef.Name != "":
 		pr.ObjectMeta.Labels[pipeline.PipelineLabelKey] = pr.Spec.PipelineRef.Name
@@ -1323,6 +1337,20 @@ func propagatePipelineNameLabelToPipelineRun(pr *v1.PipelineRun) error {
 		pr.ObjectMeta.Labels[pipeline.PipelineLabelKey] = pr.Name
 	case pr.Spec.PipelineRef != nil && pr.Spec.PipelineRef.Resolver != "":
 		pr.ObjectMeta.Labels[pipeline.PipelineLabelKey] = pr.Name
+
+		// https://tekton.dev/docs/pipelines/cluster-resolver/#pipeline-resolution
+		var kind, name string
+		for _, param := range pr.Spec.PipelineRef.Params {
+			if param.Name == "kind" {
+				kind = param.Value.StringVal
+			}
+			if param.Name == "name" {
+				name = param.Value.StringVal
+			}
+		}
+		if kind == "pipeline" {
+			pr.ObjectMeta.Labels[pipeline.PipelineLabelKey] = name
+		}
 	default:
 		return fmt.Errorf("pipelineRun %s not providing PipelineRef or PipelineSpec", pr.Name)
 	}
@@ -1434,7 +1462,9 @@ func storePipelineSpecAndMergeMeta(ctx context.Context, pr *v1.PipelineRun, ps *
 
 		// Propagate labels from Pipeline to PipelineRun. PipelineRun labels take precedences over Pipeline.
 		pr.ObjectMeta.Labels = kmap.Union(meta.Labels, pr.ObjectMeta.Labels)
-		pr.ObjectMeta.Labels[pipeline.PipelineLabelKey] = meta.Name
+		if len(meta.Name) > 0 {
+			pr.ObjectMeta.Labels[pipeline.PipelineLabelKey] = meta.Name
+		}
 
 		// Propagate annotations from Pipeline to PipelineRun. PipelineRun annotations take precedences over Pipeline.
 		pr.ObjectMeta.Annotations = kmap.Union(kmap.ExcludeKeys(meta.Annotations, tknreconciler.KubectlLastAppliedAnnotationKey), pr.ObjectMeta.Annotations)
@@ -1542,6 +1572,8 @@ func filterCustomRunsForPipelineRunStatus(logger *zap.SugaredLogger, pr *v1.Pipe
 		// We can't just get the gvk from the customRun's TypeMeta because that isn't populated for resources created through the fake client.
 		gvks = append(gvks, v1beta1.SchemeGroupVersion.WithKind(customRun))
 	}
+
+	// NAMES are names
 
 	return names, taskLabels, gvks, statuses
 }

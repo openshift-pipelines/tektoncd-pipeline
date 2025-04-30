@@ -31,8 +31,10 @@ import (
 	duckv1 "knative.dev/pkg/apis/duck/v1"
 )
 
-var now = time.Date(2022, time.January, 1, 0, 0, 0, 0, time.UTC)
-var testClock = clock.NewFakePassiveClock(now)
+var (
+	now       = time.Date(2022, time.January, 1, 0, 0, 0, 0, time.UTC)
+	testClock = clock.NewFakePassiveClock(now)
+)
 
 func TestTaskRun_GetPipelineRunPVCName(t *testing.T) {
 	tests := []struct {
@@ -367,7 +369,7 @@ func TestHasTimedOut(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			result := tc.taskRun.HasTimedOut(context.Background(), testClock)
 			if d := cmp.Diff(tc.expectedStatus, result); d != "" {
-				t.Fatalf(diff.PrintWantGot(d))
+				t.Fatal(diff.PrintWantGot(d))
 			}
 		})
 	}
@@ -441,7 +443,7 @@ func TestIsStepNeedDebug(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			result := tc.args.trd.StepNeedsDebug(tc.args.stepName)
 			if d := cmp.Diff(tc.want, result); d != "" {
-				t.Fatalf(diff.PrintWantGot(d))
+				t.Fatal(diff.PrintWantGot(d))
 			}
 		})
 	}
@@ -478,7 +480,7 @@ func TestIsNeedDebug(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			result := tc.args.trd.NeedsDebug()
 			if d := cmp.Diff(tc.want, result); d != "" {
-				t.Fatalf(diff.PrintWantGot(d))
+				t.Fatal(diff.PrintWantGot(d))
 			}
 		})
 	}
@@ -511,7 +513,7 @@ func TestTaskRunIsRetriable(t *testing.T) {
 		wantIsRetriable: false,
 	}} {
 		retriesStatus := []v1.TaskRunStatus{}
-		for i := 0; i < tc.numRetriesStatus; i++ {
+		for range tc.numRetriesStatus {
 			retriesStatus = append(retriesStatus, retryStatus)
 		}
 		t.Run(tc.name, func(t *testing.T) {

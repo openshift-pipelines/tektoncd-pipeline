@@ -69,7 +69,7 @@ func TestUninitializedMetrics(t *testing.T) {
 	}
 }
 
-func TestMetricsOnStore(t *testing.T) {
+func TestOnStore(t *testing.T) {
 	log := zap.NewExample()
 	defer log.Sync()
 	logger := log.Sugar()
@@ -81,7 +81,7 @@ func TestMetricsOnStore(t *testing.T) {
 	}
 
 	// We check that there's no change when incorrect config is passed
-	MetricsOnStore(logger)(config.GetMetricsConfigName(), &config.Store{})
+	OnStore(logger, metrics)(config.GetMetricsConfigName(), &config.Store{})
 	// Comparing function assign to struct with the one which should yield same value
 	if reflect.ValueOf(metrics.insertTag).Pointer() != reflect.ValueOf(pipelinerunInsertTag).Pointer() {
 		t.Fatal("metrics recorder shouldn't change during this OnStore call")
@@ -94,7 +94,7 @@ func TestMetricsOnStore(t *testing.T) {
 		DurationTaskrunType:     config.DurationTaskrunTypeHistogram,
 		DurationPipelinerunType: config.DurationPipelinerunTypeLastValue,
 	}
-	MetricsOnStore(logger)(config.GetMetricsConfigName(), cfg)
+	OnStore(logger, metrics)(config.GetMetricsConfigName(), cfg)
 	if reflect.ValueOf(metrics.insertTag).Pointer() != reflect.ValueOf(pipelinerunInsertTag).Pointer() {
 		t.Fatal("metrics recorder shouldn't change during this OnStore call")
 	}
@@ -105,7 +105,7 @@ func TestMetricsOnStore(t *testing.T) {
 		DurationTaskrunType:     config.DurationTaskrunTypeHistogram,
 		DurationPipelinerunType: config.DurationPipelinerunTypeLastValue,
 	}
-	MetricsOnStore(logger)(config.GetMetricsConfigName(), cfg)
+	OnStore(logger, metrics)(config.GetMetricsConfigName(), cfg)
 	if reflect.ValueOf(metrics.insertTag).Pointer() != reflect.ValueOf(nilInsertTag).Pointer() {
 		t.Fatal("metrics recorder didn't change during OnStore call")
 	}
@@ -341,6 +341,7 @@ func TestRecordPipelineRunDurationCount(t *testing.T) {
 			"pipeline":    "pipeline-1",
 			"pipelinerun": "pipelinerun-1",
 			"namespace":   "ns",
+			"reason":      "Failed",
 			"status":      "failed",
 		},
 		expectedCountTags: map[string]string{
@@ -377,6 +378,7 @@ func TestRecordPipelineRunDurationCount(t *testing.T) {
 			"pipelinerun": "pipelinerun-1",
 			"namespace":   "ns",
 			"status":      "cancelled",
+			"reason":      ReasonCancelled.String(),
 		},
 		expectedCountTags: map[string]string{
 			"status": "cancelled",
@@ -552,7 +554,7 @@ func TestRecordRunningPipelineRunsResolutionWaitCounts(t *testing.T) {
 		unregisterMetrics()
 		ctx, _ := ttesting.SetupFakeContext(t)
 		informer := fakepipelineruninformer.Get(ctx)
-		for i := 0; i < multiplier; i++ {
+		for range multiplier {
 			pr := &v1.PipelineRun{
 				ObjectMeta: metav1.ObjectMeta{Name: names.SimpleNameGenerator.RestrictLengthWithRandomSuffix("pipelinerun-")},
 				Status: v1.PipelineRunStatus{

@@ -72,9 +72,6 @@ var (
 	// ErrIsDir is returned when a reference file is attempting to be read,
 	// but the path specified is a directory.
 	ErrIsDir = errors.New("reference path is a directory")
-	// ErrEmptyRefFile is returned when a reference file is attempted to be read,
-	// but the file is empty
-	ErrEmptyRefFile = errors.New("ref file is empty")
 )
 
 // Options holds configuration for the storage.
@@ -252,7 +249,7 @@ func (d *DotGit) objectPacks() ([]plumbing.Hash, error) {
 			continue
 		}
 
-		h := plumbing.NewHash(n[5 : len(n)-5]) // pack-(hash).pack
+		h := plumbing.NewHash(n[5 : len(n)-5]) //pack-(hash).pack
 		if h.IsZero() {
 			// Ignore files with badly-formatted names.
 			continue
@@ -664,33 +661,18 @@ func (d *DotGit) readReferenceFrom(rd io.Reader, name string) (ref *plumbing.Ref
 		return nil, err
 	}
 
-	if len(b) == 0 {
-		return nil, ErrEmptyRefFile
-	}
-
 	line := strings.TrimSpace(string(b))
 	return plumbing.NewReferenceFromStrings(name, line), nil
 }
 
-// checkReferenceAndTruncate reads the reference from the given file, or the `pack-refs` file if
-// the file was empty. Then it checks that the old reference matches the stored reference and
-// truncates the file.
 func (d *DotGit) checkReferenceAndTruncate(f billy.File, old *plumbing.Reference) error {
 	if old == nil {
 		return nil
 	}
-
 	ref, err := d.readReferenceFrom(f, old.Name().String())
-	if errors.Is(err, ErrEmptyRefFile) {
-		// This may happen if the reference is being read from a newly created file.
-		// In that case, try getting the reference from the packed refs file.
-		ref, err = d.packedRef(old.Name())
-	}
-
 	if err != nil {
 		return err
 	}
-
 	if ref.Hash() != old.Hash() {
 		return storage.ErrReferenceHasChanged
 	}
@@ -719,16 +701,16 @@ func (d *DotGit) SetRef(r, old *plumbing.Reference) error {
 // Symbolic references are resolved and included in the output.
 func (d *DotGit) Refs() ([]*plumbing.Reference, error) {
 	var refs []*plumbing.Reference
-	seen := make(map[plumbing.ReferenceName]bool)
-	if err := d.addRefFromHEAD(&refs); err != nil {
-		return nil, err
-	}
-
+	var seen = make(map[plumbing.ReferenceName]bool)
 	if err := d.addRefsFromRefDir(&refs, seen); err != nil {
 		return nil, err
 	}
 
 	if err := d.addRefsFromPackedRefs(&refs, seen); err != nil {
+		return nil, err
+	}
+
+	if err := d.addRefFromHEAD(&refs); err != nil {
 		return nil, err
 	}
 
@@ -833,8 +815,7 @@ func (d *DotGit) addRefsFromPackedRefsFile(refs *[]*plumbing.Reference, f billy.
 }
 
 func (d *DotGit) openAndLockPackedRefs(doCreate bool) (
-	pr billy.File, err error,
-) {
+	pr billy.File, err error) {
 	var f billy.File
 	defer func() {
 		if err != nil && f != nil {
@@ -1039,7 +1020,7 @@ func (d *DotGit) readReferenceFile(path, name string) (ref *plumbing.Reference, 
 
 func (d *DotGit) CountLooseRefs() (int, error) {
 	var refs []*plumbing.Reference
-	seen := make(map[plumbing.ReferenceName]bool)
+	var seen = make(map[plumbing.ReferenceName]bool)
 	if err := d.addRefsFromRefDir(&refs, seen); err != nil {
 		return 0, err
 	}

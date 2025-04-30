@@ -44,7 +44,7 @@ var (
 	completionTime = metav1.NewTime(startTime.Time.Add(time.Minute))
 )
 
-func getConfigContext(countWithReason bool) context.Context {
+func getConfigContext(countWithReason, throttleWithNamespace bool) context.Context {
 	ctx := context.Background()
 	cfg := &config.Config{
 		Metrics: &config.Metrics{
@@ -53,6 +53,7 @@ func getConfigContext(countWithReason bool) context.Context {
 			DurationTaskrunType:     config.DefaultDurationTaskrunType,
 			DurationPipelinerunType: config.DefaultDurationPipelinerunType,
 			CountWithReason:         countWithReason,
+			ThrottleWithNamespace:   throttleWithNamespace,
 		},
 	}
 	return config.ToContext(ctx, cfg)
@@ -79,19 +80,19 @@ func TestUninitializedMetrics(t *testing.T) {
 	}
 }
 
-func TestMetricsOnStore(t *testing.T) {
+func TestOnStore(t *testing.T) {
 	log := zap.NewExample()
 	defer log.Sync()
 	logger := log.Sugar()
 
-	ctx := getConfigContext(false)
+	ctx := getConfigContext(false, false)
 	metrics, err := NewRecorder(ctx)
 	if err != nil {
 		t.Fatalf("NewRecorder: %v", err)
 	}
 
 	// We check that there's no change when incorrect config is passed
-	MetricsOnStore(logger)(config.GetMetricsConfigName(), &config.Store{})
+	OnStore(logger, metrics)(config.GetMetricsConfigName(), &config.Store{})
 	// Comparing function assign to struct with the one which should yield same value
 	if reflect.ValueOf(metrics.insertTaskTag).Pointer() != reflect.ValueOf(taskrunInsertTag).Pointer() {
 		t.Fatalf("metrics recorder shouldn't change during this OnStore call")
@@ -106,7 +107,7 @@ func TestMetricsOnStore(t *testing.T) {
 	}
 
 	// We test that there's no change when incorrect values in configmap is passed
-	MetricsOnStore(logger)(config.GetMetricsConfigName(), cfg)
+	OnStore(logger, metrics)(config.GetMetricsConfigName(), cfg)
 	// Comparing function assign to struct with the one which should yield same value
 	if reflect.ValueOf(metrics.insertTaskTag).Pointer() != reflect.ValueOf(taskrunInsertTag).Pointer() {
 		t.Fatalf("metrics recorder shouldn't change during this OnStore call")
@@ -120,7 +121,7 @@ func TestMetricsOnStore(t *testing.T) {
 		DurationPipelinerunType: config.DurationPipelinerunTypeLastValue,
 	}
 
-	MetricsOnStore(logger)(config.GetMetricsConfigName(), cfg)
+	OnStore(logger, metrics)(config.GetMetricsConfigName(), cfg)
 	if reflect.ValueOf(metrics.insertTaskTag).Pointer() != reflect.ValueOf(nilInsertTag).Pointer() {
 		t.Fatalf("metrics recorder didn't change during OnStore call")
 	}
@@ -434,6 +435,7 @@ func TestRecordTaskRunDurationCount(t *testing.T) {
 			"task":        "task-1",
 			"taskrun":     "taskrun-1",
 			"namespace":   "ns",
+			"reason":      "TaskRunImagePullFailed",
 			"status":      "failed",
 		},
 		expectedCountTags: map[string]string{
@@ -448,7 +450,7 @@ func TestRecordTaskRunDurationCount(t *testing.T) {
 		t.Run(c.name, func(t *testing.T) {
 			unregisterMetrics()
 
-			ctx := getConfigContext(c.countWithReason)
+			ctx := getConfigContext(c.countWithReason, false)
 			metrics, err := NewRecorder(ctx)
 			if err != nil {
 				t.Fatalf("NewRecorder: %v", err)
@@ -503,7 +505,7 @@ func TestRecordRunningTaskRunsCount(t *testing.T) {
 		}
 	}
 
-	ctx = getConfigContext(false)
+	ctx = getConfigContext(false, false)
 	metrics, err := NewRecorder(ctx)
 	if err != nil {
 		t.Fatalf("NewRecorder: %v", err)
@@ -523,6 +525,7 @@ func TestRecordRunningTaskRunsThrottledCounts(t *testing.T) {
 		nodeCount  float64
 		quotaCount float64
 		waitCount  float64
+		addNS      bool
 	}{
 		{
 			status: corev1.ConditionTrue,
@@ -534,7 +537,17 @@ func TestRecordRunningTaskRunsThrottledCounts(t *testing.T) {
 		},
 		{
 			status: corev1.ConditionTrue,
+			reason: pod.ReasonExceededResourceQuota,
+			addNS:  true,
+		},
+		{
+			status: corev1.ConditionTrue,
 			reason: pod.ReasonExceededNodeResources,
+		},
+		{
+			status: corev1.ConditionTrue,
+			reason: pod.ReasonExceededNodeResources,
+			addNS:  true,
 		},
 		{
 			status: corev1.ConditionTrue,
@@ -571,6 +584,18 @@ func TestRecordRunningTaskRunsThrottledCounts(t *testing.T) {
 			nodeCount: 3,
 		},
 		{
+			status:     corev1.ConditionUnknown,
+			reason:     pod.ReasonExceededResourceQuota,
+			quotaCount: 3,
+			addNS:      true,
+		},
+		{
+			status:    corev1.ConditionUnknown,
+			reason:    pod.ReasonExceededNodeResources,
+			nodeCount: 3,
+			addNS:     true,
+		},
+		{
 			status:    corev1.ConditionUnknown,
 			reason:    v1.TaskRunReasonResolvingTaskRef,
 			waitCount: 3,
@@ -579,9 +604,9 @@ func TestRecordRunningTaskRunsThrottledCounts(t *testing.T) {
 		unregisterMetrics()
 		ctx, _ := ttesting.SetupFakeContext(t)
 		informer := faketaskruninformer.Get(ctx)
-		for i := 0; i < multiplier; i++ {
+		for range multiplier {
 			tr := &v1.TaskRun{
-				ObjectMeta: metav1.ObjectMeta{Name: names.SimpleNameGenerator.RestrictLengthWithRandomSuffix("taskrun-")},
+				ObjectMeta: metav1.ObjectMeta{Name: names.SimpleNameGenerator.RestrictLengthWithRandomSuffix("taskrun-"), Namespace: "test"},
 				Status: v1.TaskRunStatus{
 					Status: duckv1.Status{
 						Conditions: duckv1.Conditions{{
@@ -597,7 +622,7 @@ func TestRecordRunningTaskRunsThrottledCounts(t *testing.T) {
 			}
 		}
 
-		ctx = getConfigContext(false)
+		ctx = getConfigContext(false, tc.addNS)
 		metrics, err := NewRecorder(ctx)
 		if err != nil {
 			t.Fatalf("NewRecorder: %v", err)
@@ -607,7 +632,13 @@ func TestRecordRunningTaskRunsThrottledCounts(t *testing.T) {
 			t.Errorf("RunningTaskRuns: %v", err)
 		}
 		metricstest.CheckLastValueData(t, "running_taskruns_throttled_by_quota_count", map[string]string{}, tc.quotaCount)
+		nsMap := map[string]string{}
+		if tc.addNS {
+			nsMap = map[string]string{namespaceTag.Name(): "test"}
+		}
+		metricstest.CheckLastValueData(t, "running_taskruns_throttled_by_quota", nsMap, tc.quotaCount)
 		metricstest.CheckLastValueData(t, "running_taskruns_throttled_by_node_count", map[string]string{}, tc.nodeCount)
+		metricstest.CheckLastValueData(t, "running_taskruns_throttled_by_node", nsMap, tc.nodeCount)
 		metricstest.CheckLastValueData(t, "running_taskruns_waiting_on_task_resolution_count", map[string]string{}, tc.waitCount)
 	}
 }
@@ -738,7 +769,7 @@ func TestRecordPodLatency(t *testing.T) {
 		t.Run(td.name, func(t *testing.T) {
 			unregisterMetrics()
 
-			ctx := getConfigContext(false)
+			ctx := getConfigContext(false, false)
 			metrics, err := NewRecorder(ctx)
 			if err != nil {
 				t.Fatalf("NewRecorder: %v", err)
