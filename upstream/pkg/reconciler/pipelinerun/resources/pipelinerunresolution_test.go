@@ -65,7 +65,7 @@ var pts = []v1.PipelineTask{{
 	TaskRef: &v1.TaskRef{Name: "task"},
 }, {
 	Name:    "mytask3",
-	TaskRef: &v1.TaskRef{Name: "clustertask"},
+	TaskRef: &v1.TaskRef{Name: "task"},
 }, {
 	Name:    "mytask4",
 	TaskRef: &v1.TaskRef{Name: "task"},
@@ -3800,10 +3800,10 @@ func TestResolvePipelineRunTask_WithMatrix(t *testing.T) {
 		name: "task with matrix - whole array results",
 		pt:   pts[2],
 		want: &ResolvedPipelineTask{
-			TaskRunNames: nil,
+			TaskRunNames: []string{"pipelinerun-pipelinetask-with-whole-array-results"},
 			TaskRuns:     nil,
 			PipelineTask: &pts[2],
-			ResolvedTask: nil,
+			ResolvedTask: rtr,
 		},
 		pst: pipelineRunState,
 	}} {

@@ -123,7 +123,6 @@ const (
 	apiFieldsFeatureFlag           = "enable-api-fields"
 	ociBundlesFeatureFlag          = "enable-tekton-oci-bundles"
 	maxMatrixCombinationsCountFlag = "default-max-matrix-combinations-count"
-	disableAffinityAssistantFlag   = "disable-affinity-assistant"
 )
 
 type PipelineRunTest struct {
@@ -302,7 +301,7 @@ spec:
     retries: 5
     taskRef:
       name: unit-test-task
-  - name: unit-test-cluster-task
+  - name: unit-test-3
     params:
     - name: foo
       value: somethingfun
@@ -313,8 +312,8 @@ spec:
     - name: contextPipelineParam
       value: $(context.pipeline.name)
     taskRef:
-      kind: ClusterTask
-      name: unit-test-cluster-task
+      kind: Task
+      name: unit-test-task-2
 `)}
 	ts := []*v1.Task{
 		parse.MustParseV1Task(t, `
@@ -333,12 +332,10 @@ spec:
     type: string
   - name: contextRetriesParam
     type: string
-`),
-	}
-	clusterTasks := []*v1beta1.ClusterTask{
-		parse.MustParseClusterTask(t, `
+`), parse.MustParseV1Task(t, `
 metadata:
-  name: unit-test-cluster-task
+  name: unit-test-task-2
+  namespace: foo
 spec:
   params:
   - name: foo
@@ -356,7 +353,6 @@ spec:
 		PipelineRuns: prs,
 		Pipelines:    ps,
 		Tasks:        ts,
-		ClusterTasks: clusterTasks,
 		ConfigMaps:   []*corev1.ConfigMap{newFeatureFlagsConfigMap()},
 	}
 	prt := newPipelineRunTest(t, d)
@@ -413,7 +409,7 @@ spec:
 	checkPipelineRunConditionStatusAndReason(t, reconciledRun, corev1.ConditionUnknown, v1.PipelineRunReasonRunning.String())
 
 	tr1Name := "test-pipeline-run-success-unit-test-1"
-	tr2Name := "test-pipeline-run-success-unit-test-cluster-task"
+	tr2Name := "test-pipeline-run-success-unit-test-3"
 
 	verifyTaskRunStatusesCount(t, reconciledRun.Status, 2)
 	verifyTaskRunStatusesNames(t, reconciledRun.Status, tr1Name, tr2Name)
@@ -1492,12 +1488,6 @@ func withEnabledAlphaAPIFields(cm *corev1.ConfigMap) *corev1.ConfigMap {
 func withMaxMatrixCombinationsCount(cm *corev1.ConfigMap, count int) *corev1.ConfigMap {
 	newCM := cm.DeepCopy()
 	newCM.Data[maxMatrixCombinationsCountFlag] = strconv.Itoa(count)
-	return newCM
-}
-
-func withoutAffinityAssistant(cm *corev1.ConfigMap) *corev1.ConfigMap {
-	newCM := cm.DeepCopy()
-	newCM.Data[disableAffinityAssistantFlag] = "true"
 	return newCM
 }
 
@@ -5341,7 +5331,7 @@ spec:
         name: myclaim
 `)}
 	ts := []*v1.Task{simpleHelloWorldTask}
-	cms := []*corev1.ConfigMap{withoutAffinityAssistant(newFeatureFlagsConfigMap())}
+	cms := []*corev1.ConfigMap{newFeatureFlagsConfigMap()}
 
 	d := test.Data{
 		PipelineRuns: prs,
@@ -5983,7 +5973,6 @@ status:
 		name       string
 		prs        []*v1.PipelineRun
 		expectedTr *v1.TaskRun
-		disableAA  bool
 	}{
 		{
 			name: "pcv success",
@@ -6001,10 +5990,11 @@ spec:
       persistentVolumeClaim:
         claimName: $(tasks.a-task.results.aResult)
 `)},
-			disableAA: true,
 			expectedTr: mustParseTaskRunWithObjectMeta(t,
-				taskRunObjectMeta("test-pipeline-run-variable-substitution-b-task", "foo",
-					"test-pipeline-run-variable-substitution", "test-pipeline", "b-task", false),
+				taskRunObjectMetaWithAnnotations("test-pipeline-run-variable-substitution-b-task", "foo",
+					"test-pipeline-run-variable-substitution", "test-pipeline", "b-task", false, map[string]string{
+						"pipeline.tekton.dev/affinity-assistant": "affinity-assistant-0358aabfa2",
+					}),
 				`spec:
   serviceAccountName: test-sa-0
   taskRef:
@@ -6252,11 +6242,6 @@ spec:
 				Pipelines:    ps,
 				Tasks:        ts,
 				TaskRuns:     trs,
-			}
-			if tt.disableAA {
-				configMap := newFeatureFlagsConfigMap()
-				configMap.Data["disable-affinity-assistant"] = "true"
-				d.ConfigMaps = []*corev1.ConfigMap{configMap}
 			}
 
 			prt := newPipelineRunTest(t, d)
@@ -8858,6 +8843,10 @@ func TestReconcile_DependencyValidationsImmediatelyFailPipelineRun(t *testing.T)
 	cfg := config.NewStore(logtesting.TestLogger(t))
 	ctx = cfg.ToContext(ctx)
 
+	ts := []*v1.Task{
+		simpleSomeTask,
+	}
+
 	prs := []*v1.PipelineRun{
 		parse.MustParseV1PipelineRun(t, `
 metadata:
@@ -8940,7 +8929,7 @@ spec:
              echo "$(params.platform)"
     - name: b-task
       taskRef:
-        name: mytask
+        name: some-task
       matrix:
         params:
           - name: platform
@@ -8970,6 +8959,7 @@ spec:
 	d := test.Data{
 		ConfigMaps:   cms,
 		PipelineRuns: prs,
+		Tasks:        ts,
 		ServiceAccounts: []*corev1.ServiceAccount{{
 			ObjectMeta: metav1.ObjectMeta{Name: prs[0].Spec.TaskRunTemplate.ServiceAccountName, Namespace: "foo"},
 		}},
@@ -15854,15 +15844,15 @@ spec:
       value: $(params.bar)
     taskRef:
       name: unit-test-task
-  - name: unit-test-cluster-task
+  - name: unit-test-2
     params:
     - name: foo
       value: somethingfun
     - name: bar
       value: $(params.bar)
     taskRef:
-      kind: ClusterTask
-      name: unit-test-cluster-task
+      kind: Task
+      name: unit-test-task-2
 `)}
 	ts := []*v1.Task{
 		parse.MustParseV1Task(t, `
@@ -15873,12 +15863,10 @@ spec:
   params:
   - name: foo
   - name: bar
-`),
-	}
-	clusterTasks := []*v1beta1.ClusterTask{
-		parse.MustParseClusterTask(t, `
+`), parse.MustParseV1Task(t, `
 metadata:
-  name: unit-test-cluster-task
+  name: unit-test-task-2
+  namespace: foo
 spec:
   params:
   - name: foo
@@ -15890,7 +15878,6 @@ spec:
 		PipelineRuns: prs,
 		Pipelines:    ps,
 		Tasks:        ts,
-		ClusterTasks: clusterTasks,
 		ConfigMaps:   []*corev1.ConfigMap{newFeatureFlagsConfigMap()},
 	}
 	prt := newPipelineRunTest(t, d)
@@ -15932,7 +15919,7 @@ spec:
 	checkPipelineRunConditionStatusAndReason(t, reconciledRun, corev1.ConditionUnknown, v1.PipelineRunReasonRunning.String())
 
 	tr1Name := "test-pipeline-run-success-unit-test-1"
-	tr2Name := "test-pipeline-run-success-unit-test-cluster-task"
+	tr2Name := "test-pipeline-run-success-unit-test-2"
 
 	verifyTaskRunStatusesCount(t, reconciledRun.Status, 2)
 	verifyTaskRunStatusesNames(t, reconciledRun.Status, tr1Name, tr2Name)
@@ -17992,6 +17979,55 @@ func Test_runNextSchedulableTask(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestReconcile_InvalidOnErrorPipeline(t *testing.T) {
+	names.TestingSeed()
+
+	namespace := "foo"
+	prName := "test-pipeline-invalid-onerror"
+
+	prs := []*v1.PipelineRun{
+		parse.MustParseV1PipelineRun(t, `
+metadata:
+  name: test-pipeline-invalid-onerror
+  namespace: foo
+spec:
+  params:
+    - name: onerror
+      value: "invalid"
+  pipelineSpec:
+    tasks:
+    - name: echo
+      onError: $(params.onerror)
+      taskSpec:
+        steps:
+        - name: echo
+          image: ubuntu
+          script: |
+            echo "Hello, World!"
+            exit 1
+`),
+	}
+
+	d := test.Data{
+		PipelineRuns: prs,
+		ConfigMaps:   []*corev1.ConfigMap{newFeatureFlagsConfigMap()},
+	}
+	prt := newPipelineRunTest(t, d)
+	defer prt.Cancel()
+
+	wantEvents := []string{
+		"Normal Started",
+		"(?s)Warning Failed .*PipelineTask OnError must be either \"continue\" or \"stopAndFail\"",
+		"(?s)Warning InternalError .*OnError\nPipelineTask OnError must be either \"continue\" or \"stopAndFail\"",
+	}
+	reconciledRun, clients := prt.reconcileRun(namespace, prName, wantEvents, true)
+
+	// Check that the expected TaskRun was not created
+	taskRuns := getTaskRunsForPipelineRun(prt.TestAssets.Ctx, t, clients, namespace, prName)
+	validateTaskRunsCount(t, taskRuns, 0)
+	verifyTaskRunStatusesCount(t, reconciledRun.Status, 0)
 }
 
 func getSignedV1Pipeline(unsigned *pipelinev1.Pipeline, signer signature.Signer, name string) (*pipelinev1.Pipeline, error) {
