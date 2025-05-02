@@ -275,21 +275,6 @@ that are running while the change occurs.
 
 The flags in this ConfigMap are as follows:
 
-- `disable-affinity-assistant` - set this flag to `true` to disable the [Affinity Assistant](./affinityassistants)
-  that is used to provide Node Affinity for `TaskRun` pods that share workspace volume.
-  The Affinity Assistant is incompatible with other affinity rules
-  configured for `TaskRun` pods.
-
-  **Note:** This feature flag is deprecated and will be removed in release `v0.60`. Consider using `coschedule` feature flag to configure Affinity Assistant behavior.
-
-  **Note:** Affinity Assistant use [Inter-pod affinity and anti-affinity](https://kubernetes.io/docs/concepts/scheduling-eviction/assign-pod-node/#inter-pod-affinity-and-anti-affinity)
-  that require substantial amount of processing which can slow down scheduling in large clusters
-  significantly. We do not recommend using them in clusters larger than several hundred nodes
-
-  **Note:** Pod anti-affinity requires nodes to be consistently labelled, in other words every
-  node in the cluster must have an appropriate label matching `topologyKey`. If some or all nodes
-  are missing the specified `topologyKey` label, it can lead to unintended behavior.
-
 - `coschedule`: set this flag determines how PipelineRun Pods are scheduled with [Affinity Assistant](./affinityassistants).
 Acceptable values are "workspaces" (default), "pipelineruns", "isolate-pipelinerun", or "disabled".
 Setting it to "workspaces" will schedule all the taskruns sharing the same PVC-based workspace in a pipelinerun to the same node.
@@ -406,7 +391,6 @@ Features currently in "beta" are:
 | [Isolated `Step` & `Sidecar` `Workspaces`](./workspaces.md#isolated-workspaces)                       | [TEP-0029](https://github.com/tektoncd/community/blob/main/teps/0029-step-workspaces.md)                 | [v0.24.0](https://github.com/tektoncd/pipeline/releases/tag/v0.24.0) | [v0.50.0](https://github.com/tektoncd/pipeline/releases/tag/v0.50.0) |                               |
 | [Matrix](./matrix.md)                                                                                 | [TEP-0090](https://github.com/tektoncd/community/blob/main/teps/0090-matrix.md)                          | [v0.38.0](https://github.com/tektoncd/pipeline/releases/tag/v0.38.0) | [v0.53.0](https://github.com/tektoncd/pipeline/releases/tag/v0.53.0) |                               |
 | [Task-level Resource Requirements](compute-resources.md#task-level-compute-resources-configuration)   | [TEP-0104](https://github.com/tektoncd/community/blob/main/teps/0104-tasklevel-resource-requirements.md) | [v0.39.0](https://github.com/tektoncd/pipeline/releases/tag/v0.39.0) | [v0.53.0](https://github.com/tektoncd/pipeline/releases/tag/v0.53.0) |                               |
-| [Reusable Steps via StepActions](./stepactions.md)                                                           | [TEP-0142](https://github.com/tektoncd/community/blob/main/teps/0142-enable-step-reusability.md)                     | [v0.54.0](https://github.com/tektoncd/pipeline/releases/tag/v0.54.0) | `enable-step-actions`                            |
 | [Larger Results via Sidecar Logs](#enabling-larger-results-using-sidecar-logs)                               | [TEP-0127](https://github.com/tektoncd/community/blob/main/teps/0127-larger-results-via-sidecar-logs.md)             | [v0.43.0](https://github.com/tektoncd/pipeline/releases/tag/v0.43.0) | [v0.61.0](https://github.com/tektoncd/pipeline/releases/tag/v0.61.0) | `results-from`                                   |
 | [Step and Sidecar Overrides](./taskruns.md#overriding-task-steps-and-sidecars)                               | [TEP-0094](https://github.com/tektoncd/community/blob/main/teps/0094-specifying-resource-requirements-at-runtime.md) | [v0.34.0](https://github.com/tektoncd/pipeline/releases/tag/v0.34.0) |                                                  | [v0.61.0](https://github.com/tektoncd/pipeline/releases/tag/v0.61.0)  | |
 | [Ignore Task Failure](./pipelines.md#using-the-onerror-field)                                                | [TEP-0050](https://github.com/tektoncd/community/blob/main/teps/0050-ignore-task-failures.md)                        |    [v0.55.0](https://github.com/tektoncd/pipeline/releases/tag/v0.55.0)                                                              | [v0.62.0](https://github.com/tektoncd/pipeline/releases/tag/v0.62.0)                                                 | N/A |
@@ -414,7 +398,7 @@ Features currently in "beta" are:
 ## Enabling larger results using sidecar logs
 
 **Note**: The maximum size of a Task's results is limited by the container termination message feature of Kubernetes,
-as results are passed back to the controller via this mechanism. At present, the limit is per task is “4096 bytes”. All
+as results are passed back to the controller via this mechanism. At present, the limit is per task is "4096 bytes". All
 results produced by the task share this upper limit.
 
 To exceed this limit of 4096 bytes, you can enable larger results using sidecar logs. By enabling this feature, you will
