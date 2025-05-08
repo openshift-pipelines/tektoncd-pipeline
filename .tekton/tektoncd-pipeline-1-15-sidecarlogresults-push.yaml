@@ -30,12 +30,14 @@ spec:
   - name: output-image
     value: quay.io/redhat-user-workloads/tekton-ecosystem-tenant/1-15/pipeline-sidecarlogresults-rhel8:{{revision}}
   - name: dockerfile
-    value: .konflux/dockerfiles/sidecarlogresults.Dockerfile
+    value: .konflux/dockerfiles/sidecarlogresults.Dockerfile    
   - name: prefetch-input
     value: |
       {"type": "rpm", "path": ".konflux/rpms"}
   pipelineRef:
     name: docker-build-ta
+  taskRunTemplate:
+    serviceAccountName: build-pipeline-tektoncd-pipeline-1-15-sidecarlogresults
   workspaces:
   - name: git-auth
     secret:
