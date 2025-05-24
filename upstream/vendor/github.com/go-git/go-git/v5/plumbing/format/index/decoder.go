@@ -24,8 +24,8 @@ var (
 	// ErrInvalidChecksum is returned by Decode if the SHA1 hash mismatch with
 	// the read content
 	ErrInvalidChecksum = errors.New("invalid checksum")
-	// ErrUnknownExtension is returned when an index extension is encountered that is considered mandatory
-	ErrUnknownExtension = errors.New("unknown extension")
+
+	errUnknownExtension = errors.New("unknown extension")
 )
 
 const (
@@ -39,7 +39,6 @@ const (
 
 // A Decoder reads and decodes index files from an input stream.
 type Decoder struct {
-	buf       *bufio.Reader
 	r         io.Reader
 	hash      hash.Hash
 	lastEntry *Entry
@@ -50,10 +49,8 @@ type Decoder struct {
 // NewDecoder returns a new decoder that reads from r.
 func NewDecoder(r io.Reader) *Decoder {
 	h := hash.New(hash.CryptoType)
-	buf := bufio.NewReader(r)
 	return &Decoder{
-		buf:       buf,
-		r:         io.TeeReader(buf, h),
+		r:         io.TeeReader(r, h),
 		hash:      h,
 		extReader: bufio.NewReader(nil),
 	}
@@ -213,75 +210,71 @@ func (d *Decoder) readExtensions(idx *Index) error {
 	// count that they are not supported by jgit or libgit
 
 	var expected []byte
-	var peeked []byte
 	var err error
 
-	// we should always be able to peek for 4 bytes (header) + 4 bytes (extlen) + final hash
-	// if this fails, we know that we're at the end of the index
-	peekLen := 4 + 4 + d.hash.Size()
-
+	var header [4]byte
 	for {
 		expected = d.hash.Sum(nil)
-		peeked, err = d.buf.Peek(peekLen)
-		if len(peeked) < peekLen {
-			// there can't be an extension at this point, so let's bail out
+
+		var n int
+		if n, err = io.ReadFull(d.r, header[:]); err != nil {
+			if n == 0 {
+				err = io.EOF
+			}
+
 			break
 		}
-		if err != nil {
-			return err
-		}
 
-		err = d.readExtension(idx)
+		err = d.readExtension(idx, header[:])
 		if err != nil {
-			return err
+			break
 		}
 	}
 
-	return d.readChecksum(expected)
+	if err != errUnknownExtension {
+		return err
+	}
+
+	return d.readChecksum(expected, header)
 }
 
-func (d *Decoder) readExtension(idx *Index) error {
-	var header [4]byte
-
-	if _, err := io.ReadFull(d.r, header[:]); err != nil {
-		return err
-	}
-
-	r, err := d.getExtensionReader()
-	if err != nil {
-		return err
-	}
-
+func (d *Decoder) readExtension(idx *Index, header []byte) error {
 	switch {
-	case bytes.Equal(header[:], treeExtSignature):
+	case bytes.Equal(header, treeExtSignature):
+		r, err := d.getExtensionReader()
+		if err != nil {
+			return err
+		}
+
 		idx.Cache = &Tree{}
 		d := &treeExtensionDecoder{r}
 		if err := d.Decode(idx.Cache); err != nil {
 			return err
 		}
-	case bytes.Equal(header[:], resolveUndoExtSignature):
+	case bytes.Equal(header, resolveUndoExtSignature):
+		r, err := d.getExtensionReader()
+		if err != nil {
+			return err
+		}
+
 		idx.ResolveUndo = &ResolveUndo{}
 		d := &resolveUndoDecoder{r}
 		if err := d.Decode(idx.ResolveUndo); err != nil {
 			return err
 		}
-	case bytes.Equal(header[:], endOfIndexEntryExtSignature):
+	case bytes.Equal(header, endOfIndexEntryExtSignature):
+		r, err := d.getExtensionReader()
+		if err != nil {
+			return err
+		}
+
 		idx.EndOfIndexEntry = &EndOfIndexEntry{}
 		d := &endOfIndexEntryDecoder{r}
 		if err := d.Decode(idx.EndOfIndexEntry); err != nil {
 			return err
 		}
 	default:
-		// See https://git-scm.com/docs/index-format, which says:
-		// If the first byte is 'A'..'Z' the extension is optional and can be ignored.
-		if header[0] < 'A' || header[0] > 'Z' {
-			return ErrUnknownExtension
-		}
-
-		d := &unknownExtensionDecoder{r}
-		if err := d.Decode(); err != nil {
-			return err
-		}
+		return errUnknownExtension
 	}
 
 	return nil
@@ -297,10 +290,11 @@ func (d *Decoder) getExtensionReader() (*bufio.Reader, error) {
 	return d.extReader, nil
 }
 
-func (d *Decoder) readChecksum(expected []byte) error {
+func (d *Decoder) readChecksum(expected []byte, alreadyRead [4]byte) error {
 	var h plumbing.Hash
+	copy(h[:4], alreadyRead[:])
 
-	if _, err := io.ReadFull(d.r, h[:]); err != nil {
+	if _, err := io.ReadFull(d.r, h[4:]); err != nil {
 		return err
 	}
 
@@ -481,23 +475,4 @@ func (d *endOfIndexEntryDecoder) Decode(e *EndOfIndexEntry) error {
 
 	_, err = io.ReadFull(d.r, e.Hash[:])
 	return err
-}
-
-type unknownExtensionDecoder struct {
-	r *bufio.Reader
-}
-
-func (d *unknownExtensionDecoder) Decode() error {
-	var buf [1024]byte
-
-	for {
-		_, err := d.r.Read(buf[:])
-		if err == io.EOF {
-			break
-		}
-		if err != nil {
-			return err
-		}
-	}
-	return nil
 }

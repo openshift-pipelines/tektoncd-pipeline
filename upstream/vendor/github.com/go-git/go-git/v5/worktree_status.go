@@ -29,23 +29,10 @@ var (
 	// ErrGlobNoMatches in an AddGlob if the glob pattern does not match any
 	// files in the worktree.
 	ErrGlobNoMatches = errors.New("glob pattern did not match any files")
-	// ErrUnsupportedStatusStrategy occurs when an invalid StatusStrategy is used
-	// when processing the Worktree status.
-	ErrUnsupportedStatusStrategy = errors.New("unsupported status strategy")
 )
 
 // Status returns the working tree status.
 func (w *Worktree) Status() (Status, error) {
-	return w.StatusWithOptions(StatusOptions{Strategy: defaultStatusStrategy})
-}
-
-// StatusOptions defines the options for Worktree.StatusWithOptions().
-type StatusOptions struct {
-	Strategy StatusStrategy
-}
-
-// StatusWithOptions returns the working tree status.
-func (w *Worktree) StatusWithOptions(o StatusOptions) (Status, error) {
 	var hash plumbing.Hash
 
 	ref, err := w.r.Head()
@@ -57,14 +44,11 @@ func (w *Worktree) StatusWithOptions(o StatusOptions) (Status, error) {
 		hash = ref.Hash()
 	}
 
-	return w.status(o.Strategy, hash)
+	return w.status(hash)
 }
 
-func (w *Worktree) status(ss StatusStrategy, commit plumbing.Hash) (Status, error) {
-	s, err := ss.new(w)
-	if err != nil {
-		return nil, err
-	}
+func (w *Worktree) status(commit plumbing.Hash) (Status, error) {
+	s := make(Status)
 
 	left, err := w.diffCommitWithStaging(commit, false)
 	if err != nil {
@@ -504,7 +488,7 @@ func (w *Worktree) copyFileToStorage(path string) (hash plumbing.Hash, err error
 	return w.r.Storer.SetEncodedObject(obj)
 }
 
-func (w *Worktree) fillEncodedObjectFromFile(dst io.Writer, path string, _ os.FileInfo) (err error) {
+func (w *Worktree) fillEncodedObjectFromFile(dst io.Writer, path string, fi os.FileInfo) (err error) {
 	src, err := w.Filesystem.Open(path)
 	if err != nil {
 		return err
@@ -519,7 +503,7 @@ func (w *Worktree) fillEncodedObjectFromFile(dst io.Writer, path string, _ os.Fi
 	return err
 }
 
-func (w *Worktree) fillEncodedObjectFromSymlink(dst io.Writer, path string, _ os.FileInfo) error {
+func (w *Worktree) fillEncodedObjectFromSymlink(dst io.Writer, path string, fi os.FileInfo) error {
 	target, err := w.Filesystem.Readlink(path)
 	if err != nil {
 		return err
@@ -559,11 +543,9 @@ func (w *Worktree) doUpdateFileToIndex(e *index.Entry, filename string, h plumbi
 		return err
 	}
 
-	// The entry size must always reflect the current state, otherwise
-	// it will cause go-git's Worktree.Status() to divert from "git status".
-	// The size of a symlink is the length of the path to the target.
-	// The size of Regular and Executable files is the size of the files.
-	e.Size = uint32(info.Size())
+	if e.Mode.IsRegular() {
+		e.Size = uint32(info.Size())
+	}
 
 	fillSystemInfo(e, info.Sys())
 	return nil
