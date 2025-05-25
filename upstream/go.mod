@@ -42,7 +42,7 @@ require (
 	github.com/go-jose/go-jose/v3 v3.0.4
 	github.com/goccy/kpoward v0.1.0
 	github.com/google/cel-go v0.24.1
-	github.com/google/go-containerregistry/pkg/authn/k8schain v0.0.0-20240108195214-a0658aa1d0cc
+	github.com/google/go-containerregistry/pkg/authn/k8schain 4eb8c4d84ef0
 	github.com/sigstore/sigstore/pkg/signature/kms/aws v1.8.15
 	github.com/sigstore/sigstore/pkg/signature/kms/azure v1.8.15
 	github.com/sigstore/sigstore/pkg/signature/kms/gcp v1.8.15
