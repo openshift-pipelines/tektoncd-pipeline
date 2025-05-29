@@ -14,7 +14,7 @@ RUN go build -ldflags="-X 'knative.dev/pkg/changeset.rev=$(cat HEAD)'" -mod=vend
     ./cmd/workingdirinit
 
 FROM $RUNTIME
-ARG VERSION=pipeline-next
+ARG VERSION=pipeline-1.19
 
 ENV WORKINGDIRINIT=/usr/local/bin/workingdirinit \
     KO_APP=/ko-app \

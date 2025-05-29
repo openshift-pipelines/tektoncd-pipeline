@@ -15,7 +15,7 @@ RUN CGO_ENABLED=0 \
     ./cmd/entrypoint
 
 FROM $RUNTIME
-ARG VERSION=pipeline-next
+ARG VERSION=pipeline-1.18
 
 ENV ENTRYPOINT=/usr/local/bin/entrypoint \
     KO_APP=/ko-app \
