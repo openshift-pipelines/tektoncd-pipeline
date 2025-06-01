@@ -117,7 +117,7 @@ require (
 	github.com/hashicorp/vault/api v1.10.0 // indirect
 	github.com/jellydator/ttlcache/v3 v3.1.1 // indirect
 	github.com/kylelemons/godebug v1.1.0 // indirect
-	github.com/letsencrypt/boulder v0.0.0-20230907030200-6d76a0f91e1e // indirect
+	github.com/letsencrypt/boulder 0d7ea60b2cb6 // indirect
 	github.com/mattn/go-colorable v0.1.9 // indirect
 	github.com/mattn/go-isatty v0.0.14 // indirect
 	github.com/mitchellh/mapstructure v1.5.0 // indirect
