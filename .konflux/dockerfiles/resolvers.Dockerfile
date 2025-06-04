@@ -14,7 +14,7 @@ RUN go build -ldflags="-X 'knative.dev/pkg/changeset.rev=$(cat HEAD)'" -mod=vend
     ./cmd/resolvers
 
 FROM $RUNTIME
-ARG VERSION=pipeline-next
+ARG VERSION=pipeline-1.19
 
 ENV RESOLVERS=/usr/local/bin/resolvers \
     KO_APP=/ko-app \
@@ -33,6 +33,8 @@ LABEL \
       io.k8s.display-name="Red Hat OpenShift Pipelines Resolvers" \
       io.k8s.description="Red Hat OpenShift Pipelines Resolvers" \
       io.openshift.tags="pipelines,tekton,openshift"
+
+RUN microdnf update && microdnf install -y git && microdnf clean all
 
 RUN groupadd -r -g 65532 nonroot && \
     useradd --no-log-init -r -u 65532 -g nonroot nonroot
