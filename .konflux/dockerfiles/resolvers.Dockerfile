@@ -1,6 +1,14 @@
 ARG GO_BUILDER=brew.registry.redhat.io/rh-osbs/openshift-golang-builder:v1.23
 ARG RUNTIME=registry.access.redhat.com/ubi9/ubi-minimal:latest@sha256:e12131db2e2b6572613589a94b7f615d4ac89d94f859dad05908aeb478fb090f
 
+FROM $RUNTIME as dependency-builder
+
+COPY dependencies/tini dependencies/tini
+WORKDIR /dependencies/tini
+RUN microdnf update && microdnf install -y cmake gcc
+ENV ENV CFLAGS="-DPR_SET_CHILD_SUBREAPER=36 -DPR_GET_CHILD_SUBREAPER=37"
+RUN cmake . && make tini
+
 FROM $GO_BUILDER AS builder
 
 WORKDIR /go/src/github.com/tektoncd/pipeline
@@ -22,6 +30,8 @@ ENV RESOLVERS=/usr/local/bin/resolvers \
 
 COPY --from=builder /tmp/resolvers /ko-app/resolvers
 COPY head ${KO_DATA_PATH}/HEAD
+
+COPY --from=dependency-builder /dependencies/tini/tini /ko-app/tini
 
 LABEL \
       com.redhat.component="openshift-pipelines-resolvers-rhel9-container" \
