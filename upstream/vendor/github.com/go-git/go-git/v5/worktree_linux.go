@@ -1,4 +1,3 @@
-//go:build linux
 // +build linux
 
 package git
@@ -22,6 +21,6 @@ func init() {
 	}
 }
 
-func isSymlinkWindowsNonAdmin(_ error) bool {
+func isSymlinkWindowsNonAdmin(err error) bool {
 	return false
 }
