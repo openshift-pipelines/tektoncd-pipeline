@@ -1,5 +1,13 @@
 ARG GO_BUILDER=brew.registry.redhat.io/rh-osbs/openshift-golang-builder:v1.23
-ARG RUNTIME=registry.access.redhat.com/ubi9-init@sha256:33d2db2c0035e585a391cb2c002b52fd5bb266fd7939017667a51e215e0be666
+ARG RUNTIME=registry.access.redhat.com/ubi9/ubi-minimal:latest@sha256:f172b3082a3d1bbe789a1057f03883c1113243564f01cd3020e27548b911d3f8
+
+FROM $RUNTIME as dependency-builder
+
+COPY dependencies/tini dependencies/tini
+WORKDIR /dependencies/tini
+RUN microdnf update && microdnf install -y cmake gcc
+ENV ENV CFLAGS="-DPR_SET_CHILD_SUBREAPER=36 -DPR_GET_CHILD_SUBREAPER=37"
+RUN cmake . && make tini
 
 FROM $GO_BUILDER AS builder
 
@@ -23,6 +31,8 @@ ENV RESOLVERS=/usr/local/bin/resolvers \
 COPY --from=builder /tmp/resolvers /ko-app/resolvers
 COPY head ${KO_DATA_PATH}/HEAD
 
+COPY --from=dependency-builder /dependencies/tini/tini /ko-app/tini
+
 LABEL \
       com.redhat.component="openshift-pipelines-resolvers-rhel9-container" \
       name="openshift-pipelines/pipelines-resolvers-rhel9" \
@@ -34,11 +44,12 @@ LABEL \
       io.k8s.description="Red Hat OpenShift Pipelines Resolvers" \
       io.openshift.tags="pipelines,tekton,openshift"
 
-RUN dnf update && dnf install -y git && dnf clean all
+RUN microdnf update && microdnf install -y git && microdnf clean all
 
 RUN groupadd -r -g 65532 nonroot && \
     useradd --no-log-init -r -u 65532 -g nonroot nonroot
 USER 65532
 
+ENTRYPOINT ["/ko-app/tini", "--"]
 CMD ["/ko-app/resolvers"]
 
