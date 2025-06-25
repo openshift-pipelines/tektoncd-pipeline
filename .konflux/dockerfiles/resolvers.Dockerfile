@@ -1,5 +1,5 @@
 ARG GO_BUILDER=brew.registry.redhat.io/rh-osbs/openshift-golang-builder:v1.23
-ARG RUNTIME=registry.access.redhat.com/ubi9-init@sha256:33d2db2c0035e585a391cb2c002b52fd5bb266fd7939017667a51e215e0be666
+ARG RUNTIME=registry.access.redhat.com/ubi9/ubi-minimal:latest@sha256:e12131db2e2b6572613589a94b7f615d4ac89d94f859dad05908aeb478fb090f
 
 FROM $GO_BUILDER AS builder
 
@@ -34,11 +34,8 @@ LABEL \
       io.k8s.description="Red Hat OpenShift Pipelines Resolvers" \
       io.openshift.tags="pipelines,tekton,openshift"
 
-RUN dnf update && dnf install -y git && dnf clean all
-
 RUN groupadd -r -g 65532 nonroot && \
     useradd --no-log-init -r -u 65532 -g nonroot nonroot
 USER 65532
 
-CMD ["/ko-app/resolvers"]
-
+ENTRYPOINT ["/ko-app/tini", "--", "/ko-app/resolvers"]
