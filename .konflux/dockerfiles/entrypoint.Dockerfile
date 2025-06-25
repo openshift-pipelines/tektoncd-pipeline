@@ -10,8 +10,7 @@ RUN set -e; for f in patches/*.patch; do echo ${f}; [[ -f ${f} ]] || continue; g
 COPY head HEAD
 ENV GOEXPERIMENT=strictfipsruntime
 ENV GODEBUG="http2server=0"
-RUN CGO_ENABLED=0 \
-    go build -ldflags="-X 'knative.dev/pkg/changeset.rev=$(cat HEAD)'" -mod=vendor -tags disable_gcp,disable_spire,disable_tls -tags strictfipsruntime -v -o /tmp/entrypoint \
+RUN go build -ldflags="-X 'knative.dev/pkg/changeset.rev=$(cat HEAD)'" -mod=vendor -tags disable_gcp,disable_spire,disable_tls -tags strictfipsruntime -v -o /tmp/entrypoint \
     ./cmd/entrypoint
 
 FROM $RUNTIME
