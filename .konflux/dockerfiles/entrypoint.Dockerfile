@@ -1,5 +1,5 @@
 ARG GO_BUILDER=brew.registry.redhat.io/rh-osbs/openshift-golang-builder:v1.23
-ARG RUNTIME=registry.access.redhat.com/ubi9/ubi-minimal:latest@sha256:92b1d5747a93608b6adb64dfd54515c3c5a360802db4706765ff3d8470df6290
+ARG RUNTIME=registry.access.redhat.com/ubi9/ubi-minimal:latest@sha256:383329bf9c4f968e87e85d30ba3a5cb988a3bbde28b8e4932dcd3a025fd9c98c
 
 FROM $GO_BUILDER AS builder
 
@@ -10,6 +10,7 @@ RUN set -e; for f in patches/*.patch; do echo ${f}; [[ -f ${f} ]] || continue; g
 COPY head HEAD
 ENV GOEXPERIMENT=strictfipsruntime
 ENV GODEBUG="http2server=0"
+ENV CGO_ENABLED=0
 RUN go build -ldflags="-X 'knative.dev/pkg/changeset.rev=$(cat HEAD)'" -mod=vendor -tags disable_gcp,disable_spire,disable_tls -tags strictfipsruntime -v -o /tmp/entrypoint \
     ./cmd/entrypoint
 
