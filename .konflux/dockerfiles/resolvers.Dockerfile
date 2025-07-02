@@ -6,7 +6,7 @@ FROM $RUNTIME as dependency-builder
 COPY dependencies/tini dependencies/tini
 WORKDIR /dependencies/tini
 RUN microdnf update && microdnf install -y cmake gcc
-ENV ENV CFLAGS="-DPR_SET_CHILD_SUBREAPER=36 -DPR_GET_CHILD_SUBREAPER=37"
+ENV CFLAGS="-DPR_SET_CHILD_SUBREAPER=36 -DPR_GET_CHILD_SUBREAPER=37"
 RUN cmake . && make tini
 
 FROM $GO_BUILDER AS builder
