@@ -1,6 +1,3 @@
-// Code created by gotmpl. DO NOT MODIFY.
-// source: internal/shared/semconv/util.go.tmpl
-
 // Copyright The OpenTelemetry Authors
 // SPDX-License-Identifier: Apache-2.0
 
@@ -78,16 +75,7 @@ func serverClientIP(xForwardedFor string) string {
 
 func netProtocol(proto string) (name string, version string) {
 	name, version, _ = strings.Cut(proto, "/")
-	switch name {
-	case "HTTP":
-		name = "http"
-	case "QUIC":
-		name = "quic"
-	case "SPDY":
-		name = "spdy"
-	default:
-		name = strings.ToLower(name)
-	}
+	name = strings.ToLower(name)
 	return name, version
 }
 
@@ -107,14 +95,4 @@ func handleErr(err error) {
 	if err != nil {
 		otel.Handle(err)
 	}
-}
-
-func standardizeHTTPMethod(method string) string {
-	method = strings.ToUpper(method)
-	switch method {
-	case http.MethodConnect, http.MethodDelete, http.MethodGet, http.MethodHead, http.MethodOptions, http.MethodPatch, http.MethodPost, http.MethodPut, http.MethodTrace:
-	default:
-		method = "_OTHER"
-	}
-	return method
 }

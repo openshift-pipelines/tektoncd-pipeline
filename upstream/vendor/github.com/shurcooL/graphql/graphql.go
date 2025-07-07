@@ -5,16 +5,17 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
+	"io/ioutil"
 	"net/http"
 
 	"github.com/shurcooL/graphql/internal/jsonutil"
+	"golang.org/x/net/context/ctxhttp"
 )
 
 // Client is a GraphQL client.
 type Client struct {
-	url        string       // GraphQL server URL.
-	httpClient *http.Client // Non-nil.
+	url        string // GraphQL server URL.
+	httpClient *http.Client
 }
 
 // NewClient creates a GraphQL client targeting the specified GraphQL server URL.
@@ -32,19 +33,19 @@ func NewClient(url string, httpClient *http.Client) *Client {
 // Query executes a single GraphQL query request,
 // with a query derived from q, populating the response into it.
 // q should be a pointer to struct that corresponds to the GraphQL schema.
-func (c *Client) Query(ctx context.Context, q any, variables map[string]any) error {
+func (c *Client) Query(ctx context.Context, q interface{}, variables map[string]interface{}) error {
 	return c.do(ctx, queryOperation, q, variables)
 }
 
 // Mutate executes a single GraphQL mutation request,
 // with a mutation derived from m, populating the response into it.
 // m should be a pointer to struct that corresponds to the GraphQL schema.
-func (c *Client) Mutate(ctx context.Context, m any, variables map[string]any) error {
+func (c *Client) Mutate(ctx context.Context, m interface{}, variables map[string]interface{}) error {
 	return c.do(ctx, mutationOperation, m, variables)
 }
 
 // do executes a single GraphQL operation.
-func (c *Client) do(ctx context.Context, op operationType, v any, variables map[string]any) error {
+func (c *Client) do(ctx context.Context, op operationType, v interface{}, variables map[string]interface{}) error {
 	var query string
 	switch op {
 	case queryOperation:
@@ -53,8 +54,8 @@ func (c *Client) do(ctx context.Context, op operationType, v any, variables map[
 		query = constructMutation(v, variables)
 	}
 	in := struct {
-		Query     string         `json:"query"`
-		Variables map[string]any `json:"variables,omitempty"`
+		Query     string                 `json:"query"`
+		Variables map[string]interface{} `json:"variables,omitempty"`
 	}{
 		Query:     query,
 		Variables: variables,
@@ -64,24 +65,19 @@ func (c *Client) do(ctx context.Context, op operationType, v any, variables map[
 	if err != nil {
 		return err
 	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.url, &buf)
-	if err != nil {
-		return err
-	}
-	req.Header.Set("Content-Type", "application/json")
-	resp, err := c.httpClient.Do(req)
+	resp, err := ctxhttp.Post(ctx, c.httpClient, c.url, "application/json", &buf)
 	if err != nil {
 		return err
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
+		body, _ := ioutil.ReadAll(resp.Body)
 		return fmt.Errorf("non-200 OK status code: %v body: %q", resp.Status, body)
 	}
 	var out struct {
 		Data   *json.RawMessage
 		Errors errors
-		//Extensions any // Unused.
+		//Extensions interface{} // Unused.
 	}
 	err = json.NewDecoder(resp.Body).Decode(&out)
 	if err != nil {
@@ -104,7 +100,7 @@ func (c *Client) do(ctx context.Context, op operationType, v any, variables map[
 // errors represents the "errors" array in a response from a GraphQL server.
 // If returned via error interface, the slice is expected to contain at least 1 element.
 //
-// Specification: https://spec.graphql.org/October2021/#sec-Errors.
+// Specification: https://facebook.github.io/graphql/#sec-Errors.
 type errors []struct {
 	Message   string
 	Locations []struct {
