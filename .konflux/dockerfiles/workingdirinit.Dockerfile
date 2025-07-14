@@ -21,7 +21,7 @@ ENV WORKINGDIRINIT=/usr/local/bin/workingdirinit \
     KO_DATA_PATH=/kodata
 
 COPY --from=builder /tmp/workingdirinit /ko-app/workingdirinit
-COPY head ${KO_DATA_PATH}/HEAD
+COPY head ${KO_DATA_PATH}/HEAD 
 
 LABEL \
       com.redhat.component="openshift-pipelines-workingdirinit-rhel9-container" \

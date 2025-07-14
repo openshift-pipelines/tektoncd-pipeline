@@ -21,7 +21,7 @@ ENV SIDECARLOGRESULTS=/usr/local/bin/sidecarlogresults \
     KO_DATA_PATH=/kodata
 
 COPY --from=builder /tmp/sidecarlogresults /ko-app/sidecarlogresults
-COPY head ${KO_DATA_PATH}/HEAD
+COPY head ${KO_DATA_PATH}/HEAD 
 
 LABEL \
       com.redhat.component="openshift-pipelines-sidecarlogresults-rhel9-container" \

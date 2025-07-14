@@ -21,7 +21,7 @@ ENV EVENTS=/usr/local/bin/events \
     KO_DATA_PATH=/kodata
 
 COPY --from=builder /tmp/events /ko-app/events
-COPY head ${KO_DATA_PATH}/HEAD
+COPY head ${KO_DATA_PATH}/HEAD 
 
 LABEL \
       com.redhat.component="openshift-pipelines-events-rhel9-container" \

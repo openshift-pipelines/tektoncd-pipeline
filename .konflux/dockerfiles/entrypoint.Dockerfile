@@ -22,7 +22,7 @@ ENV ENTRYPOINT=/usr/local/bin/entrypoint \
     KO_DATA_PATH=/kodata
 
 COPY --from=builder /tmp/entrypoint /ko-app/entrypoint
-COPY head ${KO_DATA_PATH}/HEAD
+COPY head ${KO_DATA_PATH}/HEAD 
 
 LABEL \
       com.redhat.component="openshift-pipelines-entrypoint-rhel9-container" \

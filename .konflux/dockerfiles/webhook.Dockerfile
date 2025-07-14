@@ -21,7 +21,7 @@ ENV WEBHOOK=/usr/local/bin/webhook \
     KO_DATA_PATH=/kodata
 
 COPY --from=builder /tmp/webhook /ko-app/webhook
-COPY head ${KO_DATA_PATH}/HEAD
+COPY head ${KO_DATA_PATH}/HEAD 
 
 LABEL \
       com.redhat.component="openshift-pipelines-webhook-rhel9-container" \

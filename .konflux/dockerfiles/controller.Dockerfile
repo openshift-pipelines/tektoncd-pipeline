@@ -21,7 +21,7 @@ ENV CONTROLLER=/usr/local/bin/controller \
     KO_DATA_PATH=/kodata
 
 COPY --from=builder /tmp/controller /ko-app/controller
-COPY head ${KO_DATA_PATH}/HEAD
+COPY head ${KO_DATA_PATH}/HEAD 
 
 LABEL \
       com.redhat.component="openshift-pipelines-controller-rhel9-container" \

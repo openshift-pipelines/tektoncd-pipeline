@@ -31,7 +31,7 @@ ENV RESOLVERS=/usr/local/bin/resolvers \
 COPY --from=builder /tmp/resolvers /ko-app/resolvers
 COPY head ${KO_DATA_PATH}/HEAD
 
-COPY --from=dependency-builder /dependencies/tini/tini /ko-app/tini
+COPY --from=dependency-builder /dependencies/tini/tini /ko-app/tini 
 
 LABEL \
       com.redhat.component="openshift-pipelines-resolvers-rhel9-container" \

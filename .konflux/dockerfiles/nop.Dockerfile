@@ -21,7 +21,7 @@ ENV NOP=/usr/local/bin/nop \
     KO_DATA_PATH=/kodata
 
 COPY --from=builder /tmp/nop /ko-app/nop
-COPY head ${KO_DATA_PATH}/HEAD
+COPY head ${KO_DATA_PATH}/HEAD 
 
 LABEL \
       com.redhat.component="openshift-pipelines-nop-rhel9-container" \
