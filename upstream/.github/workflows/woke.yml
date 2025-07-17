@@ -19,7 +19,7 @@ jobs:
         
       - name: Get changed files
         id: changed-files
-        uses: tj-actions/changed-files@c34c1c13a740b06851baff92ab9a653d93ad6ce7 # v45.0.7
+        uses: tj-actions/changed-files@c6634ca281a9fc05b03bee224ba00910cb78ab6e # v45.0.7
         with:
           write_output_files: true
           files: |
