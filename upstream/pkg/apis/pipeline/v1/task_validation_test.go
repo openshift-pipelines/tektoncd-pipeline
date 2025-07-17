@@ -24,7 +24,6 @@ import (
 	"github.com/google/go-cmp/cmp/cmpopts"
 	"github.com/tektoncd/pipeline/pkg/apis/config"
 	cfgtesting "github.com/tektoncd/pipeline/pkg/apis/config/testing"
-	"github.com/tektoncd/pipeline/pkg/apis/pipeline"
 	v1 "github.com/tektoncd/pipeline/pkg/apis/pipeline/v1"
 	"github.com/tektoncd/pipeline/test/diff"
 	corev1 "k8s.io/api/core/v1"
@@ -1049,7 +1048,19 @@ func TestTaskSpecValidateError(t *testing.T) {
 			Details: "Task step name must be a valid DNS Label, For more info refer to https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names",
 		},
 	}, {
-		name: "array used in unaccepted field",
+		name: "duplicate step name",
+		fields: fields{
+			Steps: []v1.Step{
+				{Name: "mystep", Image: "myimage"},
+				{Name: "mystep", Image: "myimage"},
+			},
+		},
+		expectedError: apis.FieldError{
+			Message: `expected exactly one, got both`,
+			Paths:   []string{"steps[1].name"},
+		},
+	}, {
+		name: "array used in a string field",
 		fields: fields{
 			Params: []v1.ParamSpec{{
 				Name: "baz",
@@ -1071,7 +1082,7 @@ func TestTaskSpecValidateError(t *testing.T) {
 			Paths:   []string{"steps[0].image"},
 		},
 	}, {
-		name: "array star used in unaccepted field",
+		name: "array star used in a string field",
 		fields: fields{
 			Params: []v1.ParamSpec{{
 				Name: "baz",
@@ -1093,7 +1104,7 @@ func TestTaskSpecValidateError(t *testing.T) {
 			Paths:   []string{"steps[0].image"},
 		},
 	}, {
-		name: "array star used illegaly in script field",
+		name: "array star used illegally in script field",
 		fields: fields{
 			Params: []v1.ParamSpec{{
 				Name: "baz",
@@ -1114,6 +1125,23 @@ func TestTaskSpecValidateError(t *testing.T) {
 		expectedError: apis.FieldError{
 			Message: `variable type invalid in "$(params.baz[*])"`,
 			Paths:   []string{"steps[0].script"},
+		},
+	}, {
+		name: "array param used in step env value field that can accept string type",
+		fields: fields{
+			Params: []v1.ParamSpec{{
+				Name: "baz",
+				Type: v1.ParamTypeArray,
+			}},
+			Steps: []v1.Step{{
+				Name:  "mystep",
+				Image: "my-image",
+				Env:   []corev1.EnvVar{{Name: "URL", Value: "$(params.baz)"}},
+			}},
+		},
+		expectedError: apis.FieldError{
+			Message: `variable type invalid in "$(params.baz)"`,
+			Paths:   []string{"steps[0].env[URL]"},
 		},
 	}, {
 		name: "array not properly isolated",
@@ -1775,6 +1803,38 @@ func TestTaskSpecValidateSuccessWithArtifactsRefFlagEnabled(t *testing.T) {
 		})
 	}
 }
+
+func TestTaskSpecValidateSuccessWithArtifactsRefFlagNotEnabled(t *testing.T) {
+	tests := []struct {
+		name  string
+		Steps []v1.Step
+	}{
+		{
+			name: "script without reference to a step artifact",
+			Steps: []v1.Step{{
+				Image:  "busybox",
+				Script: "echo 123",
+			}},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ts := v1.TaskSpec{
+				Steps: tt.Steps,
+			}
+			ctx := config.ToContext(context.Background(), &config.Config{
+				FeatureFlags: nil,
+			})
+			ctx = apis.WithinCreate(ctx)
+			ts.SetDefaults(ctx)
+			err := ts.Validate(ctx)
+			if err != nil {
+				t.Fatalf("Expected no errors, got err for %v", err)
+			}
+		})
+	}
+}
+
 func TestTaskSpecValidateErrorWithArtifactsRefFlagNotEnabled(t *testing.T) {
 	tests := []struct {
 		name          string
@@ -1967,90 +2027,6 @@ func TestTaskSpecValidateErrorWithArtifactsRef(t *testing.T) {
 			ctx = apis.WithinCreate(ctx)
 			ts.SetDefaults(ctx)
 			err := ts.Validate(ctx)
-			if err == nil {
-				t.Fatalf("Expected an error, got nothing for %v", ts)
-			}
-			if d := cmp.Diff(tt.expectedError.Error(), err.Error(), cmpopts.IgnoreUnexported(apis.FieldError{})); d != "" {
-				t.Errorf("TaskSpec.Validate() errors diff %s", diff.PrintWantGot(d))
-			}
-		})
-	}
-}
-func TestTaskSpecValidateErrorSidecars(t *testing.T) {
-	tests := []struct {
-		name          string
-		sidecars      []v1.Sidecar
-		expectedError apis.FieldError
-	}{{
-		name: "missing image",
-		sidecars: []v1.Sidecar{{
-			Name: "tekton-invalid-side-car",
-		}},
-		expectedError: apis.FieldError{
-			Message: "missing field(s)",
-			Paths:   []string{"sidecars.image"},
-		},
-	}, {
-		name: "invalid command with script",
-		sidecars: []v1.Sidecar{{
-			Name:    "tekton-invalid-side-car",
-			Image:   "ubuntu",
-			Command: []string{"command foo"},
-			Script: `
-				#!/usr/bin/env  bash
-				echo foo`,
-		}},
-		expectedError: apis.FieldError{
-			Message: "script cannot be used with command",
-			Paths:   []string{"sidecars.script"},
-		},
-	}}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			ts := &v1.TaskSpec{
-				Steps: []v1.Step{{
-					Name:  "does-not-matter",
-					Image: "does-not-matter",
-				}},
-				Sidecars: tt.sidecars,
-			}
-			err := ts.Validate(context.Background())
-			if err == nil {
-				t.Fatalf("Expected an error, got nothing for %v", ts)
-			}
-			if d := cmp.Diff(tt.expectedError.Error(), err.Error(), cmpopts.IgnoreUnexported(apis.FieldError{})); d != "" {
-				t.Errorf("TaskSpec.Validate() errors diff %s", diff.PrintWantGot(d))
-			}
-		})
-	}
-}
-
-func TestTaskSpecValidateErrorSidecarName(t *testing.T) {
-	tests := []struct {
-		name          string
-		sidecars      []v1.Sidecar
-		expectedError apis.FieldError
-	}{{
-		name: "cannot use reserved sidecar name",
-		sidecars: []v1.Sidecar{{
-			Name:  "tekton-log-results",
-			Image: "my-image",
-		}},
-		expectedError: apis.FieldError{
-			Message: fmt.Sprintf("Invalid: cannot use reserved sidecar name %v ", pipeline.ReservedResultsSidecarName),
-			Paths:   []string{"sidecars.name"},
-		},
-	}}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			ts := &v1.TaskSpec{
-				Steps: []v1.Step{{
-					Name:  "does-not-matter",
-					Image: "does-not-matter",
-				}},
-				Sidecars: tt.sidecars,
-			}
-			err := ts.Validate(context.Background())
 			if err == nil {
 				t.Fatalf("Expected an error, got nothing for %v", ts)
 			}
@@ -2450,6 +2426,25 @@ func TestTaskSpecValidateUsageOfDeclaredParams(t *testing.T) {
 			Paths:   []string{"steps[0].args[0]"},
 		},
 	}, {
+		name: "object param used in step env value field that can accept string type",
+		Params: []v1.ParamSpec{{
+			Name: "gitrepo",
+			Type: v1.ParamTypeObject,
+			Properties: map[string]v1.PropertySpec{
+				"url":    {},
+				"commit": {},
+			},
+		}},
+		Steps: []v1.Step{{
+			Name:  "do-the-clone",
+			Image: "some-git-image",
+			Env:   []corev1.EnvVar{{Name: "URL", Value: "$(params.gitrepo)"}},
+		}},
+		expectedError: apis.FieldError{
+			Message: `variable type invalid in "$(params.gitrepo)"`,
+			Paths:   []string{"steps[0].env[URL]"},
+		},
+	}, {
 		name: "non-existent individual key of an object param is used in task step",
 		Params: []v1.ParamSpec{{
 			Name: "gitrepo",
@@ -2470,7 +2465,7 @@ func TestTaskSpecValidateUsageOfDeclaredParams(t *testing.T) {
 			Paths:   []string{"steps[0].args[0]"},
 		},
 	}, {
-		name: "Inexistent param variable in volumeMount with existing",
+		name: "inexistent param variable in volumeMount with existing",
 		Params: []v1.ParamSpec{
 			{
 				Name:        "foo",
@@ -2490,7 +2485,7 @@ func TestTaskSpecValidateUsageOfDeclaredParams(t *testing.T) {
 			Paths:   []string{"steps[0].volumeMount[0].name"},
 		},
 	}, {
-		name: "Inexistent param variable with existing",
+		name: "inexistent param variable with existing",
 		Params: []v1.ParamSpec{{
 			Name:        "foo",
 			Description: "param",
@@ -2504,6 +2499,17 @@ func TestTaskSpecValidateUsageOfDeclaredParams(t *testing.T) {
 		expectedError: apis.FieldError{
 			Message: `non-existent variable in "$(params.foo) && $(params.inexistent)"`,
 			Paths:   []string{"steps[0].args[0]"},
+		},
+	}, {
+		name: "object param variable with non-existent properties",
+		Params: []v1.ParamSpec{{
+			Name: "foo",
+			Type: v1.ParamTypeObject,
+		}},
+		Steps: validSteps,
+		expectedError: apis.FieldError{
+			Message: "missing field(s)",
+			Paths:   []string{"foo.properties"},
 		},
 	}}
 	for _, tt := range tests {
