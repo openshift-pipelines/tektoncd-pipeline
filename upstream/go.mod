@@ -153,7 +153,7 @@ require (
 	github.com/Azure/go-autorest/autorest/azure/cli v0.4.6 // indirect
 	github.com/Azure/go-autorest/autorest/date v0.3.0 // indirect
 	github.com/Azure/go-autorest/logger v0.2.1 // indirect
-	github.com/Azure/go-autorest/tracing v0.6.0 // indirect
+	github.com/Azure/go-autorest/tracing v0.6.1 // indirect
 	github.com/aws/aws-sdk-go-v2 v1.26.0 // indirect
 	github.com/aws/aws-sdk-go-v2/config v1.27.9 // indirect
 	github.com/aws/aws-sdk-go-v2/credentials v1.17.9 // indirect
