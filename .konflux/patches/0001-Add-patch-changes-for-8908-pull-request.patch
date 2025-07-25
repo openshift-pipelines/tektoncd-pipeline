@@ -1,0 +1,26 @@
+From 23b0e4e803148b4f83a31996b1518eb7cafb6541 Mon Sep 17 00:00:00 2001
+From: savitaashture <sashture@redhat.com>
+Date: Fri, 25 Jul 2025 11:41:06 +0530
+Subject: [PATCH] Add patch changes for 8908 pull request
+
+Signed-off-by: savitaashture <sashture@redhat.com>
+---
+ pkg/resolution/resolver/git/repository.go | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/pkg/resolution/resolver/git/repository.go b/pkg/resolution/resolver/git/repository.go
+index 66ee335d3..d015ba7c2 100644
+--- a/pkg/resolution/resolver/git/repository.go
++++ b/pkg/resolution/resolver/git/repository.go
+@@ -120,7 +120,7 @@ func (repo *repository) execGit(ctx context.Context, subCmd string, args ...stri
+ 		}
+ 	}
+ 	cmd := repo.executor(ctx, "git", append(configArgs, args...)...)
+-	cmd.Env = append(cmd.Env, env...)
++	cmd.Env = append(cmd.Environ(), env...)
+ 
+ 	out, err := cmd.Output()
+ 	if err != nil {
+-- 
+2.50.1
+
