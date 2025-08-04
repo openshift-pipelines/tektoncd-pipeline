@@ -152,8 +152,7 @@ func (configFile *ConfigFile) Save() (retErr error) {
 		return err
 	}
 	defer func() {
-		// ignore error as the file may already be closed when we reach this.
-		_ = temp.Close()
+		temp.Close()
 		if retErr != nil {
 			if err := os.Remove(temp.Name()); err != nil {
 				logrus.WithError(err).WithField("file", temp.Name()).Debug("Error cleaning up temp file")
@@ -170,16 +169,10 @@ func (configFile *ConfigFile) Save() (retErr error) {
 		return errors.Wrap(err, "error closing temp file")
 	}
 
-	// Handle situation where the configfile is a symlink, and allow for dangling symlinks
+	// Handle situation where the configfile is a symlink
 	cfgFile := configFile.Filename
-	if f, err := filepath.EvalSymlinks(cfgFile); err == nil {
+	if f, err := os.Readlink(cfgFile); err == nil {
 		cfgFile = f
-	} else if os.IsNotExist(err) {
-		// extract the path from the error if the configfile does not exist or is a dangling symlink
-		var pathError *os.PathError
-		if errors.As(err, &pathError) {
-			cfgFile = pathError.Path
-		}
 	}
 
 	// Try copying the current config file (if any) ownership and permissions
