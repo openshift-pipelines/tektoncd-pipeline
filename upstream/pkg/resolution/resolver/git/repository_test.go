@@ -22,6 +22,7 @@ import (
 	"encoding/base64"
 	"os/exec"
 	"reflect"
+	"slices"
 	"testing"
 )
 
@@ -53,7 +54,7 @@ func TestClone(t *testing.T) {
 			}
 
 			mockCmdRemote := remote{url: test.url, username: test.username, password: test.password, cmdExecutor: executor}
-			repo, cleanup, err := mockCmdRemote.clone(context.Background())
+			repo, cleanup, err := mockCmdRemote.clone(t.Context())
 			defer cleanup()
 			if test.expectErr != "" {
 				if err.Error() != test.expectErr {
@@ -84,8 +85,15 @@ func TestClone(t *testing.T) {
 			if !reflect.DeepEqual(cmdParts, expectedCmd) {
 				t.Fatalf("Expected clone command to be %v but got %v", expectedCmd, cmdParts)
 			}
-			if !reflect.DeepEqual(cmd.Env, expectedEnv) {
-				t.Fatalf("Expected clone command env vars to be %v but got %v", expectedEnv, cmd.Env)
+
+			missingEnvVars := []string{}
+			for _, v := range expectedEnv {
+				if !slices.Contains(cmd.Environ(), v) {
+					missingEnvVars = append(missingEnvVars, v)
+				}
+			}
+			if len(missingEnvVars) > 0 {
+				t.Fatalf("Clone command missing env vars %v. Got: %v", missingEnvVars, cmd.Environ())
 			}
 		})
 	}
@@ -116,7 +124,7 @@ func TestCheckout(t *testing.T) {
 		t.Fatalf("coun't delete branch to orphan commit: %v", err)
 	}
 
-	ctx := context.Background()
+	ctx := t.Context()
 
 	type testCase struct {
 		revision         string
