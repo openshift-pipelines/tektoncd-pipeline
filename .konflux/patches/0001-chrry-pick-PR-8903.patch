@@ -1,0 +1,127 @@
+From da6417aa6f6411327b7cb109b567928cf835ed61 Mon Sep 17 00:00:00 2001
+From: savitaashture <sashture@redhat.com>
+Date: Thu, 21 Aug 2025 09:49:13 +0530
+Subject: [PATCH] chrry-pick PR 8903
+
+Signed-off-by: savitaashture <sashture@redhat.com>
+---
+ .../pipelinerun/affinity_assistant.go         |  9 ++++++---
+ pkg/reconciler/pipelinerun/pipelinerun.go     |  7 ++++++-
+ pkg/reconciler/volumeclaim/pvchandler.go      | 19 ++++++++++++++++++-
+ 3 files changed, 30 insertions(+), 5 deletions(-)
+
+diff --git a/pkg/reconciler/pipelinerun/affinity_assistant.go b/pkg/reconciler/pipelinerun/affinity_assistant.go
+index d176f219f..f39362cc3 100644
+--- a/pkg/reconciler/pipelinerun/affinity_assistant.go
++++ b/pkg/reconciler/pipelinerun/affinity_assistant.go
+@@ -50,7 +50,10 @@ const (
+ )
+ 
+ var (
+-	ErrPvcCreationFailed               = errors.New("PVC creation error")
++	// Deprecated: use volumeclain.ErrPvcCreationFailed instead
++	ErrPvcCreationFailed = volumeclaim.ErrPvcCreationFailed
++	// Deprecated: use volumeclaim.ErrAffinityAssistantCreationFailed instead
++	ErrPvcCreationFailedRetryable      = volumeclaim.ErrPvcCreationFailedRetryable
+ 	ErrAffinityAssistantCreationFailed = errors.New("Affinity Assistant creation error")
+ )
+ 
+@@ -95,7 +98,7 @@ func (c *Reconciler) createOrUpdateAffinityAssistantsAndPVCs(ctx context.Context
+ 			// To support PVC auto deletion at pipelinerun deletion time, the OwnerReference of the PVCs should be set to the owning pipelinerun instead of the StatefulSets,
+ 			// so we create PVCs from PipelineRuns' VolumeClaimTemplate and pass the PVCs to the Affinity Assistant StatefulSet for volume scheduling.
+ 			if err := c.pvcHandler.CreatePVCFromVolumeClaimTemplate(ctx, workspace, *kmeta.NewControllerRef(pr), pr.Namespace); err != nil {
+-				return fmt.Errorf("%w: %v", ErrPvcCreationFailed, err) //nolint:errorlint
++				return err
+ 			}
+ 			aaName := GetAffinityAssistantName(workspace.Name, pr.Name)
+ 			if err := c.createOrUpdateAffinityAssistant(ctx, aaName, pr, nil, []string{claimTemplate.Name}, unschedulableNodes); err != nil {
+@@ -114,7 +117,7 @@ func (c *Reconciler) createOrUpdateAffinityAssistantsAndPVCs(ctx context.Context
+ 	case aa.AffinityAssistantDisabled:
+ 		for _, workspace := range claimTemplateToWorkspace {
+ 			if err := c.pvcHandler.CreatePVCFromVolumeClaimTemplate(ctx, workspace, *kmeta.NewControllerRef(pr), pr.Namespace); err != nil {
+-				return fmt.Errorf("%w: %v", ErrPvcCreationFailed, err) //nolint:errorlint
++				return err
+ 			}
+ 		}
+ 	}
+diff --git a/pkg/reconciler/pipelinerun/pipelinerun.go b/pkg/reconciler/pipelinerun/pipelinerun.go
+index b839308e1..a877d3b6c 100644
+--- a/pkg/reconciler/pipelinerun/pipelinerun.go
++++ b/pkg/reconciler/pipelinerun/pipelinerun.go
+@@ -731,17 +731,22 @@ func (c *Reconciler) reconcile(ctx context.Context, pr *v1.PipelineRun, getPipel
+ 		}
+ 		if err := c.createOrUpdateAffinityAssistantsAndPVCs(ctx, pr, aaBehavior); err != nil {
+ 			switch {
+-			case errors.Is(err, ErrPvcCreationFailed):
++			case errors.Is(err, volumeclaim.ErrPvcCreationFailed):
+ 				logger.Errorf("Failed to create PVC for PipelineRun %s: %v", pr.Name, err)
+ 				pr.Status.MarkFailed(volumeclaim.ReasonCouldntCreateWorkspacePVC,
+ 					"Failed to create PVC for PipelineRun %s/%s correctly: %s",
+ 					pr.Namespace, pr.Name, err)
++			case errors.Is(err, volumeclaim.ErrPvcCreationFailedRetryable):
++				logger.Errorf("Failed to create PVC for PipelineRun %s: %v", pr.Name, err)
++				pr.Status.MarkRunning(ReasonPending, "Waiting for PVC creation to succeed: %v", err)
++				return err // not a permanent error, will requeue
+ 			case errors.Is(err, ErrAffinityAssistantCreationFailed):
+ 				logger.Errorf("Failed to create affinity assistant StatefulSet for PipelineRun %s: %v", pr.Name, err)
+ 				pr.Status.MarkFailed(ReasonCouldntCreateOrUpdateAffinityAssistantStatefulSet,
+ 					"Failed to create StatefulSet for PipelineRun %s/%s correctly: %s",
+ 					pr.Namespace, pr.Name, err)
+ 			default:
++				logger.Errorf("default error handling for PipelineRun %s: %v", pr.Name, err)
+ 			}
+ 			return controller.NewPermanentError(err)
+ 		}
+diff --git a/pkg/reconciler/volumeclaim/pvchandler.go b/pkg/reconciler/volumeclaim/pvchandler.go
+index 40f02fd43..60f866c31 100644
+--- a/pkg/reconciler/volumeclaim/pvchandler.go
++++ b/pkg/reconciler/volumeclaim/pvchandler.go
+@@ -21,7 +21,9 @@ import (
+ 	"crypto/sha256"
+ 	"encoding/hex"
+ 	"encoding/json"
++	"errors"
+ 	"fmt"
++	"strings"
+ 
+ 	v1 "github.com/tektoncd/pipeline/pkg/apis/pipeline/v1"
+ 	"go.uber.org/zap"
+@@ -39,6 +41,11 @@ const (
+ 	ReasonCouldntCreateWorkspacePVC = "CouldntCreateWorkspacePVC"
+ )
+ 
++var (
++	ErrPvcCreationFailed          = errors.New("PVC creation error")
++	ErrPvcCreationFailedRetryable = errors.New("PVC creation error, retryable")
++)
++
+ // PvcHandler is used to create PVCs for workspaces
+ type PvcHandler interface {
+ 	CreatePVCFromVolumeClaimTemplate(ctx context.Context, wb v1.WorkspaceBinding, ownerReference metav1.OwnerReference, namespace string) error
+@@ -73,8 +80,11 @@ func (c *defaultPVCHandler) CreatePVCFromVolumeClaimTemplate(ctx context.Context
+ 			if apierrors.IsAlreadyExists(err) {
+ 				c.logger.Infof("Tried to create PersistentVolumeClaim %s in namespace %s, but it already exists",
+ 					claim.Name, claim.Namespace)
++			} else if isRetryableError(err) {
++				// This is a retry-able error
++				return fmt.Errorf("%w for %s: %v", ErrPvcCreationFailedRetryable, claim.Name, err.Error())
+ 			} else {
+-				return fmt.Errorf("failed to create PVC %s: %w", claim.Name, err)
++				return fmt.Errorf("%w for %s: %v", ErrPvcCreationFailed, claim.Name, err.Error())
+ 			}
+ 		} else {
+ 			c.logger.Infof("Created PersistentVolumeClaim %s in namespace %s", claim.Name, claim.Namespace)
+@@ -163,3 +173,10 @@ func getPersistentVolumeClaimIdentity(workspaceName, ownerName string) string {
+ 	hashString := hex.EncodeToString(hashBytes[:])
+ 	return hashString[:10]
+ }
++
++func isRetryableError(err error) bool {
++	if (apierrors.IsForbidden(err) && strings.Contains(err.Error(), "exceeded quota")) || apierrors.IsConflict(err) {
++		return true
++	}
++	return false
++}
+-- 
+2.50.1
+
