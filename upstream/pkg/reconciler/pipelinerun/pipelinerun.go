@@ -753,17 +753,22 @@ func (c *Reconciler) reconcile(ctx context.Context, pr *v1.PipelineRun, getPipel
 		}
 		if err := c.createOrUpdateAffinityAssistantsAndPVCs(ctx, pr, aaBehavior); err != nil {
 			switch {
-			case errors.Is(err, ErrPvcCreationFailed):
+			case errors.Is(err, volumeclaim.ErrPvcCreationFailed):
 				logger.Errorf("Failed to create PVC for PipelineRun %s: %v", pr.Name, err)
 				pr.Status.MarkFailed(volumeclaim.ReasonCouldntCreateWorkspacePVC,
 					"Failed to create PVC for PipelineRun %s/%s correctly: %s",
 					pr.Namespace, pr.Name, err)
+			case errors.Is(err, volumeclaim.ErrPvcCreationFailedRetryable):
+				logger.Errorf("Failed to create PVC for PipelineRun %s: %v", pr.Name, err)
+				pr.Status.MarkRunning(ReasonPending, "Waiting for PVC creation to succeed: %v", err)
+				return err // not a permanent error, will requeue
 			case errors.Is(err, ErrAffinityAssistantCreationFailed):
 				logger.Errorf("Failed to create affinity assistant StatefulSet for PipelineRun %s: %v", pr.Name, err)
 				pr.Status.MarkFailed(ReasonCouldntCreateOrUpdateAffinityAssistantStatefulSet,
 					"Failed to create StatefulSet for PipelineRun %s/%s correctly: %s",
 					pr.Namespace, pr.Name, err)
 			default:
+				logger.Errorf("default error handling for PipelineRun %s: %v", pr.Name, err)
 			}
 			return controller.NewPermanentError(err)
 		}

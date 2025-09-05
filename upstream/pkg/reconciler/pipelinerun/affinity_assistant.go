@@ -50,7 +50,10 @@ const (
 )
 
 var (
-	ErrPvcCreationFailed               = errors.New("PVC creation error")
+	// Deprecated: use volumeclain.ErrPvcCreationFailed instead
+	ErrPvcCreationFailed = volumeclaim.ErrPvcCreationFailed
+	// Deprecated: use volumeclaim.ErrAffinityAssistantCreationFailed instead
+	ErrPvcCreationFailedRetryable      = volumeclaim.ErrPvcCreationFailedRetryable
 	ErrAffinityAssistantCreationFailed = errors.New("Affinity Assistant creation error")
 )
 
@@ -95,7 +98,7 @@ func (c *Reconciler) createOrUpdateAffinityAssistantsAndPVCs(ctx context.Context
 			// To support PVC auto deletion at pipelinerun deletion time, the OwnerReference of the PVCs should be set to the owning pipelinerun instead of the StatefulSets,
 			// so we create PVCs from PipelineRuns' VolumeClaimTemplate and pass the PVCs to the Affinity Assistant StatefulSet for volume scheduling.
 			if err := c.pvcHandler.CreatePVCFromVolumeClaimTemplate(ctx, workspace, *kmeta.NewControllerRef(pr), pr.Namespace); err != nil {
-				return fmt.Errorf("%w: %v", ErrPvcCreationFailed, err) //nolint:errorlint
+				return err
 			}
 			aaName := GetAffinityAssistantName(workspace.Name, pr.Name)
 			if err := c.createOrUpdateAffinityAssistant(ctx, aaName, pr, nil, []string{claimTemplate.Name}, unschedulableNodes); err != nil {
@@ -114,7 +117,7 @@ func (c *Reconciler) createOrUpdateAffinityAssistantsAndPVCs(ctx context.Context
 	case aa.AffinityAssistantDisabled:
 		for _, workspace := range claimTemplateToWorkspace {
 			if err := c.pvcHandler.CreatePVCFromVolumeClaimTemplate(ctx, workspace, *kmeta.NewControllerRef(pr), pr.Namespace); err != nil {
-				return fmt.Errorf("%w: %v", ErrPvcCreationFailed, err) //nolint:errorlint
+				return err
 			}
 		}
 	}
