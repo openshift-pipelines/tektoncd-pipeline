@@ -26,6 +26,7 @@ LABEL \
       com.redhat.component="openshift-pipelines-webhook-rhel8-container" \
       name="openshift-pipelines/pipelines-webhook-rhel8" \
       version=$VERSION \
+      cpe="cpe:/a:redhat:openshift_pipelines:1.16::el8" \
       summary="Red Hat OpenShift Pipelines Webhook" \
       maintainer="pipelines-extcomm@redhat.com" \
       description="Red Hat OpenShift Pipelines Webhook" \
