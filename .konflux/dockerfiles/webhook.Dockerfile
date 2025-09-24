@@ -25,6 +25,7 @@ COPY head ${KO_DATA_PATH}/HEAD
 
 LABEL \
       com.redhat.component="openshift-pipelines-webhook-rhel9-container" \
+      cpe="cpe:/a:redhat:openshift_pipelines:1.18::el9" \
       name="openshift-pipelines/pipelines-webhook-rhel9" \
       version=$VERSION \
       summary="Red Hat OpenShift Pipelines Webhook" \
