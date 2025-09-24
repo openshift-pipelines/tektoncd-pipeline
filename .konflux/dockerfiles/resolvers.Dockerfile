@@ -42,7 +42,8 @@ LABEL \
       description="Red Hat OpenShift Pipelines Resolvers" \
       io.k8s.display-name="Red Hat OpenShift Pipelines Resolvers" \
       io.k8s.description="Red Hat OpenShift Pipelines Resolvers" \
-      io.openshift.tags="pipelines,tekton,openshift"
+      io.openshift.tags="pipelines,tekton,openshift" \
+      cpe="cpe:/a:redhat:openshift_pipelines:1.19::el9"
 
 RUN microdnf update && microdnf install -y git && microdnf clean all
 
