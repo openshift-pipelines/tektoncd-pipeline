@@ -26,6 +26,7 @@ LABEL \
       com.redhat.component="openshift-pipelines-workingdirinit-rhel8-container" \
       name="openshift-pipelines/pipelines-workingdirinit-rhel8" \
       version=$VERSION \
+      cpe="cpe:/a:redhat:openshift_pipelines:1.15::el8" \
       summary="Red Hat OpenShift Pipelines Workingdirinit" \
       maintainer="pipelines-extcomm@redhat.com" \
       description="Red Hat OpenShift Pipelines Workingdirinit" \
