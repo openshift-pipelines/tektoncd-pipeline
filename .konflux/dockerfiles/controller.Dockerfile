@@ -27,6 +27,7 @@ LABEL \
       com.redhat.component="openshift-pipelines-controller-rhel8-container" \
       name="openshift-pipelines/pipelines-controller-rhel8" \
       version=$VERSION \
+      cpe="cpe:/a:redhat:openshift_pipelines:1.17::el8" \
       summary="Red Hat OpenShift Pipelines Controller" \
       maintainer="pipelines-extcomm@redhat.com" \
       description="Red Hat OpenShift Pipelines Controller" \
