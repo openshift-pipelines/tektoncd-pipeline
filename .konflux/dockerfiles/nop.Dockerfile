@@ -36,6 +36,7 @@ LABEL \
       io.openshift.tags="pipelines,tekton,openshift" \
       vendor="Red Hat, Inc." \
       distribution-scope="public" \
+      cpe="cpe:/a:redhat:openshift_pipelines:1.17::el8" \
       url="https://access.redhat.com/containers/#/registry.access.redhat.com/ubi9-minimal/images/9.4-1227.1725849298" \
       release="1227.1725849298"
 
