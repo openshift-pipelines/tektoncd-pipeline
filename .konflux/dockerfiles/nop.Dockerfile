@@ -35,6 +35,7 @@ LABEL \
       vendor="Red Hat, Inc." \
       distribution-scope="public" \
       url="https://access.redhat.com/containers/#/registry.access.redhat.com/ubi9-minimal/images/9.4-1227.1725849298" \
+      cpe="cpe:/a:redhat:openshift_pipelines:1.16::el8" \
       release="1227.1725849298"
 
 USER 65532
