@@ -336,7 +336,7 @@ func parseError(tag uint8) error {
 	return fmt.Errorf("ssh: parse error in message type %d", tag)
 }
 
-func findCommon(what string, client []string, server []string, isClient bool) (string, error) {
+func findCommon(what string, client []string, server []string) (common string, err error) {
 	for _, c := range client {
 		for _, s := range server {
 			if c == s {
@@ -344,32 +344,7 @@ func findCommon(what string, client []string, server []string, isClient bool) (s
 			}
 		}
 	}
-	err := &AlgorithmNegotiationError{
-		What: what,
-	}
-	if isClient {
-		err.SupportedAlgorithms = client
-		err.RequestedAlgorithms = server
-	} else {
-		err.SupportedAlgorithms = server
-		err.RequestedAlgorithms = client
-	}
-	return "", err
-}
-
-// AlgorithmNegotiationError defines the error returned if the client and the
-// server cannot agree on an algorithm for key exchange, host key, cipher, MAC.
-type AlgorithmNegotiationError struct {
-	What string
-	// RequestedAlgorithms lists the algorithms supported by the peer.
-	RequestedAlgorithms []string
-	// SupportedAlgorithms lists the algorithms supported on our side.
-	SupportedAlgorithms []string
-}
-
-func (a *AlgorithmNegotiationError) Error() string {
-	return fmt.Sprintf("ssh: no common algorithm for %s; we offered: %v, peer offered: %v",
-		a.What, a.SupportedAlgorithms, a.RequestedAlgorithms)
+	return "", fmt.Errorf("ssh: no common algorithm for %s; client offered: %v, server offered: %v", what, client, server)
 }
 
 // DirectionAlgorithms defines the algorithms negotiated in one direction
@@ -404,12 +379,12 @@ var aeadCiphers = map[string]bool{
 func findAgreedAlgorithms(isClient bool, clientKexInit, serverKexInit *kexInitMsg) (algs *NegotiatedAlgorithms, err error) {
 	result := &NegotiatedAlgorithms{}
 
-	result.KeyExchange, err = findCommon("key exchange", clientKexInit.KexAlgos, serverKexInit.KexAlgos, isClient)
+	result.KeyExchange, err = findCommon("key exchange", clientKexInit.KexAlgos, serverKexInit.KexAlgos)
 	if err != nil {
 		return
 	}
 
-	result.HostKey, err = findCommon("host key", clientKexInit.ServerHostKeyAlgos, serverKexInit.ServerHostKeyAlgos, isClient)
+	result.HostKey, err = findCommon("host key", clientKexInit.ServerHostKeyAlgos, serverKexInit.ServerHostKeyAlgos)
 	if err != nil {
 		return
 	}
@@ -419,36 +394,36 @@ func findAgreedAlgorithms(isClient bool, clientKexInit, serverKexInit *kexInitMs
 		ctos, stoc = stoc, ctos
 	}
 
-	ctos.Cipher, err = findCommon("client to server cipher", clientKexInit.CiphersClientServer, serverKexInit.CiphersClientServer, isClient)
+	ctos.Cipher, err = findCommon("client to server cipher", clientKexInit.CiphersClientServer, serverKexInit.CiphersClientServer)
 	if err != nil {
 		return
 	}
 
-	stoc.Cipher, err = findCommon("server to client cipher", clientKexInit.CiphersServerClient, serverKexInit.CiphersServerClient, isClient)
+	stoc.Cipher, err = findCommon("server to client cipher", clientKexInit.CiphersServerClient, serverKexInit.CiphersServerClient)
 	if err != nil {
 		return
 	}
 
 	if !aeadCiphers[ctos.Cipher] {
-		ctos.MAC, err = findCommon("client to server MAC", clientKexInit.MACsClientServer, serverKexInit.MACsClientServer, isClient)
+		ctos.MAC, err = findCommon("client to server MAC", clientKexInit.MACsClientServer, serverKexInit.MACsClientServer)
 		if err != nil {
 			return
 		}
 	}
 
 	if !aeadCiphers[stoc.Cipher] {
-		stoc.MAC, err = findCommon("server to client MAC", clientKexInit.MACsServerClient, serverKexInit.MACsServerClient, isClient)
+		stoc.MAC, err = findCommon("server to client MAC", clientKexInit.MACsServerClient, serverKexInit.MACsServerClient)
 		if err != nil {
 			return
 		}
 	}
 
-	ctos.compression, err = findCommon("client to server compression", clientKexInit.CompressionClientServer, serverKexInit.CompressionClientServer, isClient)
+	ctos.compression, err = findCommon("client to server compression", clientKexInit.CompressionClientServer, serverKexInit.CompressionClientServer)
 	if err != nil {
 		return
 	}
 
-	stoc.compression, err = findCommon("server to client compression", clientKexInit.CompressionServerClient, serverKexInit.CompressionServerClient, isClient)
+	stoc.compression, err = findCommon("server to client compression", clientKexInit.CompressionServerClient, serverKexInit.CompressionServerClient)
 	if err != nil {
 		return
 	}
