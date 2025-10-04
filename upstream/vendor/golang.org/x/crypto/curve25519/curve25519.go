@@ -36,7 +36,7 @@ func ScalarBaseMult(dst, scalar *[32]byte) {
 	curve := ecdh.X25519()
 	priv, err := curve.NewPrivateKey(scalar[:])
 	if err != nil {
-		panic("curve25519: " + err.Error())
+		panic("curve25519: internal error: scalarBaseMult was not 32 bytes")
 	}
 	copy(dst[:], priv.PublicKey().Bytes())
 }
