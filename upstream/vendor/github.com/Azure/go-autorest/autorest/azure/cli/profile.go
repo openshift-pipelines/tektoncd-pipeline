@@ -18,6 +18,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"io/ioutil"
 	"os"
 	"path/filepath"
 
@@ -65,7 +66,7 @@ func ProfilePath() (string, error) {
 // LoadProfile restores a Profile object from a file located at 'path'.
 func LoadProfile(path string) (result Profile, err error) {
 	var contents []byte
-	contents, err = os.ReadFile(path)
+	contents, err = ioutil.ReadFile(path)
 	if err != nil {
 		err = fmt.Errorf("failed to open file (%s) while loading token: %v", path, err)
 		return
