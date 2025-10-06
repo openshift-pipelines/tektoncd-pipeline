@@ -618,8 +618,8 @@ github.com/stretchr/testify v1.10.0/go.mod h1:r2ic/lqez/lEtzL7wO/rwa5dbSLXVDPFyf
 github.com/stvp/go-udp-testing v0.0.0-20201019212854-469649b16807/go.mod h1:7jxmlfBCDBXRzr0eAQJ48XC1hBu1np4CS5+cHEYfwpc=
 github.com/tektoncd/ahmetb-gen-crd-api-reference-docs v0.3.1-0.20220729140133-6ce2d5aafcb4 h1:E5MV/fepEo6WUfYi+rE5y4oL5BUncZmO7e1FJm7F+sI=
 github.com/tektoncd/ahmetb-gen-crd-api-reference-docs v0.3.1-0.20220729140133-6ce2d5aafcb4/go.mod h1:lQON0TD5PnAUl7Q6H5FNV+/AqCSeltYf72OGIkegB/o=
-github.com/tektoncd/plumbing v0.0.0-20251004131613-10dc46da7bf4 h1:H1/5eZXOQSghnHUZEx7Qp3a6KuvldX/0VTg5nlVbiqo=
-github.com/tektoncd/plumbing v0.0.0-20251004131613-10dc46da7bf4/go.mod h1:BC6F3DlZc+wpUT9YcwG9MoSfb4tUiH2olB9xYoIsB4I=
+github.com/tektoncd/plumbing v0.0.0-20251005211614-769d6d439f9d h1:YWFo85Smp5GN+YUoV8j+gKN/xfWj0k1zG5wVLKjI36Y=
+github.com/tektoncd/plumbing v0.0.0-20251005211614-769d6d439f9d/go.mod h1:BC6F3DlZc+wpUT9YcwG9MoSfb4tUiH2olB9xYoIsB4I=
 github.com/titanous/rocacheck v0.0.0-20171023193734-afe73141d399 h1:e/5i7d4oYZ+C1wj2THlRK+oAhjeS/TRQwMfkIuet3w0=
 github.com/titanous/rocacheck v0.0.0-20171023193734-afe73141d399/go.mod h1:LdwHTNJT99C5fTAzDz0ud328OgXz+gierycbcIx2fRs=
 github.com/valyala/bytebufferpool v1.0.0 h1:GqA5TC/0021Y/b9FG4Oi9Mr3q7XYx6KllzawFIhcdPw=
