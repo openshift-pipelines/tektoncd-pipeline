@@ -19,7 +19,7 @@ require (
 	github.com/sigstore/sigstore v1.9.5
 	github.com/spiffe/go-spiffe/v2 v2.5.0
 	github.com/spiffe/spire-api-sdk v1.12.4
-	github.com/tektoncd/plumbing v0.0.0-20251004131613-10dc46da7bf4
+	github.com/tektoncd/plumbing v0.0.0-20251005211614-769d6d439f9d
 	go.opencensus.io v0.24.0
 	go.uber.org/zap v1.27.0
 	golang.org/x/exp v0.0.0-20250210185358-939b2ce775ac // indirect
