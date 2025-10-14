@@ -36,7 +36,7 @@ cloud.google.com/go/iam/apiv1/iampb
 cloud.google.com/go/kms/apiv1
 cloud.google.com/go/kms/apiv1/kmspb
 cloud.google.com/go/kms/internal
-# cloud.google.com/go/longrunning v0.6.7
+# cloud.google.com/go/longrunning v0.6.6
 ## explicit; go 1.23.0
 cloud.google.com/go/longrunning
 cloud.google.com/go/longrunning/autogen
@@ -1789,7 +1789,7 @@ k8s.io/utils/pointer
 k8s.io/utils/ptr
 k8s.io/utils/strings/slices
 k8s.io/utils/trace
-# knative.dev/hack v0.0.0-20251013111017-49bc1be5f373
+# knative.dev/hack v0.0.0-20250331013814-c577ed9f7775
 ## explicit; go 1.21
 knative.dev/hack
 # knative.dev/pkg v0.0.0-20250415155312-ed3e2158b883
