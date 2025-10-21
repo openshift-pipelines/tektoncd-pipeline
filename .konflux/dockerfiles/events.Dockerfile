@@ -1,5 +1,5 @@
 ARG GO_BUILDER=brew.registry.redhat.io/rh-osbs/openshift-golang-builder:v1.23
-ARG RUNTIME=registry.redhat.io/ubi8/ubi:latest@sha256:96ede92bab65df0386c9dabe6ec946aaa13a8717d2d5ad52d5d9a1d2e1f90e0f
+ARG RUNTIME=registry.redhat.io/ubi8/ubi:latest@sha256:bcfca5f27e2d2a822bdbbe7390601edefee48c3cae03b552a33235dcca4a0e24
 
 FROM $GO_BUILDER AS builder
 
