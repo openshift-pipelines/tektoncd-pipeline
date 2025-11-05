@@ -148,8 +148,9 @@ var (
 // "ControllerName" const in describing the type of run, we import these
 // constants (for consistency) but rename them (for ergonomic semantics).
 const (
-	taskRun   = pipeline.TaskRunControllerName
-	customRun = pipeline.CustomRunControllerName
+	taskRun     = pipeline.TaskRunControllerName
+	customRun   = pipeline.CustomRunControllerName
+	pipelineRun = pipeline.PipelineRunControllerName
 )
 
 // Reconciler implements controller.Reconciler for Configuration resources.
@@ -362,6 +363,10 @@ func (c *Reconciler) resolvePipelineState(
 			return nil, fmt.Errorf("failed to list VerificationPolicies from namespace %s with error %w", pr.Namespace, err)
 		}
 
+		getChildPipelineRunFunc := func(name string) (*v1.PipelineRun, error) {
+			return c.pipelineRunLister.PipelineRuns(pr.Namespace).Get(name)
+		}
+
 		getTaskFunc := tresources.GetTaskFunc(
 			ctx,
 			c.KubeClientSet,
@@ -389,6 +394,7 @@ func (c *Reconciler) resolvePipelineState(
 
 		resolvedTask, err := resources.ResolvePipelineTask(ctx,
 			*pr,
+			getChildPipelineRunFunc,
 			getTaskFunc,
 			getTaskRunFunc,
 			getCustomRunFunc,
@@ -449,7 +455,7 @@ func (c *Reconciler) reconcile(ctx context.Context, pr *v1.PipelineRun, getPipel
 		pr.Status.MarkRunning(v1.PipelineRunReasonResolvingPipelineRef.String(), message)
 		return nil
 	case errors.Is(err, apiserver.ErrReferencedObjectValidationFailed), errors.Is(err, apiserver.ErrCouldntValidateObjectPermanent):
-		logger.Errorf("Failed dryRunValidation for PipelineRun %s: %w", pr.Name, err)
+		logger.Errorf("Failed dryRunValidation for PipelineRun %s: %v", pr.Name, err)
 		pr.Status.MarkFailed(v1.PipelineRunReasonFailedValidation.String(),
 			"Failed dryRunValidation for PipelineRun %s: %s",
 			pr.Name, pipelineErrors.WrapUserError(err))
@@ -682,10 +688,11 @@ func (c *Reconciler) reconcile(ctx context.Context, pr *v1.PipelineRun, getPipel
 	}
 
 	for i, rpt := range pipelineRunFacts.State {
-		if !rpt.IsCustomTask() {
+		// Task?
+		if !rpt.IsCustomTask() && !rpt.IsChildPipeline() {
 			err := taskrun.ValidateResolvedTask(ctx, rpt.PipelineTask.Params, rpt.PipelineTask.Matrix, rpt.ResolvedTask)
 			if err != nil {
-				logger.Errorf("Failed to validate pipelinerun %s with error %w", pr.Name, err)
+				logger.Errorf("Failed to validate pipelinerun %s with error %v", pr.Name, err)
 				pr.Status.MarkFailed(v1.PipelineRunReasonFailedValidation.String(),
 					"Validation failed for pipelinerun %s with error %s",
 					pr.Name, pipelineErrors.WrapUserError(err))
@@ -694,7 +701,7 @@ func (c *Reconciler) reconcile(ctx context.Context, pr *v1.PipelineRun, getPipel
 
 			if config.FromContextOrDefaults(ctx).FeatureFlags.EnableParamEnum {
 				if err := resources.ValidateParamEnumSubset(originalTasks[i].Params, pipelineSpec.Params, rpt.ResolvedTask); err != nil {
-					logger.Errorf("Failed to validate pipelinerun %q with error %w", pr.Name, err)
+					logger.Errorf("Failed to validate pipelinerun %q with error %v", pr.Name, err)
 					pr.Status.MarkFailed(v1.PipelineRunReasonFailedValidation.String(),
 						"Validation failed for pipelinerun with error %s",
 						pipelineErrors.WrapUserError(err))
@@ -710,7 +717,7 @@ func (c *Reconciler) reconcile(ctx context.Context, pr *v1.PipelineRun, getPipel
 		if err != nil {
 			logger.Errorf("Error evaluating CEL %s: %v", pr.Name, err)
 			pr.Status.MarkFailed(string(v1.PipelineRunReasonCELEvaluationFailed),
-				"Error evaluating CEL %s: %w", pr.Name, pipelineErrors.WrapUserError(err))
+				"Error evaluating CEL %s: %v", pr.Name, pipelineErrors.WrapUserError(err))
 			return controller.NewPermanentError(err)
 		}
 	}
@@ -733,17 +740,17 @@ func (c *Reconciler) reconcile(ctx context.Context, pr *v1.PipelineRun, getPipel
 		}
 
 		if err := resources.ValidatePipelineResults(pipelineSpec, pipelineRunFacts.State); err != nil {
-			logger.Errorf("Failed to resolve pipeline result reference for %q with error %w", pr.Name, err)
+			logger.Errorf("Failed to resolve pipeline result reference for %q with error %v", pr.Name, err)
 			pr.Status.MarkFailed(v1.PipelineRunReasonInvalidPipelineResultReference.String(),
-				"Failed to resolve pipeline result reference for %q with error %w",
+				"Failed to resolve pipeline result reference for %q with error %v",
 				pr.Name, err)
 			return controller.NewPermanentError(err)
 		}
 
 		if err := resources.ValidateOptionalWorkspaces(pipelineSpec.Workspaces, pipelineRunFacts.State); err != nil {
-			logger.Errorf("Optional workspace not supported by task: %w", err)
+			logger.Errorf("Optional workspace not supported by task: %v", err)
 			pr.Status.MarkFailed(v1.PipelineRunReasonRequiredWorkspaceMarkedOptional.String(),
-				"Optional workspace not supported by task: %w", pipelineErrors.WrapUserError(err))
+				"Optional workspace not supported by task: %v", pipelineErrors.WrapUserError(err))
 			return controller.NewPermanentError(err)
 		}
 
@@ -916,7 +923,7 @@ func (c *Reconciler) runNextSchedulableTask(ctx context.Context, pr *v1.Pipeline
 			if err := rpt.EvaluateCEL(); err != nil {
 				logger.Errorf("Final task %q is not executed, due to error evaluating CEL %s: %v", rpt.PipelineTask.Name, pr.Name, err)
 				pr.Status.MarkFailed(string(v1.PipelineRunReasonCELEvaluationFailed),
-					"Error evaluating CEL %s: %w", pr.Name, pipelineErrors.WrapUserError(err))
+					"Error evaluating CEL %s: %v", pr.Name, pipelineErrors.WrapUserError(err))
 				return controller.NewPermanentError(err)
 			}
 
@@ -954,21 +961,29 @@ func (c *Reconciler) runNextSchedulableTask(ctx context.Context, pr *v1.Pipeline
 		// Validate parameter types in matrix after apply substitutions from Task Results
 		if rpt.PipelineTask.IsMatrixed() {
 			if err := resources.ValidateParameterTypesInMatrix(pipelineRunFacts.State); err != nil {
-				logger.Errorf("Failed to validate matrix %q with error %w", pr.Name, err)
+				logger.Errorf("Failed to validate matrix %q with error %v", pr.Name, err)
 				pr.Status.MarkFailed(v1.PipelineRunReasonInvalidMatrixParameterTypes.String(),
-					"Failed to validate matrix %q with error %w", pipelineErrors.WrapUserError(err))
+					"Failed to validate matrix %q with error %v", pipelineErrors.WrapUserError(err))
 				return controller.NewPermanentError(err)
 			}
 		}
 
-		if rpt.IsCustomTask() {
+		switch {
+		case rpt.IsChildPipeline():
+			rpt.ChildPipelineRuns, err = c.createChildPipelineRuns(ctx, rpt, pr, pipelineRunFacts)
+			if err != nil {
+				recorder.Eventf(pr, corev1.EventTypeWarning, "ChildPipelineRunsCreationFailed", "Failed to create child (PIP) PipelineRuns %q: %v", rpt.ChildPipelineRunNames, err)
+				err = fmt.Errorf("error creating child PipelineRuns called %s for PipelineTask %s from PipelineRun %s: %w", rpt.ChildPipelineRunNames, rpt.PipelineTask.Name, pr.Name, err)
+				return err
+			}
+		case rpt.IsCustomTask():
 			rpt.CustomRuns, err = c.createCustomRuns(ctx, rpt, pr, pipelineRunFacts)
 			if err != nil {
 				recorder.Eventf(pr, corev1.EventTypeWarning, "RunsCreationFailed", "Failed to create CustomRuns %q: %v", rpt.CustomRunNames, err)
 				err = fmt.Errorf("error creating CustomRuns called %s for PipelineTask %s from PipelineRun %s: %w", rpt.CustomRunNames, rpt.PipelineTask.Name, pr.Name, err)
 				return err
 			}
-		} else {
+		default:
 			rpt.TaskRuns, err = c.createTaskRuns(ctx, rpt, pr, pipelineRunFacts)
 			if err != nil {
 				recorder.Eventf(pr, corev1.EventTypeWarning, "TaskRunsCreationFailed", "Failed to create TaskRuns %q: %v", rpt.TaskRunNames, err)
@@ -991,6 +1006,67 @@ func (c *Reconciler) setFinallyStartedTimeIfNeeded(pr *v1.PipelineRun, facts *re
 	}
 }
 
+func (c *Reconciler) createChildPipelineRuns(
+	ctx context.Context,
+	rpt *resources.ResolvedPipelineTask,
+	pr *v1.PipelineRun,
+	facts *resources.PipelineRunFacts,
+) ([]*v1.PipelineRun, error) {
+	ctx, span := c.tracerProvider.Tracer(TracerName).Start(ctx, "createChildPipelineRuns")
+	defer span.End()
+
+	var childPipelineRuns []*v1.PipelineRun
+	for _, childPipelineRunName := range rpt.ChildPipelineRunNames {
+		var params v1.Params
+		childPipelineRun, err := c.createChildPipelineRun(ctx, childPipelineRunName, params, rpt, pr, facts)
+		if err != nil {
+			err := c.handleRunCreationError(pr, err)
+			return nil, err
+		}
+		childPipelineRuns = append(childPipelineRuns, childPipelineRun)
+	}
+
+	return childPipelineRuns, nil
+}
+
+func (c *Reconciler) createChildPipelineRun(
+	ctx context.Context,
+	childPipelineRunName string,
+	params v1.Params,
+	rpt *resources.ResolvedPipelineTask,
+	pr *v1.PipelineRun,
+	facts *resources.PipelineRunFacts,
+) (*v1.PipelineRun, error) {
+	ctx, span := c.tracerProvider.Tracer(TracerName).Start(ctx, "createChildPipelineRun")
+	defer span.End()
+
+	logger := logging.FromContext(ctx)
+	rpt.PipelineTask = resources.ApplyPipelineTaskContexts(rpt.PipelineTask, pr.Status, facts)
+
+	newChildPipelineRun := &v1.PipelineRun{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:            childPipelineRunName,
+			Namespace:       pr.Namespace,
+			OwnerReferences: []metav1.OwnerReference{*kmeta.NewControllerRef(pr)},
+			Labels:          createChildResourceLabels(pr, rpt.PipelineTask.Name, true),
+			Annotations:     createChildResourceAnnotations(pr),
+		},
+		Spec: v1.PipelineRunSpec{
+			PipelineSpec: rpt.PipelineTask.PipelineSpec,
+		},
+	}
+
+	logger.Infof(
+		"Creating a new child (PIP) PipelineRun object %s for pipeline task %s",
+		childPipelineRunName,
+		rpt.PipelineTask.Name,
+	)
+
+	return c.PipelineClientSet.TektonV1().
+		PipelineRuns(pr.Namespace).
+		Create(ctx, newChildPipelineRun, metav1.CreateOptions{})
+}
+
 func (c *Reconciler) createTaskRuns(ctx context.Context, rpt *resources.ResolvedPipelineTask, pr *v1.PipelineRun, facts *resources.PipelineRunFacts) ([]*v1.TaskRun, error) {
 	ctx, span := c.tracerProvider.Tracer(TracerName).Start(ctx, "createTaskRuns")
 	defer span.End()
@@ -1010,7 +1086,7 @@ func (c *Reconciler) createTaskRuns(ctx context.Context, rpt *resources.Resolved
 			params = append(params, rpt.PipelineTask.Params...)
 			if err := taskrun.ValidateEnumParam(ctx, params, rpt.ResolvedTask.TaskSpec.Params); err != nil {
 				pr.Status.MarkFailed(v1.PipelineRunReasonInvalidParamValue.String(),
-					"Invalid param value from PipelineTask \"%s\": %w",
+					"Invalid param value from PipelineTask \"%s\": %v",
 					rpt.PipelineTask.Name, pipelineErrors.WrapUserError(err))
 				return nil, controller.NewPermanentError(err)
 			}
@@ -1025,7 +1101,7 @@ func (c *Reconciler) createTaskRuns(ctx context.Context, rpt *resources.Resolved
 		}
 		taskRun, err := c.createTaskRun(ctx, taskRunName, params, rpt, pr, facts)
 		if err != nil {
-			err := c.handleRunCreationError(ctx, pr, err)
+			err := c.handleRunCreationError(pr, err)
 			return nil, err
 		}
 		taskRuns = append(taskRuns, taskRun)
@@ -1071,6 +1147,11 @@ func (c *Reconciler) createTaskRun(ctx context.Context, taskRunName string, para
 
 	if rpt.PipelineTask.Timeout != nil {
 		tr.Spec.Timeout = rpt.PipelineTask.Timeout
+	}
+
+	// taskRunSpec timeout overrides pipeline task timeout
+	if taskRunSpec.Timeout != nil {
+		tr.Spec.Timeout = taskRunSpec.Timeout
 	}
 
 	if rpt.ResolvedTask.TaskName != "" {
@@ -1127,12 +1208,13 @@ func (c *Reconciler) createTaskRun(ctx context.Context, taskRunName string, para
 }
 
 // handleRunCreationError marks the PipelineRun as failed and returns a permanent error if the run creation error is not retryable
-func (c *Reconciler) handleRunCreationError(ctx context.Context, pr *v1.PipelineRun, err error) error {
+func (c *Reconciler) handleRunCreationError(pr *v1.PipelineRun, err error) error {
 	if controller.IsPermanentError(err) {
 		pr.Status.MarkFailed(v1.PipelineRunReasonCreateRunFailed.String(), err.Error())
 		return err
 	}
-	// This is not a complete list of permanent errors. Any permanent error with TaskRun/CustomRun creation can be added here.
+	// This is not a complete list of permanent errors. Any permanent error with child (PinP)
+	// PipelinRun/TaskRun/CustomRun creation can be added here.
 	if apierrors.IsInvalid(err) || apierrors.IsBadRequest(err) {
 		pr.Status.MarkFailed(v1.PipelineRunReasonCreateRunFailed.String(), err.Error())
 		return controller.NewPermanentError(err)
@@ -1156,7 +1238,7 @@ func (c *Reconciler) createCustomRuns(ctx context.Context, rpt *resources.Resolv
 		}
 		customRun, err := c.createCustomRun(ctx, customRunName, params, rpt, pr, facts)
 		if err != nil {
-			err := c.handleRunCreationError(ctx, pr, err)
+			err := c.handleRunCreationError(pr, err)
 			return nil, err
 		}
 		customRuns = append(customRuns, customRun)
@@ -1173,6 +1255,11 @@ func (c *Reconciler) createCustomRun(ctx context.Context, runName string, params
 	params = append(params, rpt.PipelineTask.Params...)
 
 	taskTimeout := rpt.PipelineTask.Timeout
+	// taskRunSpec timeout overrides pipeline task timeout
+	if taskRunSpec.Timeout != nil {
+		taskTimeout = taskRunSpec.Timeout
+	}
+
 	var pipelinePVCWorkspaceName string
 	var err error
 	var workspaces []v1.WorkspaceBinding
@@ -1185,8 +1272,8 @@ func (c *Reconciler) createCustomRun(ctx context.Context, runName string, params
 		Name:            runName,
 		Namespace:       pr.Namespace,
 		OwnerReferences: []metav1.OwnerReference{*kmeta.NewControllerRef(pr)},
-		Labels:          getTaskrunLabels(pr, rpt.PipelineTask.Name, true),
-		Annotations:     getTaskrunAnnotations(pr),
+		Labels:          createChildResourceLabels(pr, rpt.PipelineTask.Name, true),
+		Annotations:     createChildResourceAnnotations(pr),
 	}
 
 	// TaskRef, Params and Workspaces are converted to v1beta1 since CustomRuns
@@ -1411,8 +1498,8 @@ func combinedSubPath(workspaceSubPath string, pipelineTaskSubPath string) string
 	return filepath.Join(workspaceSubPath, pipelineTaskSubPath)
 }
 
-func getTaskrunAnnotations(pr *v1.PipelineRun) map[string]string {
-	// Propagate annotations from PipelineRun to TaskRun.
+func createChildResourceAnnotations(pr *v1.PipelineRun) map[string]string {
+	// propagate annotations from PipelineRun to child (PinP) PipelineRun/TaskRun/CustomRun
 	annotations := make(map[string]string, len(pr.ObjectMeta.Annotations)+1)
 	for key, val := range pr.ObjectMeta.Annotations {
 		annotations[key] = val
@@ -1458,10 +1545,10 @@ func propagatePipelineNameLabelToPipelineRun(pr *v1.PipelineRun) error {
 	return nil
 }
 
-func getTaskrunLabels(pr *v1.PipelineRun, pipelineTaskName string, includePipelineLabels bool) map[string]string {
-	// Propagate labels from PipelineRun to TaskRun.
+func createChildResourceLabels(pr *v1.PipelineRun, pipelineTaskName string, includePipelineRunLabels bool) map[string]string {
+	// propagate labels from PipelineRun to child (PinP) PipelineRun/TaskRun/CustomRun
 	labels := make(map[string]string, len(pr.ObjectMeta.Labels)+1)
-	if includePipelineLabels {
+	if includePipelineRunLabels {
 		for key, val := range pr.ObjectMeta.Labels {
 			labels[key] = val
 		}
@@ -1498,7 +1585,7 @@ func combineTaskRunAndTaskSpecLabels(pr *v1.PipelineRun, pipelineTask *v1.Pipeli
 		addMetadataByPrecedence(labels, taskRunSpec.Metadata.Labels)
 	}
 
-	addMetadataByPrecedence(labels, getTaskrunLabels(pr, pipelineTask.Name, true))
+	addMetadataByPrecedence(labels, createChildResourceLabels(pr, pipelineTask.Name, true))
 
 	if pipelineTask.TaskSpec != nil {
 		addMetadataByPrecedence(labels, pipelineTask.TaskSpecMetadata().Labels)
@@ -1515,7 +1602,7 @@ func combineTaskRunAndTaskSpecAnnotations(pr *v1.PipelineRun, pipelineTask *v1.P
 		addMetadataByPrecedence(annotations, taskRunSpec.Metadata.Annotations)
 	}
 
-	addMetadataByPrecedence(annotations, getTaskrunAnnotations(pr))
+	addMetadataByPrecedence(annotations, createChildResourceAnnotations(pr))
 
 	if pipelineTask.TaskSpec != nil {
 		addMetadataByPrecedence(annotations, pipelineTask.TaskSpecMetadata().Annotations)
@@ -1595,10 +1682,16 @@ func (c *Reconciler) updatePipelineRunStatusFromInformer(ctx context.Context, pr
 	defer span.End()
 	logger := logging.FromContext(ctx)
 
-	// Get the pipelineRun label that is set on each TaskRun.  Do not include the propagated labels from the
-	// Pipeline and PipelineRun.  The user could change them during the lifetime of the PipelineRun so the
+	// Get the parent PipelineRun label that is set on each child (PinP) PipelineRun/TaskRun/CustomRun. Do not include the propagated labels from the
+	// Pipeline and PipelineRun. The user could change them during the lifetime of the PipelineRun so the
 	// current labels may not be set on the previously created TaskRuns.
-	pipelineRunLabels := getTaskrunLabels(pr, "", false)
+	pipelineRunLabels := createChildResourceLabels(pr, "", false)
+	childPipelineRuns, err := c.pipelineRunLister.PipelineRuns(pr.Namespace).List(k8slabels.SelectorFromSet(pipelineRunLabels))
+	if err != nil {
+		logger.Errorf("Could not list PipelineRuns %#v", err)
+		return err
+	}
+
 	taskRuns, err := c.taskRunLister.TaskRuns(pr.Namespace).List(k8slabels.SelectorFromSet(pipelineRunLabels))
 	if err != nil {
 		logger.Errorf("Could not list TaskRuns %#v", err)
@@ -1610,11 +1703,12 @@ func (c *Reconciler) updatePipelineRunStatusFromInformer(ctx context.Context, pr
 		logger.Errorf("Could not list CustomRuns %#v", err)
 		return err
 	}
-	return updatePipelineRunStatusFromChildObjects(ctx, logger, pr, taskRuns, customRuns)
+
+	return updatePipelineRunStatusFromChildObjects(ctx, logger, pr, childPipelineRuns, taskRuns, customRuns)
 }
 
-func updatePipelineRunStatusFromChildObjects(ctx context.Context, logger *zap.SugaredLogger, pr *v1.PipelineRun, taskRuns []*v1.TaskRun, customRuns []*v1beta1.CustomRun) error {
-	updatePipelineRunStatusFromChildRefs(logger, pr, taskRuns, customRuns)
+func updatePipelineRunStatusFromChildObjects(ctx context.Context, logger *zap.SugaredLogger, pr *v1.PipelineRun, childPipelineRuns []*v1.PipelineRun, taskRuns []*v1.TaskRun, customRuns []*v1beta1.CustomRun) error {
+	updatePipelineRunStatusFromChildRefs(logger, pr, childPipelineRuns, taskRuns, customRuns)
 
 	return validateChildObjectsInPipelineRunStatus(ctx, pr.Status)
 }
@@ -1624,7 +1718,7 @@ func validateChildObjectsInPipelineRunStatus(ctx context.Context, prs v1.Pipelin
 
 	for _, cr := range prs.ChildReferences {
 		switch cr.Kind {
-		case taskRun, customRun:
+		case taskRun, customRun, pipelineRun:
 			continue
 		default:
 			err = errors.Join(err, fmt.Errorf("child with name %s has unknown kind %s", cr.Name, cr.Kind))
@@ -1634,7 +1728,23 @@ func validateChildObjectsInPipelineRunStatus(ctx context.Context, prs v1.Pipelin
 	return err
 }
 
-// filterTaskRunsForPipelineRunStatus returns TaskRuns owned by the PipelineRun.
+// filterChildPipelineRunsForParentPipelineRunStatus returns child (PinP) PipelineRuns owned by the parent PipelineRun.
+func filterChildPipelineRunsForParentPipelineRunStatus(logger *zap.SugaredLogger, pr *v1.PipelineRun, childPipelineRuns []*v1.PipelineRun) []*v1.PipelineRun {
+	var owned []*v1.PipelineRun
+
+	for _, child := range childPipelineRuns {
+		// Only process child (PinP) PipelineRuns that are owned by this parent PipelineRun.
+		// This skips PipelineRuns that are indirectly created by the PipelineRun (e.g. by custom tasks).
+		if len(child.OwnerReferences) == 0 || child.OwnerReferences[0].UID != pr.ObjectMeta.UID {
+			logger.Debugf("Found a child (PIP) PipelineRun %s that is not owned by this parent PipelineRun", child.Name)
+			continue
+		}
+		owned = append(owned, child)
+	}
+
+	return owned
+}
+
 func filterTaskRunsForPipelineRunStatus(logger *zap.SugaredLogger, pr *v1.PipelineRun, trs []*v1.TaskRun) []*v1.TaskRun {
 	var ownedTaskRuns []*v1.TaskRun
 
@@ -1680,22 +1790,46 @@ func filterCustomRunsForPipelineRunStatus(logger *zap.SugaredLogger, pr *v1.Pipe
 	return names, taskLabels, gvks, statuses
 }
 
-func updatePipelineRunStatusFromChildRefs(logger *zap.SugaredLogger, pr *v1.PipelineRun, trs []*v1.TaskRun, customRuns []*v1beta1.CustomRun) {
-	// If no TaskRun or CustomRun was found, nothing to be done. We never remove child references from the status.
+func updatePipelineRunStatusFromChildRefs(logger *zap.SugaredLogger, pr *v1.PipelineRun, childPipelineRuns []*v1.PipelineRun, trs []*v1.TaskRun, customRuns []*v1beta1.CustomRun) {
+	// If no child (PinP) PipelineRun, TaskRun or CustomRun was found, nothing to be done. We never remove child references from the status.
 	// We do still return an empty map of TaskRun/Run names keyed by PipelineTask name for later functions.
-	if len(trs) == 0 && len(customRuns) == 0 {
+	if len(childPipelineRuns) == 0 && len(trs) == 0 && len(customRuns) == 0 {
 		return
 	}
 
-	// Map PipelineTask names to TaskRun child references that were already in the status
+	// Map PipelineTask names to child (PinP) PipelineRun, TaskRun or CustomRun child references that were already in the status
 	childRefByName := make(map[string]*v1.ChildStatusReference)
 
 	for i := range pr.Status.ChildReferences {
 		childRefByName[pr.Status.ChildReferences[i].Name] = &pr.Status.ChildReferences[i]
 	}
 
-	taskRuns := filterTaskRunsForPipelineRunStatus(logger, pr, trs)
+	filteredChildPipelineRuns := filterChildPipelineRunsForParentPipelineRunStatus(logger, pr, childPipelineRuns)
 
+	// Loop over all the child (PinP) PipelineRuns associated to the parent PipelineRun
+	for _, fcpr := range filteredChildPipelineRuns {
+		labels := fcpr.GetLabels()
+		pipelineTaskName := labels[pipeline.PipelineTaskLabelKey]
+
+		// this child pipeline run is already in the status
+		if _, ok := childRefByName[fcpr.Name]; ok {
+			continue
+		}
+
+		logger.Infof("Found a child (PinP) PipelineRun %s that was missing from the parent PipelineRun status", fcpr.Name)
+
+		// Since this was recovered now, add it to the map, or it might be overwritten
+		childRefByName[fcpr.Name] = &v1.ChildStatusReference{
+			TypeMeta: runtime.TypeMeta{
+				APIVersion: v1.SchemeGroupVersion.String(),
+				Kind:       pipelineRun,
+			},
+			Name:             fcpr.Name,
+			PipelineTaskName: pipelineTaskName,
+		}
+	}
+
+	taskRuns := filterTaskRunsForPipelineRunStatus(logger, pr, trs)
 	// Loop over all the TaskRuns associated to Tasks
 	for _, tr := range taskRuns {
 		lbls := tr.GetLabels()
@@ -1720,7 +1854,6 @@ func updatePipelineRunStatusFromChildRefs(logger *zap.SugaredLogger, pr *v1.Pipe
 
 	// Get the names, their task label values, and their group/version/kind info for all CustomRuns or Runs associated with the PipelineRun
 	names, taskLabels, gvks, _ := filterCustomRunsForPipelineRunStatus(logger, pr, customRuns)
-
 	// Loop over that data and populate the child references
 	for idx := range names {
 		name := names[idx]
