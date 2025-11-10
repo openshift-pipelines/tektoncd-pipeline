@@ -5,7 +5,7 @@ FROM $RUNTIME as dependency-builder
 
 COPY dependencies/tini dependencies/tini
 WORKDIR /dependencies/tini
-RUN microdnf update && microdnf install -y cmake gcc
+RUN microdnf update -y && microdnf install -y cmake gcc
 ENV CFLAGS="-DPR_SET_CHILD_SUBREAPER=36 -DPR_GET_CHILD_SUBREAPER=37"
 RUN cmake . && make tini
 
@@ -45,7 +45,7 @@ LABEL \
       io.k8s.description="Red Hat OpenShift Pipelines Resolvers" \
       io.openshift.tags="pipelines,tekton,openshift"
 
-RUN microdnf update && microdnf install -y git && microdnf clean all
+RUN microdnf update -y && microdnf install -y git && microdnf clean all
 
 RUN groupadd -r -g 65532 nonroot && \
     useradd --no-log-init -r -u 65532 -g nonroot nonroot
