@@ -14,7 +14,7 @@ RUN go build -ldflags="-X 'knative.dev/pkg/changeset.rev=$(cat HEAD)'" -mod=vend
     ./cmd/nop
 
 FROM $RUNTIME
-ARG VERSION=pipeline-1.20
+ARG VERSION=pipeline-1.21
 
 ENV NOP=/usr/local/bin/nop \
     KO_APP=/ko-app \

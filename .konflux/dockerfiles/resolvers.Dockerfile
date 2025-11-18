@@ -22,7 +22,7 @@ RUN go build -ldflags="-X 'knative.dev/pkg/changeset.rev=$(cat HEAD)'" -mod=vend
     ./cmd/resolvers
 
 FROM $RUNTIME
-ARG VERSION=pipeline-1.20
+ARG VERSION=pipeline-1.21
 
 ENV RESOLVERS=/usr/local/bin/resolvers \
     KO_APP=/ko-app \
