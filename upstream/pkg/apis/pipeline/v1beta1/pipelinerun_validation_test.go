@@ -32,6 +32,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	corev1resources "k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	ptr "k8s.io/utils/pointer"
 	"knative.dev/pkg/apis"
 	duckv1 "knative.dev/pkg/apis/duck/v1"
 )
@@ -523,6 +524,27 @@ func TestPipelineRun_Invalid(t *testing.T) {
 		},
 		want: &apis.FieldError{Message: "must not set the field(s)", Paths: []string{"spec.pipelineRef.bundle"}},
 		wc:   apis.WithinCreate,
+	}, {
+		name: "when pipeline timeout is no timeout (0s), task timeouts can exceed it without error",
+		pr: v1beta1.PipelineRun{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: "pipelinelinename",
+			},
+			Spec: v1beta1.PipelineRunSpec{
+				PipelineRef: &v1beta1.PipelineRef{
+					Name: "prname",
+				},
+				Timeouts: &v1beta1.TimeoutFields{
+					Pipeline: &metav1.Duration{Duration: 0 * time.Minute}, // No timeout
+				},
+				TaskRunSpecs: []v1beta1.PipelineTaskRunSpec{{
+					PipelineTaskName:       "task1",
+					TaskPodTemplate:        &pod.PodTemplate{},
+					TaskServiceAccountName: "default",
+				}},
+			},
+		},
+		want: nil, // NoTimeoutDuration (0s) allows any task timeout
 	}}
 
 	for _, tc := range tests {
@@ -532,7 +554,11 @@ func TestPipelineRun_Invalid(t *testing.T) {
 				ctx = tc.wc(ctx)
 			}
 			err := tc.pr.Validate(ctx)
-			if d := cmp.Diff(tc.want.Error(), err.Error()); d != "" {
+			if tc.want == nil {
+				if err != nil {
+					t.Errorf("Expected no error but got: %v", err)
+				}
+			} else if d := cmp.Diff(tc.want.Error(), err.Error()); d != "" {
 				t.Error(diff.PrintWantGot(d))
 			}
 		})
@@ -1531,13 +1557,38 @@ func TestPipelineRun_InvalidTimeouts(t *testing.T) {
 			},
 		},
 		want: apis.ErrDisallowedFields("spec.timeout", "spec.timeouts"),
+	}, {
+		name: "when pipeline timeout is no timeout (0s), task timeouts can exceed it without error",
+		pr: v1beta1.PipelineRun{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: "pipelinelinename",
+			},
+			Spec: v1beta1.PipelineRunSpec{
+				PipelineRef: &v1beta1.PipelineRef{
+					Name: "prname",
+				},
+				Timeouts: &v1beta1.TimeoutFields{
+					Pipeline: &metav1.Duration{Duration: 0 * time.Minute}, // No timeout
+				},
+				TaskRunSpecs: []v1beta1.PipelineTaskRunSpec{{
+					PipelineTaskName:       "task1",
+					TaskPodTemplate:        &pod.PodTemplate{},
+					TaskServiceAccountName: "default",
+				}},
+			},
+		},
+		want: nil, // NoTimeoutDuration (0s) allows any task timeout
 	}}
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			ctx := t.Context()
 			err := tc.pr.Validate(ctx)
-			if d := cmp.Diff(tc.want.Error(), err.Error()); d != "" {
+			if tc.want == nil {
+				if err != nil {
+					t.Errorf("Expected no error but got: %v", err)
+				}
+			} else if d := cmp.Diff(tc.want.Error(), err.Error()); d != "" {
 				t.Error(diff.PrintWantGot(d))
 			}
 		})
@@ -1848,6 +1899,56 @@ func TestPipelineRunSpec_ValidateUpdate(t *testing.T) {
 				Message: `invalid value: Once the PipelineRun is complete, no updates are allowed`,
 				Paths:   []string{""},
 			},
+		}, {
+			name: "is update ctx, baseline is not done, managedBy changes",
+			baselinePipelineRun: &v1beta1.PipelineRun{
+				Spec: v1beta1.PipelineRunSpec{
+					ManagedBy: ptr.String("tekton.dev/pipeline"),
+				},
+				Status: v1beta1.PipelineRunStatus{
+					Status: duckv1.Status{
+						Conditions: duckv1.Conditions{
+							{Type: apis.ConditionSucceeded, Status: corev1.ConditionUnknown},
+						},
+					},
+				},
+			},
+			pipelineRun: &v1beta1.PipelineRun{
+				Spec: v1beta1.PipelineRunSpec{
+					ManagedBy: ptr.String("some-other-controller"),
+				},
+			},
+			isCreate: false,
+			isUpdate: true,
+			expectedError: apis.FieldError{
+				Message: `invalid value: managedBy is immutable`,
+				Paths:   []string{"spec.managedBy"},
+			},
+		}, {
+			name: "is update ctx, baseline is unknown, managedBy changes",
+			baselinePipelineRun: &v1beta1.PipelineRun{
+				Spec: v1beta1.PipelineRunSpec{
+					ManagedBy: ptr.String("tekton.dev/pipeline"),
+				},
+				Status: v1beta1.PipelineRunStatus{
+					Status: duckv1.Status{
+						Conditions: duckv1.Conditions{
+							{Type: apis.ConditionSucceeded, Status: corev1.ConditionUnknown},
+						},
+					},
+				},
+			},
+			pipelineRun: &v1beta1.PipelineRun{
+				Spec: v1beta1.PipelineRunSpec{
+					ManagedBy: ptr.String("some-other-controller"),
+				},
+			},
+			isCreate: false,
+			isUpdate: true,
+			expectedError: apis.FieldError{
+				Message: `invalid value: managedBy is immutable`,
+				Paths:   []string{"spec.managedBy"},
+			},
 		},
 	}
 
@@ -1973,6 +2074,112 @@ func TestPipelineRunSpec_ValidateUpdate_FinalizerChanges(t *testing.T) {
 				} else if !strings.Contains(err.Error(), tt.expectedError) {
 					t.Errorf("Expected error containing %q, but got: %v", tt.expectedError, err)
 				}
+			}
+		})
+	}
+}
+
+func TestPipelineRunTaskRunSpecTimeout_Validate(t *testing.T) {
+	tests := []struct {
+		name        string
+		spec        v1beta1.PipelineRunSpec
+		wantErr     bool
+		expectedErr string
+	}{{
+		name: "taskRunSpec timeout within pipeline timeout",
+		spec: v1beta1.PipelineRunSpec{
+			PipelineRef: &v1beta1.PipelineRef{Name: "test"},
+			Timeouts: &v1beta1.TimeoutFields{
+				Pipeline: &metav1.Duration{Duration: 1 * time.Hour},
+			},
+			TaskRunSpecs: []v1beta1.PipelineTaskRunSpec{{
+				PipelineTaskName: "task1",
+				Timeout:          &metav1.Duration{Duration: 30 * time.Minute},
+			}},
+		},
+		wantErr: false,
+	}, {
+		name: "taskRunSpec timeout exceeds pipeline timeout",
+		spec: v1beta1.PipelineRunSpec{
+			PipelineRef: &v1beta1.PipelineRef{Name: "test"},
+			Timeouts: &v1beta1.TimeoutFields{
+				Pipeline: &metav1.Duration{Duration: 30 * time.Minute},
+			},
+			TaskRunSpecs: []v1beta1.PipelineTaskRunSpec{{
+				PipelineTaskName: "task1",
+				Timeout:          &metav1.Duration{Duration: 1 * time.Hour},
+			}},
+		},
+		wantErr:     true,
+		expectedErr: "taskRunSpecs[0].timeout",
+	}, {
+		name: "no pipeline timeout uses default",
+		spec: v1beta1.PipelineRunSpec{
+			PipelineRef: &v1beta1.PipelineRef{Name: "test"},
+			TaskRunSpecs: []v1beta1.PipelineTaskRunSpec{{
+				PipelineTaskName: "task1",
+				Timeout:          &metav1.Duration{Duration: 30 * time.Minute},
+			}},
+		},
+		wantErr: false,
+	}, {
+		name: "taskRunSpec timeout exceeds tasks timeout",
+		spec: v1beta1.PipelineRunSpec{
+			PipelineRef: &v1beta1.PipelineRef{Name: "test"},
+			Timeouts: &v1beta1.TimeoutFields{
+				Tasks: &metav1.Duration{Duration: 30 * time.Minute}, // Key: tasks timeout
+			},
+			TaskRunSpecs: []v1beta1.PipelineTaskRunSpec{{
+				PipelineTaskName: "task1",
+				Timeout:          &metav1.Duration{Duration: 45 * time.Minute}, // Exceeds tasks timeout
+			}},
+		},
+		wantErr:     true,
+		expectedErr: "taskRunSpecs[0].timeout",
+	}, {
+		name: "taskRunSpec timeout within tasks timeout",
+		spec: v1beta1.PipelineRunSpec{
+			PipelineRef: &v1beta1.PipelineRef{Name: "test"},
+			Timeouts: &v1beta1.TimeoutFields{
+				Pipeline: &metav1.Duration{Duration: 2 * time.Hour}, // Pipeline timeout must be >= tasks timeout
+				Tasks:    &metav1.Duration{Duration: 1 * time.Hour},
+			},
+			TaskRunSpecs: []v1beta1.PipelineTaskRunSpec{{
+				PipelineTaskName: "task1",
+				Timeout:          &metav1.Duration{Duration: 30 * time.Minute}, // Within tasks timeout
+			}},
+		},
+		wantErr: false,
+	}, {
+		name: "taskRunSpec timeout exceeds default pipeline timeout",
+		spec: v1beta1.PipelineRunSpec{
+			PipelineRef: &v1beta1.PipelineRef{Name: "test"},
+			// No timeouts field set - should use default 60 minutes
+			TaskRunSpecs: []v1beta1.PipelineTaskRunSpec{{
+				PipelineTaskName: "task1",
+				Timeout:          &metav1.Duration{Duration: 90 * time.Minute}, // Exceeds 60m default
+			}},
+		},
+		wantErr:     true,
+		expectedErr: "taskRunSpecs[0].timeout",
+	}}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ctx := config.ToContext(t.Context(), &config.Config{
+				Defaults: &config.Defaults{
+					DefaultTimeoutMinutes: 60,
+				},
+			})
+			err := tt.spec.Validate(ctx)
+			if tt.wantErr {
+				if err == nil {
+					t.Errorf("Expected error but got none")
+				} else if !strings.Contains(err.Error(), tt.expectedErr) {
+					t.Errorf("Expected error containing %q but got %q", tt.expectedErr, err.Error())
+				}
+			} else if err != nil {
+				t.Errorf("Expected no error but got: %v", err)
 			}
 		})
 	}

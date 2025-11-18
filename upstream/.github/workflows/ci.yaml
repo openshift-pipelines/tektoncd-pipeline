@@ -1,6 +1,7 @@
 name: ci
 
-on: [pull_request] # yamllint disable-line rule:truthy
+on:
+  - pull_request
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull-request.number || github.ref }}
@@ -19,8 +20,8 @@ jobs:
     name: build
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4.2.2
-    - uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5  # v5.5.0
+    - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8  # v5.0.0
+    - uses: actions/setup-go@44694675825211faa026b3c33043df3e48a5fa00  # v6.0.0
       with:
         go-version-file: "go.mod"
     - name: build
@@ -30,8 +31,8 @@ jobs:
     name: buildFips
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4.2.2
-    - uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5  # v5.5.0
+    - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8  # v5.0.0
+    - uses: actions/setup-go@44694675825211faa026b3c33043df3e48a5fa00  # v6.0.0
       with:
         go-version-file: "go.mod"
     - name: build
@@ -43,8 +44,8 @@ jobs:
     name: lint
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4.2.2
-    - uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5  # v5.5.0
+    - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8  # v5.0.0
+    - uses: actions/setup-go@44694675825211faa026b3c33043df3e48a5fa00  # v6.0.0
       with:
         go-version-file: "go.mod"
     - name: gofmt
@@ -62,8 +63,8 @@ jobs:
         args: --timeout=10m
     - name: yamllint
       run: |
-        apt update && apt install -y yamllint
-        yamllint -c .yamllint $(find . -path ./vendor -prune -o -type f -regex ".*y[a]ml" -print | tr '\n' ' ')
+        apt-get update && apt-get install -y yamllint
+        make yamllint
     - name: check-license
       run: |
         go install github.com/google/go-licenses@v1.0.0
@@ -73,8 +74,8 @@ jobs:
     name: test
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4.2.2
-    - uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5  # v5.5.0
+    - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8  # v5.0.0
+    - uses: actions/setup-go@44694675825211faa026b3c33043df3e48a5fa00  # v6.0.0
       with:
         go-version-file: "go.mod"
     - name: unit-test
@@ -85,8 +86,8 @@ jobs:
     name: Check generated code
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4.2.2
-    - uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5  # v5.5.0
+    - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8  # v5.0.0
+    - uses: actions/setup-go@44694675825211faa026b3c33043df3e48a5fa00  # v6.0.0
       with:
         go-version-file: "go.mod"
     - name: generated
@@ -97,25 +98,14 @@ jobs:
     name: Multi-arch build
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4.2.2
-    - uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5  # v5.5.0
+    - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8  # v5.0.0
+    - uses: actions/setup-go@44694675825211faa026b3c33043df3e48a5fa00  # v6.0.0
       with:
         go-version-file: "go.mod"
     - uses: ko-build/setup-ko@d006021bd0c28d1ce33a07e7943d48b079944c8d # v0.9
     - name: ko-resolve
       run: |
-          cat <<EOF > .ko.yaml
-          defaultBaseImage: cgr.dev/chainguard/static
-          baseImageOverrides:
-            # Use the combined base image for images that should include Windows support.
-            # NOTE: Make sure this list of images to use the combined base image is in sync with what's in tekton/publish.yaml's 'create-ko-yaml' Task.
-            github.com/tektoncd/pipeline/cmd/entrypoint: ghcr.io/tektoncd/pipeline/github.com/tektoncd/pipeline/combined-base-image:latest
-            github.com/tektoncd/pipeline/cmd/nop: ghcr.io/tektoncd/pipeline/github.com/tektoncd/pipeline/combined-base-image:latest
-            github.com/tektoncd/pipeline/cmd/workingdirinit: ghcr.io/tektoncd/pipeline/github.com/tektoncd/pipeline/combined-base-image:latest
-
-            github.com/tektoncd/pipeline/cmd/git-init: cgr.dev/chainguard/git
-          EOF
-
+          # Use the repository's .ko.yaml for consistent base images
           KO_DOCKER_REPO=example.com ko resolve -l 'app.kubernetes.io/component!=resolvers' --platform=all --push=false -R -f config 1>/dev/null
           KO_DOCKER_REPO=example.com ko resolve --platform=all --push=false -f config/resolvers 1>/dev/null
   e2e-tests:
