@@ -3322,6 +3322,21 @@ Kubernetes core/v1.ResourceRequirements
 <p>Compute resources to use for this TaskRun</p>
 </td>
 </tr>
+<tr>
+<td>
+<code>timeout</code><br/>
+<em>
+<a href="https://godoc.org/k8s.io/apimachinery/pkg/apis/meta/v1#Duration">
+Kubernetes meta/v1.Duration
+</a>
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>Time after which the TaskRun times out.
+Refer Go&rsquo;s ParseDuration documentation for expected format: <a href="https://golang.org/pkg/time/#ParseDuration">https://golang.org/pkg/time/#ParseDuration</a></p>
+</td>
+</tr>
 </tbody>
 </table>
 <h3 id="tekton.dev/v1.PipelineTaskRunTemplate">PipelineTaskRunTemplate
@@ -4370,6 +4385,19 @@ string
 <td>
 <p>Name of the Step specified as a DNS_LABEL.
 Each Step in a Task must have a unique name.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>displayName</code><br/>
+<em>
+string
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>DisplayName is a user-facing name of the step that may be
+used to populate a UI.</p>
 </td>
 </tr>
 <tr>
@@ -13497,6 +13525,19 @@ string
 <td>
 <p>Name of the Step specified as a DNS_LABEL.
 Each Step in a Task must have a unique name.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>displayName</code><br/>
+<em>
+string
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>DisplayName is a user-facing name of the step that may be
+used to populate a UI.</p>
 </td>
 </tr>
 <tr>
