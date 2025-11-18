@@ -6,7 +6,7 @@ packages:
   - gcc
   - git
   - git-lfs
-  - openssl-libs-3.2.2-6.el9_5.1 
+  - openssl-libs 
 arches:
   # The list of architectures
   - aarch64
