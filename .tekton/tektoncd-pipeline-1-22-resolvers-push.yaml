@@ -1,4 +1,4 @@
-# Generated for Konflux Application openshift-pipelines-core-next by openshift-pipelines/hack. DO NOT EDIT
+# Generated for Konflux Application openshift-pipelines-core by openshift-pipelines/hack. DO NOT EDIT
 apiVersion: tekton.dev/v1
 kind: PipelineRun
 metadata:
@@ -10,16 +10,16 @@ metadata:
     build.appstudio.redhat.com/target_branch: '{{target_branch}}'
     pipelinesascode.tekton.dev/max-keep-runs: "3"
     pipelinesascode.tekton.dev/on-cel-expression: event == "push" && target_branch
-      == "next" &&
-      ("upstream/***".pathChanged() || ".konflux/patches/***".pathChanged() || ".konflux/rpms/***".pathChanged() ||
-      ".konflux/dockerfiles/entrypoint.Dockerfile".pathChanged() ||
-      ".tekton/tektoncd-pipeline-next-entrypoint-push.yaml".pathChanged())
+      == "release-v1.22.x" &&
+      (("dependencies/tini/***".pathChanged()) ||
+      ".konflux/dockerfiles/resolvers.Dockerfile".pathChanged() ||
+      ".tekton/tektoncd-pipeline-1-22-resolvers-push.yaml".pathChanged())
   creationTimestamp: null
   labels:
-    appstudio.openshift.io/application: openshift-pipelines-core-next
-    appstudio.openshift.io/component: tektoncd-pipeline-next-entrypoint
+    appstudio.openshift.io/application: openshift-pipelines-core-1-22
+    appstudio.openshift.io/component: tektoncd-pipeline-resolvers-1-22
     pipelines.appstudio.openshift.io/type: build
-  name: tektoncd-pipeline-next-entrypoint-on-push
+  name: tektoncd-pipeline-1-22-resolvers-on-push
   namespace: tekton-ecosystem-tenant
 spec:
   params:
@@ -27,19 +27,21 @@ spec:
     value: '{{source_url}}'
   - name: revision
     value: '{{revision}}'
-  - name: upstream-git-url
-    value: 'https://github.com/tektoncd/pipeline'
   - name: output-image
-    value: quay.io/redhat-user-workloads/tekton-ecosystem-tenant/next/pipeline-entrypoint-rhel9:{{revision}}
+    value: quay.io/redhat-user-workloads/tekton-ecosystem-tenant/pipelines-resolvers-rhel9:{{revision}}
   - name: dockerfile
-    value: .konflux/dockerfiles/entrypoint.Dockerfile
+    value: .konflux/dockerfiles/resolvers.Dockerfile
+  - name: additional-tags
+    value:
+      - "1.22"
+      - "1.22.0"
   - name: prefetch-input
     value: |
       {"type": "rpm", "path": ".konflux/rpms"}
   pipelineRef:
     name: docker-build-ta
   taskRunTemplate:
-    serviceAccountName: build-pipeline-tektoncd-pipeline-next-entrypoint
+    serviceAccountName: build-pipeline-tektoncd-pipeline-resolvers-1-22
   workspaces:
   - name: git-auth
     secret:
