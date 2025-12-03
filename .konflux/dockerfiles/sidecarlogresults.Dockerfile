@@ -14,7 +14,7 @@ RUN go build -ldflags="-X 'knative.dev/pkg/changeset.rev=$(cat HEAD)'" -mod=vend
     ./cmd/sidecarlogresults
 
 FROM $RUNTIME
-ARG VERSION=pipeline-1.19
+ARG VERSION=pipeline-1.19.4
 
 ENV SIDECARLOGRESULTS=/usr/local/bin/sidecarlogresults \
     KO_APP=/ko-app \
