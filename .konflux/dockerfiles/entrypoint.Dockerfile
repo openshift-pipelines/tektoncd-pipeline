@@ -15,7 +15,7 @@ RUN go build -ldflags="-X 'knative.dev/pkg/changeset.rev=$(cat HEAD)'" -mod=vend
     ./cmd/entrypoint
 
 FROM $RUNTIME
-ARG VERSION=pipeline-1.19
+ARG VERSION=pipeline-1.19.4
 
 ENV ENTRYPOINT=/usr/local/bin/entrypoint \
     KO_APP=/ko-app \
