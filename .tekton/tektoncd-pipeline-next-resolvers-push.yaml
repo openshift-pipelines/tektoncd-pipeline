@@ -1,4 +1,4 @@
-# Generated for Konflux Application openshift-pipelines-core by openshift-pipelines/hack. DO NOT EDIT
+# Generated for Konflux Application openshift-pipelines-core-next by openshift-pipelines/hack. DO NOT EDIT
 apiVersion: tekton.dev/v1
 kind: PipelineRun
 metadata:
@@ -11,7 +11,7 @@ metadata:
     pipelinesascode.tekton.dev/max-keep-runs: "3"
     pipelinesascode.tekton.dev/on-cel-expression: event == "push" && target_branch
       == "next" &&
-      (("dependencies/tini/***".pathChanged()) ||
+      ("upstream/***".pathChanged() || ".konflux/patches/***".pathChanged() || ".konflux/rpms/***".pathChanged() ||
       ".konflux/dockerfiles/resolvers.Dockerfile".pathChanged() ||
       ".tekton/tektoncd-pipeline-next-resolvers-push.yaml".pathChanged())
   creationTimestamp: null
@@ -25,17 +25,14 @@ spec:
   params:
   - name: git-url
     value: '{{source_url}}'
-  - name: upstream-git-url
-    value: 'https://github.com/tektoncd/pipeline'
   - name: revision
     value: '{{revision}}'
+  - name: upstream-git-url
+    value: 'https://github.com/tektoncd/pipeline'
   - name: output-image
-    value: quay.io/redhat-user-workloads/tekton-ecosystem-tenant/pipelines-resolvers-rhel9:{{revision}}
+    value: quay.io/redhat-user-workloads/tekton-ecosystem-tenant/next/pipeline-resolvers-rhel9:{{revision}}
   - name: dockerfile
     value: .konflux/dockerfiles/resolvers.Dockerfile
-  - name: additional-tags
-    value:
-      - "next"
   - name: prefetch-input
     value: |
       {"type": "rpm", "path": ".konflux/rpms"}
