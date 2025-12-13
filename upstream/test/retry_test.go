@@ -34,7 +34,7 @@ import (
 // TestTaskRunRetry tests that retries behave as expected, by creating multiple
 // Pods for the same TaskRun each time it fails, up to the configured max.
 func TestTaskRunRetry(t *testing.T) {
-	ctx := t.Context()
+	ctx := context.Background()
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	c, namespace := setup(ctx, t)

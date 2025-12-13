@@ -34,7 +34,7 @@ import (
 )
 
 func TestFailingStepOnContinue(t *testing.T) {
-	ctx := t.Context()
+	ctx := context.Background()
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	c, namespace := setup(ctx, t)

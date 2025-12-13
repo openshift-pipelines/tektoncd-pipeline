@@ -36,7 +36,7 @@ import (
 func TestDuplicatePodTaskRun(t *testing.T) {
 	t.Parallel()
 
-	ctx, cancel := context.WithCancel(t.Context())
+	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	c, namespace := setup(ctx, t)
 
