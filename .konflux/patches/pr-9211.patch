@@ -1,0 +1,87 @@
+From 2272937832e21c960a336b4f2c2059e76060b0ba Mon Sep 17 00:00:00 2001
+From: Shubham Mathur <shumathu@redhat.com>
+Date: Tue, 18 Nov 2025 13:34:00 -0500
+Subject: [PATCH] fix: panic in v1beta1 matrix validation for invalid result
+ refs
+
+---
+ .../pipeline/v1beta1/pipeline_validation.go   |  4 ++
+ .../v1beta1/pipeline_validation_test.go       | 50 +++++++++++++++++++
+ 2 files changed, 54 insertions(+)
+
+diff --git a/pkg/apis/pipeline/v1beta1/pipeline_validation.go b/pkg/apis/pipeline/v1beta1/pipeline_validation.go
+index e0c9b7365e2..65ef7a5edc5 100644
+--- a/pkg/apis/pipeline/v1beta1/pipeline_validation.go
++++ b/pkg/apis/pipeline/v1beta1/pipeline_validation.go
+@@ -811,6 +811,10 @@ func findAndValidateResultRefsForMatrix(tasks []PipelineTask, taskMapping map[st
+ func validateMatrixedPipelineTaskConsumed(expressions []string, taskMapping map[string]PipelineTask) (resultRefs []*ResultRef, errs *apis.FieldError) {
+ 	var filteredExpressions []string
+ 	for _, expression := range expressions {
++		// if it is not matrix result ref expression, skip
++		if !resultref.LooksLikeResultRef(expression) {
++			continue
++		}
+ 		// ie. "tasks.<pipelineTaskName>.results.<resultName>[*]"
+ 		subExpressions := strings.Split(expression, ".")
+ 		pipelineTask := subExpressions[1] // pipelineTaskName
+diff --git a/pkg/apis/pipeline/v1beta1/pipeline_validation_test.go b/pkg/apis/pipeline/v1beta1/pipeline_validation_test.go
+index d478a030c1a..04d7ece9b5f 100644
+--- a/pkg/apis/pipeline/v1beta1/pipeline_validation_test.go
++++ b/pkg/apis/pipeline/v1beta1/pipeline_validation_test.go
+@@ -167,6 +167,56 @@ func TestPipeline_Validate_Success(t *testing.T) {
+ 				}},
+ 			},
+ 		},
++	}, {
++		name: "param with different type of values with matrix and invalid result ref",
++		p: &Pipeline{
++			ObjectMeta: metav1.ObjectMeta{
++				Name: "pipelinelinename",
++			},
++			Spec: PipelineSpec{
++				Tasks: []PipelineTask{{
++					Name: "echo-result",
++					TaskSpec: &EmbeddedTask{TaskSpec: TaskSpec{
++						Results: []TaskResult{{
++							Name: "output",
++							Type: ResultsTypeString,
++						}},
++						Steps: []Step{{
++							Name:   "emit-a-result",
++							Image:  "mirror.gcr.io/bash",
++							Script: "#!/usr/bin/env bash\necho -n \"some data\" | tee $(results.output.path)",
++						}},
++					}},
++				}, {
++					Name: "consume-result",
++					Matrix: &Matrix{
++						Params: Params{{
++							Name: "version", Value: ParamValue{ArrayVal: []string{"1", "2"}},
++						}},
++					},
++					Params: Params{
++						{
++							Name: "bad-input",
++							Value: ParamValue{
++								Type:      ParamTypeString,
++								StringVal: "$(tasks)-$(tasks.echo-result.results.output)",
++							},
++						},
++					},
++					TaskSpec: &EmbeddedTask{TaskSpec: TaskSpec{
++						Params: []ParamSpec{{
++							Name: "bad-input",
++							Type: ParamTypeString,
++						}},
++						Steps: []Step{{
++							Name:   "consume-the-result",
++							Image:  "mirror.gcr.io/bash",
++							Script: "#!/usr/bin/env bash\necho -n \"input: $(params.bad-input)\"",
++						}},
++					}},
++				}},
++			},
++		},
+ 	}, {
+ 		name: "valid pipeline with pipeline task and final task referencing artifacts in task params with enable-artifacts flag true",
+ 		p: &Pipeline{
