@@ -1,5 +1,4 @@
 //go:build e2e
-// +build e2e
 
 /*
 Copyright 2019 The Tekton Authors
@@ -57,7 +56,7 @@ func TestSidecarTaskSupport(t *testing.T) {
 		sidecarCommand: []string{"echo", "\"hello from sidecar\""},
 	}}
 
-	ctx := context.Background()
+	ctx := t.Context()
 	t.Parallel()
 
 	for _, test := range tests {
