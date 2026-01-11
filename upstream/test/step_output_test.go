@@ -1,5 +1,4 @@
 //go:build e2e
-// +build e2e
 
 /*
 Copyright 2019 The Tekton Authors
@@ -36,12 +35,12 @@ import (
 // TestStepOutput verifies that step output streams can be copied to local files and task results.
 func TestStepOutput(t *testing.T) {
 	t.Parallel()
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	ctx, cancel := context.WithTimeout(t.Context(), 2*time.Minute)
 	defer cancel()
 	clients, namespace := setup(ctx, t, requireAnyGate(map[string]string{"enable-api-fields": "alpha"}))
 
-	knativetest.CleanupOnInterrupt(func() { tearDown(context.Background(), t, clients, namespace) }, t.Logf)
-	defer tearDown(context.Background(), t, clients, namespace)
+	knativetest.CleanupOnInterrupt(func() { tearDown(t.Context(), t, clients, namespace) }, t.Logf)
+	defer tearDown(t.Context(), t, clients, namespace)
 
 	wantResultName := "step-cat-stdout"
 	wantResultValue := "hello world"
@@ -51,7 +50,7 @@ func TestStepOutput(t *testing.T) {
 			TaskSpec: &v1.TaskSpec{
 				Steps: []v1.Step{{
 					Name:  "echo",
-					Image: "busybox",
+					Image: "mirror.gcr.io/busybox",
 					VolumeMounts: []corev1.VolumeMount{{
 						Name:      "data",
 						MountPath: "/data",
@@ -62,7 +61,7 @@ func TestStepOutput(t *testing.T) {
 					},
 				}, {
 					Name:  "cat",
-					Image: "busybox",
+					Image: "mirror.gcr.io/busybox",
 					VolumeMounts: []corev1.VolumeMount{{
 						Name:      "data",
 						MountPath: "/data",
@@ -114,12 +113,12 @@ func TestStepOutput(t *testing.T) {
 // when a workspace is defined for the task.
 func TestStepOutputWithWorkspace(t *testing.T) {
 	t.Parallel()
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	ctx, cancel := context.WithTimeout(t.Context(), 2*time.Minute)
 	defer cancel()
 	clients, namespace := setup(ctx, t, requireAnyGate(map[string]string{"enable-api-fields": "alpha"}))
 
-	knativetest.CleanupOnInterrupt(func() { tearDown(context.Background(), t, clients, namespace) }, t.Logf)
-	defer tearDown(context.Background(), t, clients, namespace)
+	knativetest.CleanupOnInterrupt(func() { tearDown(t.Context(), t, clients, namespace) }, t.Logf)
+	defer tearDown(t.Context(), t, clients, namespace)
 
 	wantResultName := "step-cat-stdout"
 	wantResultValue := "hello world"
@@ -133,14 +132,14 @@ func TestStepOutputWithWorkspace(t *testing.T) {
 			TaskSpec: &v1.TaskSpec{
 				Steps: []v1.Step{{
 					Name:   "echo",
-					Image:  "busybox",
+					Image:  "mirror.gcr.io/busybox",
 					Script: "echo -n " + wantResultValue,
 					StdoutConfig: &v1.StepOutputConfig{
 						Path: "/data/step-echo-stdout",
 					},
 				}, {
 					Name:   "cat",
-					Image:  "busybox",
+					Image:  "mirror.gcr.io/busybox",
 					Script: "cat /data/step-echo-stdout",
 					StdoutConfig: &v1.StepOutputConfig{
 						Path: fmt.Sprintf("$(results.%s.path)", wantResultName),

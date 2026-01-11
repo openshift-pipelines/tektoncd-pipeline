@@ -1,5 +1,4 @@
 //go:build e2e
-// +build e2e
 
 /*
 Copyright 2022 The Tekton Authors
@@ -56,7 +55,7 @@ func init() {
 }
 
 func TestTrustedResourcesVerify_VerificationPolicy_Success(t *testing.T) {
-	ctx := context.Background()
+	ctx := t.Context()
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
@@ -170,7 +169,7 @@ spec:
 }
 
 func TestTrustedResourcesVerify_VerificationPolicy_Error(t *testing.T) {
-	ctx := context.Background()
+	ctx := t.Context()
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
