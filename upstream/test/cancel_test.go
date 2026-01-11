@@ -1,5 +1,4 @@
 //go:build e2e
-// +build e2e
 
 /*
 Copyright 2019 The Tekton Authors
@@ -44,7 +43,7 @@ func TestTaskRunPipelineRunCancel(t *testing.T) {
 	for _, numRetries := range []int{0, 1} {
 		specStatus := v1.PipelineRunSpecStatusCancelled
 		t.Run(fmt.Sprintf("retries=%d,status=%s", numRetries, specStatus), func(t *testing.T) {
-			ctx := context.Background()
+			ctx := t.Context()
 			ctx, cancel := context.WithCancel(ctx)
 			defer cancel()
 			requirements := []func(context.Context, *testing.T, *clients, string){}
@@ -189,7 +188,7 @@ spec:
 func TestCancelActivePipelineRunWithCompletedTaskRuns(t *testing.T) {
 	specStatus := v1.PipelineRunSpecStatusCancelled
 	t.Run("status="+specStatus, func(t *testing.T) {
-		ctx := context.Background()
+		ctx := t.Context()
 		ctx, cancel := context.WithCancel(ctx)
 		defer cancel()
 		requirements := []func(context.Context, *testing.T, *clients, string){}
