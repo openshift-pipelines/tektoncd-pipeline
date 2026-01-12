@@ -1,5 +1,4 @@
 //go:build e2e
-// +build e2e
 
 /*
 Copyright 2019 The Tekton Authors
@@ -36,12 +35,8 @@ import (
 	"knative.dev/pkg/test/helpers"
 )
 
-var requireAlphaFeatureFlags = requireAnyGate(map[string]string{
-	"enable-api-fields": "alpha",
-})
-
 func TestPipelineLevelFinally_OneDAGTaskFailed_InvalidTaskResult_Failure(t *testing.T) {
-	ctx := context.Background()
+	ctx := t.Context()
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	c, namespace := setup(ctx, t)
@@ -391,7 +386,7 @@ spec:
 }
 
 func TestPipelineLevelFinally_OneFinalTaskFailed_Failure(t *testing.T) {
-	ctx := context.Background()
+	ctx := t.Context()
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	c, namespace := setup(ctx, t)
@@ -459,10 +454,12 @@ spec:
 }
 
 func TestPipelineLevelFinally_OneFinalTask_CancelledRunFinally(t *testing.T) {
-	ctx := context.Background()
+	ctx := t.Context()
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
-	c, namespace := setup(ctx, t, requireAlphaFeatureFlags)
+	c, namespace := setup(ctx, t, requireAnyGate(map[string]string{
+		"enable-api-fields": "alpha",
+	}))
 	knativetest.CleanupOnInterrupt(func() { tearDown(ctx, t, c, namespace) }, t.Logf)
 	defer tearDown(ctx, t, c, namespace)
 
@@ -574,10 +571,12 @@ spec:
 }
 
 func TestPipelineLevelFinally_OneFinalTask_StoppedRunFinally(t *testing.T) {
-	ctx := context.Background()
+	ctx := t.Context()
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
-	c, namespace := setup(ctx, t, requireAlphaFeatureFlags)
+	c, namespace := setup(ctx, t, requireAnyGate(map[string]string{
+		"enable-api-fields": "alpha",
+	}))
 	knativetest.CleanupOnInterrupt(func() { tearDown(ctx, t, c, namespace) }, t.Logf)
 	defer tearDown(ctx, t, c, namespace)
 
@@ -689,7 +688,7 @@ spec:
 }
 
 func TestPipelineLevelFinally_OneDAGNotProducingResult_SecondDAGUsingResult_Failure(t *testing.T) {
-	ctx := context.Background()
+	ctx := t.Context()
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	c, namespace := setup(ctx, t)

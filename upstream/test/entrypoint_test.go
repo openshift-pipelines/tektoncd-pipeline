@@ -1,5 +1,4 @@
 //go:build e2e
-// +build e2e
 
 /*
 Copyright 2019 The Tekton Authors
@@ -35,7 +34,7 @@ import (
 // that doesn't have a cmd defined. In addition to making sure the steps
 // are executed in the order specified
 func TestEntrypointRunningStepsInOrder(t *testing.T) {
-	ctx := context.Background()
+	ctx := t.Context()
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	c, namespace := setup(ctx, t)
