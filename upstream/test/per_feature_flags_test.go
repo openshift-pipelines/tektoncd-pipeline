@@ -1,5 +1,4 @@
 //go:build featureflags
-// +build featureflags
 
 /*
 Copyright 2023 The Tekton Authors
@@ -30,7 +29,6 @@ import (
 	"time"
 
 	"github.com/google/go-cmp/cmp"
-	"github.com/google/go-cmp/cmp/cmpopts"
 	"github.com/tektoncd/pipeline/pkg/apis/config"
 	v1 "github.com/tektoncd/pipeline/pkg/apis/pipeline/v1"
 	"github.com/tektoncd/pipeline/test/parse"
@@ -41,21 +39,17 @@ import (
 )
 
 const (
-	sleepDuration = 15 * time.Second
-	enabled       = "true"
-	disabled      = "false"
+	enabled  = "true"
+	disabled = "false"
 )
 
 var (
 	alphaFeatureFlags = []string{"enable-param-enum", "keep-pod-enabled-cancel", "enable-cel-in-whenexpression", "enable-artifacts"}
-	betaFeatureFlags  = []string{"enable-step-actions"}
+	betaFeatureFlags  = []string{}
 	perFeatureFlags   = map[string][]string{
 		"alpha": alphaFeatureFlags,
 		"beta":  betaFeatureFlags,
 	}
-
-	ignorePipelineRunStatus = cmpopts.IgnoreFields(v1.PipelineRunStatusFields{}, "StartTime", "CompletionTime", "FinallyStartTime", "ChildReferences", "Provenance")
-	ignoreTaskRunStatus     = cmpopts.IgnoreFields(v1.TaskRunStatusFields{}, "StartTime", "CompletionTime", "Provenance")
 )
 
 // TestPerFeatureFlagOptInAlpha tests the behavior with all alpha Per-feature
@@ -124,7 +118,7 @@ func testMinimumEndToEndSubSet(t *testing.T, configMapData map[string]string) {
 // testFanInFanOut tests DAG built with a small fan-in fan-out pipeline and
 // examines the sequence of the PipelineTasks being run.
 func testFanInFanOut(t *testing.T, configMapData map[string]string) {
-	ctx := context.Background()
+	ctx := t.Context()
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	c, namespace := setup(ctx, t)
@@ -241,7 +235,7 @@ spec:
 // verifies the TaskRun produced by the Finally Task after a failed TaskRun
 // with its results.
 func testResultsAndFinally(t *testing.T, configMapData map[string]string) {
-	ctx := context.Background()
+	ctx := t.Context()
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	c, namespace := setup(ctx, t)
@@ -326,7 +320,7 @@ spec:
 // testParams tests the parameter propagation by comparing the expected
 // TaskRuns run from the PipelineRun specified in Finally Task.
 func testParams(t *testing.T, configMapData map[string]string) {
-	ctx := context.Background()
+	ctx := t.Context()
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	c, namespace := setup(ctx, t)
