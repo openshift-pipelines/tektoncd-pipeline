@@ -8861,6 +8861,10 @@ func TestReconcile_DependencyValidationsImmediatelyFailPipelineRun(t *testing.T)
 	cfg := config.NewStore(logtesting.TestLogger(t))
 	ctx = cfg.ToContext(ctx)
 
+	ts := []*v1.Task{
+		simpleSomeTask,
+	}
+
 	prs := []*v1.PipelineRun{
 		parse.MustParseV1PipelineRun(t, `
 metadata:
@@ -8943,7 +8947,7 @@ spec:
              echo "$(params.platform)"
     - name: b-task
       taskRef:
-        name: mytask
+        name: some-task
       matrix:
         params:
           - name: platform
@@ -8973,6 +8977,7 @@ spec:
 	d := test.Data{
 		ConfigMaps:   cms,
 		PipelineRuns: prs,
+		Tasks:        ts,
 		ServiceAccounts: []*corev1.ServiceAccount{{
 			ObjectMeta: metav1.ObjectMeta{Name: prs[0].Spec.TaskRunTemplate.ServiceAccountName, Namespace: "foo"},
 		}},
