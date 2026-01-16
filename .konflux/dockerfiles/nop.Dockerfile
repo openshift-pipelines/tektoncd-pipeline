@@ -31,6 +31,9 @@ COPY --from=fips_builder /usr/lib64/libcrypto.so.3 /usr/lib64/
 COPY --from=fips_builder /usr/lib64/libcrypto.so.3.5.1 /usr/lib64/
 COPY --from=fips_builder /usr/lib64/ossl-modules/fips.so /usr/lib64/ossl-modules/
 
+# Copy OS release file to pass FIPS certification validation
+COPY --from=fips_builder /etc/redhat-release /etc/
+
 LABEL \
       com.redhat.component="openshift-pipelines-nop-rhel9-container" \
       name="openshift-pipelines/pipelines-nop-rhel9" \
