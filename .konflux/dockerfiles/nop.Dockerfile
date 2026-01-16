@@ -1,5 +1,8 @@
 ARG GO_BUILDER=brew.registry.redhat.io/rh-osbs/openshift-golang-builder:v1.24
 ARG RUNTIME=scratch
+# Add FIPS compliance layer
+ARG FIPS_BUILDER=registry.access.redhat.com/ubi9/ubi-minimal:latest@sha256:6fc28bcb6776e387d7a35a2056d9d2b985dc4e26031e98a2bd35a7137cd6fd71
+FROM $FIPS_BUILDER AS fips_builder
 
 FROM $GO_BUILDER AS builder
 
@@ -23,6 +26,14 @@ ENV NOP=/usr/local/bin/nop \
 COPY --from=builder /tmp/nop /ko-app/nop
 COPY head ${KO_DATA_PATH}/HEAD
 
+# Copy FIPS-compliant libraries
+COPY --from=fips_builder /usr/lib64/libcrypto.so.3 /usr/lib64/
+COPY --from=fips_builder /usr/lib64/libcrypto.so.3.5.1 /usr/lib64/
+COPY --from=fips_builder /usr/lib64/ossl-modules/fips.so /usr/lib64/ossl-modules/
+
+# Copy OS release file to pass FIPS certification validation
+COPY --from=fips_builder /etc/redhat-release /etc/
+
 LABEL \
       com.redhat.component="openshift-pipelines-nop-rhel9-container" \
       name="openshift-pipelines/pipelines-nop-rhel9" \
@@ -36,7 +47,8 @@ LABEL \
       vendor="Red Hat, Inc." \
       distribution-scope="public" \
       url="https://access.redhat.com/containers/#/registry.access.redhat.com/ubi9-minimal/images/9.4-1227.1725849298" \
-      release="1227.1725849298"
+      release="1227.1725849298" \
+      cpe="cpe:/a:redhat:openshift_pipelines:1.20::el9"
 
 USER 65532
 
