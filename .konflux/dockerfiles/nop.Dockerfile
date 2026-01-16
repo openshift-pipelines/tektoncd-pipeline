@@ -23,6 +23,11 @@ ENV NOP=/usr/local/bin/nop \
 COPY --from=builder /tmp/nop /ko-app/nop
 COPY head ${KO_DATA_PATH}/HEAD
 
+# Copy FIPS-compliant libraries
+COPY --from=fips_builder /usr/lib64/libcrypto.so.3 /usr/lib64/
+COPY --from=fips_builder /usr/lib64/libcrypto.so.3.5.1 /usr/lib64/
+COPY --from=fips_builder /usr/lib64/ossl-modules/fips.so /usr/lib64/ossl-modules/
+
 LABEL \
       com.redhat.component="openshift-pipelines-nop-rhel9-container" \
       name="openshift-pipelines/pipelines-nop-rhel9" \
@@ -36,7 +41,8 @@ LABEL \
       vendor="Red Hat, Inc." \
       distribution-scope="public" \
       url="https://access.redhat.com/containers/#/registry.access.redhat.com/ubi9-minimal/images/9.4-1227.1725849298" \
-      release="1227.1725849298"
+      release="1227.1725849298" \
+      cpe="cpe:/a:redhat:openshift_pipelines:1.20::el9"
 
 USER 65532
 
