@@ -24,8 +24,8 @@ import (
 	"path/filepath"
 	"reflect"
 	"regexp"
+	"sort"
 	"strings"
-	"time"
 
 	"k8s.io/apimachinery/pkg/util/wait"
 
@@ -275,31 +275,50 @@ func (c *Reconciler) ReconcileKind(ctx context.Context, pr *v1.PipelineRun) pkgr
 	}
 
 	if pr.Status.StartTime != nil {
-		// Compute the time since the task started.
+		// Compute the time since the pipeline started.
 		elapsed := c.Clock.Since(pr.Status.StartTime.Time)
 		// Snooze this resource until the appropriate timeout has elapsed.
-		// but if the timeout has been disabled by setting timeout to 0, we
-		// do not want to subtract from 0, because a negative wait time will
-		// result in the requeue happening essentially immediately
 		timeout := pr.PipelineTimeout(ctx)
 		taskTimeout := pr.TasksTimeout()
-		waitTime := timeout - elapsed
-		if timeout == config.NoTimeoutDuration {
-			waitTime = time.Duration(config.FromContextOrDefaults(ctx).Defaults.DefaultTimeoutMinutes) * time.Minute
-		}
-		if pr.Status.FinallyStartTime == nil && taskTimeout != nil {
-			waitTime = pr.TasksTimeout().Duration - elapsed
-			if taskTimeout.Duration == config.NoTimeoutDuration {
-				waitTime = time.Duration(config.FromContextOrDefaults(ctx).Defaults.DefaultTimeoutMinutes) * time.Minute
+
+		// If the main pipeline timeout is NoTimeoutDuration (0), it means no timeout is configured.
+		// This can happen in two ways:
+		// 1. User explicitly set pr.Spec.Timeouts.Pipeline to 0 (wants no timeout)
+		// 2. User didn't set pr.Spec.Timeouts.Pipeline (nil) AND default-timeout-minutes config is "0"
+		// In these cases, check if there are specific task or finally timeouts to enforce.
+		// If not, don't requeue - the reconciler will be triggered by watch events.
+		// Check which phase we're in and handle timeout accordingly
+		if pr.Status.FinallyStartTime != nil {
+			// We're in finally phase - check for finally-specific timeout
+			if pr.FinallyTimeout() != nil && pr.FinallyTimeout().Duration != config.NoTimeoutDuration {
+				finallyWaitTime := pr.FinallyTimeout().Duration - c.Clock.Since(pr.Status.FinallyStartTime.Time)
+				// If pipeline timeout is also set, use the most restrictive timeout
+				if timeout != config.NoTimeoutDuration {
+					waitTime := timeout - elapsed
+					if finallyWaitTime < waitTime {
+						return controller.NewRequeueAfter(finallyWaitTime)
+					}
+					return controller.NewRequeueAfter(waitTime)
+				}
+				return controller.NewRequeueAfter(finallyWaitTime)
 			}
-		} else if pr.Status.FinallyStartTime != nil && pr.FinallyTimeout() != nil &&
-			pr.FinallyTimeout().Duration != config.NoTimeoutDuration {
-			finallyWaitTime := pr.FinallyTimeout().Duration - c.Clock.Since(pr.Status.FinallyStartTime.Time)
-			if finallyWaitTime < waitTime {
-				waitTime = finallyWaitTime
+			// No finally timeout, use pipeline timeout if set
+			if timeout != config.NoTimeoutDuration {
+				return controller.NewRequeueAfter(timeout - elapsed)
 			}
+			return nil
 		}
-		return controller.NewRequeueAfter(waitTime)
+
+		// We're in tasks phase - check for task-specific timeout
+		if taskTimeout != nil && taskTimeout.Duration != config.NoTimeoutDuration {
+			return controller.NewRequeueAfter(taskTimeout.Duration - elapsed)
+		}
+		// No task timeout, use pipeline timeout if set
+		if timeout != config.NoTimeoutDuration {
+			return controller.NewRequeueAfter(timeout - elapsed)
+		}
+		return nil
+
 	}
 	return nil
 }
@@ -577,7 +596,7 @@ func (c *Reconciler) reconcile(ctx context.Context, pr *v1.PipelineRun, getPipel
 		return controller.NewPermanentError(err)
 	}
 
-	resources.ApplyParametersToWorkspaceBindings(ctx, pr)
+	resources.ApplyParametersToWorkspaceBindings(pr)
 	// Make a deep copy of the Pipeline and its Tasks before value substitution.
 	// This is used to find referenced pipeline-level params at each PipelineTask when validate param enum subset requirement
 	originalPipeline := pipelineSpec.DeepCopy()
@@ -585,7 +604,14 @@ func (c *Reconciler) reconcile(ctx context.Context, pr *v1.PipelineRun, getPipel
 	originalTasks = append(originalTasks, originalPipeline.Finally...)
 
 	// Apply parameter substitution from the PipelineRun
-	pipelineSpec = resources.ApplyParameters(ctx, pipelineSpec, pr)
+	pipelineSpec, err = resources.ApplyParameters(pipelineSpec, pr)
+	if err != nil {
+		logger.Errorf("Failed to apply parameters to pipeline %q: %v", pipelineMeta.Name, err)
+		pr.Status.MarkFailed(v1.PipelineRunReasonFailedValidation.String(),
+			"Failed to apply parameters to Pipeline %s/%s: %s",
+			pr.Namespace, pipelineMeta.Name, pipelineErrors.WrapUserError(err))
+		return controller.NewPermanentError(err)
+	}
 	pipelineSpec = resources.ApplyContexts(pipelineSpec, pipelineMeta.Name, pr)
 	pipelineSpec = resources.ApplyWorkspaces(pipelineSpec, pr)
 	// Update pipelinespec of pipelinerun's status field
@@ -853,7 +879,6 @@ func (c *Reconciler) reconcile(ctx context.Context, pr *v1.PipelineRun, getPipel
 
 	if after.Status == corev1.ConditionTrue || after.Status == corev1.ConditionFalse {
 		pr.Status.Results, err = resources.ApplyTaskResultsToPipelineResults(
-			ctx,
 			pipelineSpec.Results,
 			pipelineRunFacts.State.GetTaskRunsResults(),
 			pipelineRunFacts.State.GetRunsResults(),
@@ -1881,6 +1906,18 @@ func updatePipelineRunStatusFromChildRefs(logger *zap.SugaredLogger, pr *v1.Pipe
 	for k := range childRefByName {
 		newChildRefs = append(newChildRefs, *childRefByName[k])
 	}
+
+	// sorting childRef in a specific order can greatly avoid
+	// meaningless updates of status caused by unordered arrays.
+	sort.Slice(newChildRefs, func(i, j int) bool {
+		if newChildRefs[i].PipelineTaskName == newChildRefs[j].PipelineTaskName {
+			if newChildRefs[i].Name == newChildRefs[j].Name {
+				return newChildRefs[i].Kind < newChildRefs[j].Kind
+			}
+			return newChildRefs[i].Name < newChildRefs[j].Name
+		}
+		return newChildRefs[i].PipelineTaskName < newChildRefs[j].PipelineTaskName
+	})
 	pr.Status.ChildReferences = newChildRefs
 }
 
