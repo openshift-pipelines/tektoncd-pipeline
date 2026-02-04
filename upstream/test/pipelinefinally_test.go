@@ -1,4 +1,5 @@
 //go:build e2e
+// +build e2e
 
 /*
 Copyright 2019 The Tekton Authors
@@ -35,9 +36,12 @@ import (
 	"knative.dev/pkg/test/helpers"
 )
 
-// @test:execution=parallel
+var requireAlphaFeatureFlags = requireAnyGate(map[string]string{
+	"enable-api-fields": "alpha",
+})
+
 func TestPipelineLevelFinally_OneDAGTaskFailed_InvalidTaskResult_Failure(t *testing.T) {
-	ctx := t.Context()
+	ctx := context.Background()
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	c, namespace := setup(ctx, t)
@@ -386,9 +390,8 @@ spec:
 	}
 }
 
-// @test:execution=parallel
 func TestPipelineLevelFinally_OneFinalTaskFailed_Failure(t *testing.T) {
-	ctx := t.Context()
+	ctx := context.Background()
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	c, namespace := setup(ctx, t)
@@ -455,14 +458,11 @@ spec:
 	}
 }
 
-// @test:execution=parallel
 func TestPipelineLevelFinally_OneFinalTask_CancelledRunFinally(t *testing.T) {
-	ctx := t.Context()
+	ctx := context.Background()
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
-	c, namespace := setup(ctx, t, requireAnyGate(map[string]string{
-		"enable-api-fields": "alpha",
-	}))
+	c, namespace := setup(ctx, t, requireAlphaFeatureFlags)
 	knativetest.CleanupOnInterrupt(func() { tearDown(ctx, t, c, namespace) }, t.Logf)
 	defer tearDown(ctx, t, c, namespace)
 
@@ -573,14 +573,11 @@ spec:
 	}
 }
 
-// @test:execution=parallel
 func TestPipelineLevelFinally_OneFinalTask_StoppedRunFinally(t *testing.T) {
-	ctx := t.Context()
+	ctx := context.Background()
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
-	c, namespace := setup(ctx, t, requireAnyGate(map[string]string{
-		"enable-api-fields": "alpha",
-	}))
+	c, namespace := setup(ctx, t, requireAlphaFeatureFlags)
 	knativetest.CleanupOnInterrupt(func() { tearDown(ctx, t, c, namespace) }, t.Logf)
 	defer tearDown(ctx, t, c, namespace)
 
@@ -691,9 +688,8 @@ spec:
 	}
 }
 
-// @test:execution=parallel
 func TestPipelineLevelFinally_OneDAGNotProducingResult_SecondDAGUsingResult_Failure(t *testing.T) {
-	ctx := t.Context()
+	ctx := context.Background()
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	c, namespace := setup(ctx, t)

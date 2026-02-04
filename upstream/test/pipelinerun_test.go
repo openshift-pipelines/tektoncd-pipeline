@@ -1,4 +1,5 @@
 //go:build e2e
+// +build e2e
 
 /*
 Copyright 2019 The Tekton Authors
@@ -44,7 +45,6 @@ var (
 	task1Name  = "task1"
 )
 
-// @test:execution=parallel
 func TestPipelineRunStatusSpec(t *testing.T) {
 	t.Parallel()
 	type tests struct {
@@ -93,7 +93,7 @@ spec:
 	for i, td := range tds {
 		t.Run(td.name, func(t *testing.T) {
 			t.Parallel()
-			ctx := t.Context()
+			ctx := context.Background()
 			ctx, cancel := context.WithCancel(ctx)
 			defer cancel()
 			c, namespace := setup(ctx, t)
@@ -169,7 +169,6 @@ spec:
 	}
 }
 
-// @test:execution=parallel
 func TestPipelineRun(t *testing.T) {
 	t.Parallel()
 	type tests struct {
@@ -298,7 +297,7 @@ spec:
 	for i, td := range tds {
 		t.Run(td.name, func(t *testing.T) {
 			t.Parallel()
-			ctx := t.Context()
+			ctx := context.Background()
 			ctx, cancel := context.WithCancel(ctx)
 			defer cancel()
 			c, namespace := setup(ctx, t)
@@ -365,7 +364,7 @@ spec:
 						collectedEvents += ", "
 					}
 				}
-				t.Fatalf("Expected %d number of successful events from pipelinerun and taskrun but got %d; list of received events : %#v", td.expectedNumberOfEvents, len(events), collectedEvents)
+				t.Fatalf("Expected %d number of successful events from pipelinerun and taskrun but got %d; list of receieved events : %#v", td.expectedNumberOfEvents, len(events), collectedEvents)
 			}
 
 			t.Logf("Successfully finished test %q", td.name)
@@ -419,9 +418,8 @@ spec:
 
 // TestPipelineRunRefDeleted tests that a running PipelineRun doesn't fail when the Pipeline
 // it references is deleted.
-// @test:execution=parallel
 func TestPipelineRunRefDeleted(t *testing.T) {
-	ctx := t.Context()
+	ctx := context.Background()
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	c, namespace := setup(ctx, t)
@@ -493,9 +491,8 @@ spec:
 // status is cleared. This is separate from the TestPipelineRun suite because it has to
 // transition PipelineRun states during the test, which the TestPipelineRun suite does not
 // support.
-// @test:execution=parallel
 func TestPipelineRunPending(t *testing.T) {
-	ctx := t.Context()
+	ctx := context.Background()
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	c, namespace := setup(ctx, t)
@@ -778,13 +775,7 @@ func getName(namespace string, suffix int) string {
 // collectMatchingEvents collects list of events under 5 seconds that match
 // 1. matchKinds which is a map of Kind of Object with name of objects
 // 2. reason which is the expected reason of event
-func collectMatchingEvents(
-	ctx context.Context,
-	kubeClient kubernetes.Interface,
-	namespace string,
-	kinds map[string][]string,
-	reason string,
-) ([]*corev1.Event, error) {
+func collectMatchingEvents(ctx context.Context, kubeClient kubernetes.Interface, namespace string, kinds map[string][]string, reason string) ([]*corev1.Event, error) {
 	var events []*corev1.Event
 
 	watchEvents, err := kubeClient.CoreV1().Events(namespace).Watch(ctx, metav1.ListOptions{})
@@ -857,7 +848,7 @@ func checkLabelPropagation(ctx context.Context, t *testing.T, c *clients, namesp
 	}
 	assertLabelsMatch(t, labels, tr.ObjectMeta.Labels)
 
-	// PodName is "" if a retry happened and pod is deleted
+	// PodName is "" iff a retry happened and pod is deleted
 	// This label is added to every Pod by the TaskRun controller
 	if tr.Status.PodName != "" {
 		// Check label propagation to Pods.
@@ -959,9 +950,8 @@ func getLimitRange(name, namespace, resourceCPU, resourceMemory, resourceEphemer
 	}
 }
 
-// @test:execution=parallel
 func TestPipelineRunTaskFailed(t *testing.T) {
-	ctx := t.Context()
+	ctx := context.Background()
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	c, namespace := setup(ctx, t)

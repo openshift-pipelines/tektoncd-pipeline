@@ -1,4 +1,5 @@
 //go:build e2e
+// +build e2e
 
 /*
 Copyright 2022 The Tekton Authors
@@ -35,11 +36,12 @@ import (
 )
 
 var (
-	ignoreTaskRunProvenance = cmpopts.IgnoreFields(v1.TaskRunStatusFields{}, "Provenance")
+	ignoreProvenance             = cmpopts.IgnoreFields(v1.TaskRunStatusFields{}, "Provenance")
+	requireEnableStepActionsGate = map[string]string{
+		"enable-step-actions": "true",
+	}
 )
 
-// @test:execution=serial
-// @test:reason=modifies results-from field in feature-flags ConfigMap
 func TestStepResultsStepActions(t *testing.T) {
 	featureFlags := getFeatureFlagsBaseOnAPIFlag(t)
 	previousResultExtractionMethod := featureFlags.ResultExtractionMethod
@@ -58,7 +60,7 @@ func TestStepResultsStepActions(t *testing.T) {
 
 	for _, td := range tds {
 		t.Run(td.name, func(t *testing.T) {
-			ctx := t.Context()
+			ctx := context.Background()
 			ctx, cancel := context.WithCancel(ctx)
 			defer cancel()
 
@@ -98,10 +100,7 @@ func TestStepResultsStepActions(t *testing.T) {
 				ignoreCondition,
 				ignoreTaskRunStatus,
 				ignoreContainerStates,
-				// Ignoring Provenance field as it differs from one instance to the other (different flags,
-				// new flags, ...). It can also be modified by another test. In addition, we don't care about its value here.
-				// #9071, #9066
-				ignoreTaskRunProvenance,
+				ignoreProvenance,
 				ignoreSidecarState,
 				ignoreStepState,
 			)
@@ -240,7 +239,7 @@ status:
 
 func setUpStepActionsResults(ctx context.Context, t *testing.T) (*clients, string) {
 	t.Helper()
-	c, ns := setup(ctx, t)
+	c, ns := setup(ctx, t, requireAllGates(requireEnableStepActionsGate))
 	configMapData := map[string]string{
 		"results-from": "termination-message",
 	}

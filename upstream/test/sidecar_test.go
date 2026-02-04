@@ -1,4 +1,5 @@
 //go:build e2e
+// +build e2e
 
 /*
 Copyright 2019 The Tekton Authors
@@ -39,7 +40,6 @@ const (
 // TestSidecarTaskSupport checks whether support for sidecars is working
 // as expected by running a Task with a Sidecar defined and confirming
 // that both the primary and sidecar containers terminate.
-// @test:execution=parallel
 func TestSidecarTaskSupport(t *testing.T) {
 	tests := []struct {
 		desc           string
@@ -57,7 +57,7 @@ func TestSidecarTaskSupport(t *testing.T) {
 		sidecarCommand: []string{"echo", "\"hello from sidecar\""},
 	}}
 
-	ctx := t.Context()
+	ctx := context.Background()
 	t.Parallel()
 
 	for _, test := range tests {

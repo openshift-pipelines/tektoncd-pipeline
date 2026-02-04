@@ -169,11 +169,7 @@ func (fm *formatter) FormatFile(f *File) {
 
 	if f.IsBinary {
 		if f.BinaryFragment == nil {
-			fm.WriteString("Binary files ")
-			fm.WriteQuotedName("a/" + aName)
-			fm.WriteString(" and ")
-			fm.WriteQuotedName("b/" + bName)
-			fm.WriteString(" differ\n")
+			fm.WriteString("Binary files fmer\n")
 		} else {
 			fm.WriteString("GIT binary patch\n")
 			fm.FormatBinaryFragment(f.BinaryFragment)

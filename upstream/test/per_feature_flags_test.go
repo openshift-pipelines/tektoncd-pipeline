@@ -1,4 +1,5 @@
 //go:build featureflags
+// +build featureflags
 
 /*
 Copyright 2023 The Tekton Authors
@@ -29,6 +30,7 @@ import (
 	"time"
 
 	"github.com/google/go-cmp/cmp"
+	"github.com/google/go-cmp/cmp/cmpopts"
 	"github.com/tektoncd/pipeline/pkg/apis/config"
 	v1 "github.com/tektoncd/pipeline/pkg/apis/pipeline/v1"
 	"github.com/tektoncd/pipeline/test/parse"
@@ -39,25 +41,26 @@ import (
 )
 
 const (
-	enabled  = "true"
-	disabled = "false"
+	sleepDuration = 15 * time.Second
+	enabled       = "true"
+	disabled      = "false"
 )
 
 var (
 	alphaFeatureFlags = []string{"enable-param-enum", "keep-pod-enabled-cancel", "enable-cel-in-whenexpression", "enable-artifacts"}
-	betaFeatureFlags  = []string{}
+	betaFeatureFlags  = []string{"enable-step-actions"}
 	perFeatureFlags   = map[string][]string{
 		"alpha": alphaFeatureFlags,
 		"beta":  betaFeatureFlags,
 	}
+
+	ignorePipelineRunStatus = cmpopts.IgnoreFields(v1.PipelineRunStatusFields{}, "StartTime", "CompletionTime", "FinallyStartTime", "ChildReferences", "Provenance")
+	ignoreTaskRunStatus     = cmpopts.IgnoreFields(v1.TaskRunStatusFields{}, "StartTime", "CompletionTime", "Provenance")
 )
 
 // TestPerFeatureFlagOptInAlpha tests the behavior with all alpha Per-feature
 // flags enabled. It first turns ON all per-feature flags by default and turns
 // OFF one feature flag at a time to mock opt-in alpha test env.
-//
-// @test:execution=serial
-// @test:reason=modifies enable-api-fields and multiple feature flags in feature-flags ConfigMap
 func TestPerFeatureFlagOptInAlpha(t *testing.T) {
 	configMapData := createExpectedConfigMap(t, true)
 	for _, alphaFlag := range alphaFeatureFlags {
@@ -70,9 +73,6 @@ func TestPerFeatureFlagOptInAlpha(t *testing.T) {
 // TestFeatureFlagOptInBeta tests the behavior with all beta feature
 // flags enabled. It first turns ON all beta feature flags by default and
 // turns ON one alpha feature flag at a time to mock opt-in beta test env.
-//
-// @test:execution=serial
-// @test:reason=modifies enable-api-fields and multiple feature flags in feature-flags ConfigMap
 func TestFeatureFlagOptInBeta(t *testing.T) {
 	configMapData := createExpectedConfigMap(t, false)
 	for _, betaFlag := range betaFeatureFlags {
@@ -88,9 +88,6 @@ func TestFeatureFlagOptInBeta(t *testing.T) {
 // TestPerFeatureFlagOptInStable tests all Per-feature flags while opting in
 // stable features. It turns OFF all per-feature flags by default and turns
 // OFF one feature flag at a time to mock opt-in stable feature test env.
-//
-// @test:execution=serial
-// @test:reason=modifies enable-api-fields and multiple feature flags in feature-flags ConfigMap
 func TestPerFeatureFlagOptInStable(t *testing.T) {
 	configMapData := createExpectedConfigMap(t, false)
 	for _, betaFlag := range betaFeatureFlags {
@@ -127,7 +124,7 @@ func testMinimumEndToEndSubSet(t *testing.T, configMapData map[string]string) {
 // testFanInFanOut tests DAG built with a small fan-in fan-out pipeline and
 // examines the sequence of the PipelineTasks being run.
 func testFanInFanOut(t *testing.T, configMapData map[string]string) {
-	ctx := t.Context()
+	ctx := context.Background()
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	c, namespace := setup(ctx, t)
@@ -244,7 +241,7 @@ spec:
 // verifies the TaskRun produced by the Finally Task after a failed TaskRun
 // with its results.
 func testResultsAndFinally(t *testing.T, configMapData map[string]string) {
-	ctx := t.Context()
+	ctx := context.Background()
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	c, namespace := setup(ctx, t)
@@ -329,7 +326,7 @@ spec:
 // testParams tests the parameter propagation by comparing the expected
 // TaskRuns run from the PipelineRun specified in Finally Task.
 func testParams(t *testing.T, configMapData map[string]string) {
-	ctx := t.Context()
+	ctx := context.Background()
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	c, namespace := setup(ctx, t)
