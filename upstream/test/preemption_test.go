@@ -34,7 +34,6 @@ import (
 
 // TestTaskRunPreemption tests that Taskrun can run again
 // after its pod has been preempted before completion.
-// @test:execution=parallel
 func TestTaskRunPreemption(t *testing.T) {
 	ctx := t.Context()
 	ctx, cancel := context.WithCancel(ctx)
