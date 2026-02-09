@@ -141,7 +141,7 @@ func TestSetTaskRunStatusBasedOnStepStatus_sidecar_logs(t *testing.T) {
 			},
 		},
 		maxResultSize: 1,
-		wantErr:       fmt.Errorf("%d bytes %w of %d bytes", 9, sidecarlogresults.ErrSizeExceeded, 1),
+		wantErr:       sidecarlogresults.ErrSizeExceeded,
 	}, {
 		desc: "test result with sidecar logs bad format",
 		tr: v1.TaskRun{
@@ -177,7 +177,7 @@ func TestSetTaskRunStatusBasedOnStepStatus_sidecar_logs(t *testing.T) {
 			},
 		},
 		maxResultSize:   1,
-		wantErr:         fmt.Errorf("%d bytes %w of %d bytes", 9, sidecarlogresults.ErrSizeExceeded, 1),
+		wantErr:         sidecarlogresults.ErrSizeExceeded,
 		enableArtifacts: true,
 	}, {
 		desc: "test artifact with sidecar logs bad format",

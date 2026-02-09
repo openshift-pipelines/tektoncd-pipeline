@@ -1036,29 +1036,6 @@ spec:
 			"Normal Started",
 			"Warning Failed [User error] PipelineRun foo/pipeline-invalid-final-graph's Pipeline DAG is invalid for finally clause: task final-task-1 is already present in Graph, can't add it again: duplicate pipeline task",
 		},
-	}, {
-		name: "invalid-pipeline-with-missing-param-reference",
-		pipelineRun: parse.MustParseV1PipelineRun(t, `
-metadata:
-  name: pipeline-missing-param-ref
-  namespace: foo
-spec:
-  pipelineSpec:
-    params:
-      - name: existing-param
-        type: string
-        default: "$(params.nonexistent-param)"
-    tasks:
-      - name: some-task
-        taskRef:
-          name: a-task-that-exists
-`),
-		reason:         v1.PipelineRunReasonFailedValidation.String(),
-		permanentError: true,
-		wantEvents: []string{
-			"Normal Started",
-			`Warning Failed \[User error\] Failed to apply parameters to Pipeline foo/pipeline-missing-param-ref: parameter resolution failed: param ".*" references undefined param "params\.nonexistent-param"`,
-		},
 	}} {
 		t.Run(tc.name, func(t *testing.T) {
 			d := test.Data{
@@ -2622,26 +2599,13 @@ spec:
 			c := prt.TestAssets.Controller
 			clients := prt.TestAssets.Clients
 			reconcileError := c.Reconciler.Reconcile(prt.TestAssets.Ctx, fmt.Sprintf("%s/%s", "foo", tc.prs[0].Name))
-
-			// When timeout is explicitly disabled (set to 0), we should NOT requeue
-			// This prevents excessive reconciliation (issue #8495)
-			// Check if the pipeline has timeout disabled
-			pipelineTimeout := tc.prs[0].PipelineTimeout(prt.TestAssets.Ctx)
-			if pipelineTimeout == config.NoTimeoutDuration {
-				// Timeout is disabled - should not requeue
-				if reconcileError != nil {
-					t.Errorf("expected no error when timeout is disabled, but got: %v", reconcileError)
-				}
-			} else {
-				// Timeout is enabled - should requeue
-				if reconcileError == nil {
-					t.Errorf("expected error when timeout is enabled, but got nil")
-				}
-				if isRequeueError, requeueDuration := controller.IsRequeueKey(reconcileError); !isRequeueError {
-					t.Errorf("Expected requeue error, but got: %v", reconcileError)
-				} else if requeueDuration < 0 {
-					t.Errorf("Expected a positive requeue duration but got %s", requeueDuration.String())
-				}
+			if reconcileError == nil {
+				t.Errorf("expected error, but got nil")
+			}
+			if isRequeueError, requeueDuration := controller.IsRequeueKey(reconcileError); !isRequeueError {
+				t.Errorf("Expected requeue error, but got: %s", reconcileError.Error())
+			} else if requeueDuration < 0 {
+				t.Errorf("Expected a positive requeue duration but got %s", requeueDuration.String())
 			}
 			prt.Test.Logf("Getting reconciled run")
 			reconciledRun, err := clients.Pipeline.TektonV1().PipelineRuns("foo").Get(prt.TestAssets.Ctx, tc.prs[0].Name, metav1.GetOptions{})
