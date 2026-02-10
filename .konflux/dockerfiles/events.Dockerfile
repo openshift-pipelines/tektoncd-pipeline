@@ -14,7 +14,7 @@ RUN go build -ldflags="-X 'knative.dev/pkg/changeset.rev=$(cat HEAD)'" -mod=vend
     ./cmd/events
 
 FROM $RUNTIME
-ARG VERSION=pipeline-1.15.3
+ARG VERSION=pipeline-1.15.4
 
 ENV EVENTS=/usr/local/bin/events \
     KO_APP=/ko-app \
