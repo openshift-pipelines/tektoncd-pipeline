@@ -14,7 +14,7 @@ RUN go build -ldflags="-X 'knative.dev/pkg/changeset.rev=$(cat HEAD)'" -mod=vend
     ./cmd/controller
 
 FROM $RUNTIME
-ARG VERSION=pipeline-1.15.3
+ARG VERSION=pipeline-1.15.4
 
 ENV CONTROLLER=/usr/local/bin/controller \
     KO_APP=/ko-app \
