@@ -39,7 +39,6 @@ const (
 // TestSidecarTaskSupport checks whether support for sidecars is working
 // as expected by running a Task with a Sidecar defined and confirming
 // that both the primary and sidecar containers terminate.
-// @test:execution=parallel
 func TestSidecarTaskSupport(t *testing.T) {
 	tests := []struct {
 		desc           string
