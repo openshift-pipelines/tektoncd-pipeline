@@ -33,18 +33,19 @@ COPY --from=fips_builder /usr/lib64/ossl-modules/fips.so /usr/lib64/ossl-modules
 
 LABEL \
       com.redhat.component="openshift-pipelines-nop-rhel9-container" \
-      name="openshift-pipelines/pipelines-nop-rhel9" \
-      version=$VERSION \
-      summary="Red Hat OpenShift Pipelines Nop" \
-      maintainer="pipelines-extcomm@redhat.com" \
-      description="Red Hat OpenShift Pipelines Nop" \
-      io.k8s.display-name="Red Hat OpenShift Pipelines Nop" \
-      io.k8s.description="Red Hat OpenShift Pipelines Nop" \
-      io.openshift.tags="pipelines,tekton,openshift" \
-      vendor="Red Hat, Inc." \
+      cpe="cpe:/a:redhat:openshift_pipelines:1.22::el9" \
+      description="Red Hat OpenShift Pipelines tektoncd-pipeline nop" \
       distribution-scope="public" \
+      io.k8s.description="Red Hat OpenShift Pipelines tektoncd-pipeline nop" \
+      io.k8s.display-name="Red Hat OpenShift Pipelines tektoncd-pipeline nop" \
+      io.openshift.tags="tekton,openshift,tektoncd-pipeline,nop" \
+      maintainer="pipelines-extcomm@redhat.com" \
+      name="openshift-pipelines/pipelines-nop-rhel9" \
+      release="1227.1725849298" \
+      summary="Red Hat OpenShift Pipelines tektoncd-pipeline nop" \
       url="https://access.redhat.com/containers/#/registry.access.redhat.com/ubi9-minimal/images/9.4-1227.1725849298" \
-      release="1227.1725849298"
+      vendor="Red Hat, Inc." \
+      version="v1.22.0"
 
 USER 65532
 

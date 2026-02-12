@@ -36,14 +36,15 @@ RUN chmod 0755 /sbin/tini && chown root:root /sbin/tini
 
 LABEL \
       com.redhat.component="openshift-pipelines-resolvers-rhel9-container" \
-      name="openshift-pipelines/pipelines-resolvers-rhel9" \
-      version=$VERSION \
-      summary="Red Hat OpenShift Pipelines Resolvers" \
+      cpe="cpe:/a:redhat:openshift_pipelines:1.22::el9" \
+      description="Red Hat OpenShift Pipelines tektoncd-pipeline resolvers" \
+      io.k8s.description="Red Hat OpenShift Pipelines tektoncd-pipeline resolvers" \
+      io.k8s.display-name="Red Hat OpenShift Pipelines tektoncd-pipeline resolvers" \
+      io.openshift.tags="tekton,openshift,tektoncd-pipeline,resolvers" \
       maintainer="pipelines-extcomm@redhat.com" \
-      description="Red Hat OpenShift Pipelines Resolvers" \
-      io.k8s.display-name="Red Hat OpenShift Pipelines Resolvers" \
-      io.k8s.description="Red Hat OpenShift Pipelines Resolvers" \
-      io.openshift.tags="pipelines,tekton,openshift"
+      name="openshift-pipelines/pipelines-resolvers-rhel9" \
+      summary="Red Hat OpenShift Pipelines tektoncd-pipeline resolvers" \
+      version="v1.22.0"
 
 RUN microdnf update && microdnf install -y git && microdnf clean all
 
