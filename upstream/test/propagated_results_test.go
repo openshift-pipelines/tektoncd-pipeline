@@ -31,7 +31,6 @@ import (
 	knativetest "knative.dev/pkg/test"
 )
 
-// @test:execution=parallel
 func TestPropagatedResults(t *testing.T) {
 	t.Parallel()
 

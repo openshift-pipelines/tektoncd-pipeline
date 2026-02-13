@@ -32,7 +32,6 @@ import (
 	knativetest "knative.dev/pkg/test"
 )
 
-// @test:execution=parallel
 func TestFailingStepOnContinue(t *testing.T) {
 	ctx := t.Context()
 	ctx, cancel := context.WithCancel(ctx)
