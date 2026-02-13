@@ -40,3 +40,4 @@ USER 65532
 
 ENTRYPOINT ["/ko-app/events"]
 
+# trigger rebuild 2026-02-14
