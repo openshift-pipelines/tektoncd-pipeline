@@ -59,19 +59,12 @@ spec:
       - mountPath: /certs/client
         name: dind-certs
       # Wait for the dind daemon to generate the certs it will share with the
-      # client. StartupProbe handles slow Docker daemon initialization.
-      startupProbe:
-        periodSeconds: 1
-        failureThreshold: 30  # Allow up to 30 seconds for Docker daemon to start
-        exec:
-          command: ['ls', '/certs/client/ca.pem']
-      # ReadinessProbe verifies Docker daemon is actually ready to accept commands.
-      # Note: With k8s native sidecar support, startupProbe is honored but
-      # readinessProbe may not be.
+      # client.
       readinessProbe:
+        initialDelaySeconds: 3
         periodSeconds: 2
         exec:
-          command: ['docker', 'info']
+          command: ['ls', '/certs/client/ca.pem']
 
     volumes:
     - name: dind-certs

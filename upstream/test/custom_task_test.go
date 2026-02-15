@@ -58,7 +58,6 @@ var (
 	filterPipelineRunStatus = cmpopts.IgnoreFields(v1.PipelineRunStatusFields{}, "StartTime", "CompletionTime")
 )
 
-// @test:execution=parallel
 func TestCustomTask(t *testing.T) {
 	ctx := t.Context()
 	ctx, cancel := context.WithCancel(ctx)
@@ -268,7 +267,6 @@ func WaitForCustomRunSpecCancelled(ctx context.Context, c *clients, name string,
 
 // TestPipelineRunCustomTaskTimeout is an integration test that will
 // verify that pipelinerun timeout works and leads to the correct Run Spec.status
-// @test:execution=parallel
 func TestPipelineRunCustomTaskTimeout(t *testing.T) {
 	// cancel the context after we have waited a suitable buffer beyond the given deadline.
 	ctx, cancel := context.WithTimeout(t.Context(), timeout+2*time.Minute)
@@ -405,7 +403,6 @@ func cleanUpV1beta1Controller(t *testing.T) {
 	}
 }
 
-// @test:execution=parallel
 func TestWaitCustomTask_V1_PipelineRun(t *testing.T) {
 	ctx := t.Context()
 	ctx, cancel := context.WithCancel(ctx)
