@@ -53,4 +53,4 @@ LABEL \
 USER 65532
 
 ENTRYPOINT ["/ko-app/nop"]
-# trigger rebuild 2026-02-14
+# trigger rebuild 2026-02-15
