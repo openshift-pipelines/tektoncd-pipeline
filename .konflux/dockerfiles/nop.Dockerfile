@@ -1,9 +1,6 @@
 # Rebuild trigger: 1.15.4 release 2026-01-19
 ARG GO_BUILDER=brew.registry.redhat.io/rh-osbs/openshift-golang-builder:v1.23
 ARG RUNTIME=scratch
-# Add FIPS compliance layer
-ARG FIPS_BUILDER=registry.access.redhat.com/ubi9/ubi-minimal:latest@sha256:759f5f42d9d6ce2a705e290b7fc549e2d2cd39312c4fa345f93c02e4abb8da95
-FROM $FIPS_BUILDER AS fips_builder
 
 FROM $GO_BUILDER AS builder
 
@@ -26,14 +23,6 @@ ENV NOP=/usr/local/bin/nop \
 COPY --from=builder /tmp/nop /ko-app/nop
 COPY head ${KO_DATA_PATH}/HEAD
 
-# Copy FIPS-compliant libraries
-COPY --from=fips_builder /usr/lib64/libcrypto.so.3 /usr/lib64/
-COPY --from=fips_builder /usr/lib64/libcrypto.so.3.5.1 /usr/lib64/
-COPY --from=fips_builder /usr/lib64/ossl-modules/fips.so /usr/lib64/ossl-modules/
-
-# Copy OS release file to pass FIPS certification validation
-COPY --from=fips_builder /etc/redhat-release /etc/
-
 LABEL \
       com.redhat.component="openshift-pipelines-nop-rhel8-container" \
       name="openshift-pipelines/pipelines-nop-rhel8" \
@@ -53,4 +42,3 @@ LABEL \
 USER 65532
 
 ENTRYPOINT ["/ko-app/nop"]
-# trigger rebuild 2026-02-15
