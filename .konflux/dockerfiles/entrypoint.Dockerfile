@@ -26,14 +26,15 @@ COPY head ${KO_DATA_PATH}/HEAD
 
 LABEL \
       com.redhat.component="openshift-pipelines-entrypoint-rhel9-container" \
-      name="openshift-pipelines/pipelines-entrypoint-rhel9" \
-      version=$VERSION \
-      summary="Red Hat OpenShift Pipelines Entrypoint" \
+      cpe="cpe:/a:redhat:openshift_pipelines:next::el9" \
+      description="Red Hat OpenShift Pipelines tektoncd-pipeline entrypoint" \
+      io.k8s.description="Red Hat OpenShift Pipelines tektoncd-pipeline entrypoint" \
+      io.k8s.display-name="Red Hat OpenShift Pipelines tektoncd-pipeline entrypoint" \
+      io.openshift.tags="tekton,openshift,tektoncd-pipeline,entrypoint" \
       maintainer="pipelines-extcomm@redhat.com" \
-      description="Red Hat OpenShift Pipelines Entrypoint" \
-      io.k8s.display-name="Red Hat OpenShift Pipelines Entrypoint" \
-      io.k8s.description="Red Hat OpenShift Pipelines Entrypoint" \
-      io.openshift.tags="pipelines,tekton,openshift"
+      name="openshift-pipelines/pipelines-entrypoint-rhel9" \
+      summary="Red Hat OpenShift Pipelines tektoncd-pipeline entrypoint" \
+      version="next"
 
 RUN groupadd -r -g 65532 nonroot && \
     useradd --no-log-init -r -u 65532 -g nonroot nonroot
