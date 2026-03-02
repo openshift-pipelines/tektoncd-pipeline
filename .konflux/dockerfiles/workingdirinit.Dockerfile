@@ -25,14 +25,15 @@ COPY head ${KO_DATA_PATH}/HEAD
 
 LABEL \
       com.redhat.component="openshift-pipelines-workingdirinit-rhel9-container" \
-      name="openshift-pipelines/pipelines-workingdirinit-rhel9" \
-      version=$VERSION \
-      summary="Red Hat OpenShift Pipelines Workingdirinit" \
+      cpe="cpe:/a:redhat:openshift_pipelines:1.21::el9" \
+      description="Red Hat OpenShift Pipelines tektoncd-pipeline workingdirinit" \
+      io.k8s.description="Red Hat OpenShift Pipelines tektoncd-pipeline workingdirinit" \
+      io.k8s.display-name="Red Hat OpenShift Pipelines tektoncd-pipeline workingdirinit" \
+      io.openshift.tags="tekton,openshift,tektoncd-pipeline,workingdirinit" \
       maintainer="pipelines-extcomm@redhat.com" \
-      description="Red Hat OpenShift Pipelines Workingdirinit" \
-      io.k8s.display-name="Red Hat OpenShift Pipelines Workingdirinit" \
-      io.k8s.description="Red Hat OpenShift Pipelines Workingdirinit" \
-      io.openshift.tags="pipelines,tekton,openshift"
+      name="openshift-pipelines/pipelines-workingdirinit-rhel9" \
+      summary="Red Hat OpenShift Pipelines tektoncd-pipeline workingdirinit" \
+      version="v1.21.1"
 
 RUN groupadd -r -g 65532 nonroot && \
     useradd --no-log-init -r -u 65532 -g nonroot nonroot

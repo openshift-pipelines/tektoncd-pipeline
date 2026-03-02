@@ -25,14 +25,15 @@ COPY head ${KO_DATA_PATH}/HEAD
 
 LABEL \
       com.redhat.component="openshift-pipelines-webhook-rhel9-container" \
-      name="openshift-pipelines/pipelines-webhook-rhel9" \
-      version=$VERSION \
-      summary="Red Hat OpenShift Pipelines Webhook" \
+      cpe="cpe:/a:redhat:openshift_pipelines:1.21::el9" \
+      description="Red Hat OpenShift Pipelines tektoncd-pipeline webhook" \
+      io.k8s.description="Red Hat OpenShift Pipelines tektoncd-pipeline webhook" \
+      io.k8s.display-name="Red Hat OpenShift Pipelines tektoncd-pipeline webhook" \
+      io.openshift.tags="tekton,openshift,tektoncd-pipeline,webhook" \
       maintainer="pipelines-extcomm@redhat.com" \
-      description="Red Hat OpenShift Pipelines Webhook" \
-      io.k8s.display-name="Red Hat OpenShift Pipelines Webhook" \
-      io.k8s.description="Red Hat OpenShift Pipelines Webhook" \
-      io.openshift.tags="pipelines,tekton,openshift"
+      name="openshift-pipelines/pipelines-webhook-rhel9" \
+      summary="Red Hat OpenShift Pipelines tektoncd-pipeline webhook" \
+      version="v1.21.1"
 
 RUN groupadd -r -g 65532 nonroot && \
     useradd --no-log-init -r -u 65532 -g nonroot nonroot
