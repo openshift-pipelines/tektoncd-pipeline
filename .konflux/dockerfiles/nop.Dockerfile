@@ -17,7 +17,7 @@ RUN go build -ldflags="-X 'knative.dev/pkg/changeset.rev=$(cat HEAD)'" -mod=vend
     ./cmd/nop
 
 FROM $RUNTIME
-ARG VERSION=pipeline-next
+ARG VERSION=v1.22.0
 
 ENV NOP=/usr/local/bin/nop \
     KO_APP=/ko-app \
@@ -30,6 +30,7 @@ COPY head ${KO_DATA_PATH}/HEAD
 COPY --from=fips_builder /usr/lib64/libcrypto.so.3 /usr/lib64/
 COPY --from=fips_builder /usr/lib64/libcrypto.so.3.5.1 /usr/lib64/
 COPY --from=fips_builder /usr/lib64/ossl-modules/fips.so /usr/lib64/ossl-modules/
+COPY --from=fips_builder /etc/redhat-release /etc/
 
 LABEL \
       com.redhat.component="openshift-pipelines-nop-rhel9-container" \
