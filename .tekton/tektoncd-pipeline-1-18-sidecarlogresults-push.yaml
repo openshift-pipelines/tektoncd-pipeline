@@ -10,16 +10,16 @@ metadata:
     build.appstudio.redhat.com/target_branch: '{{target_branch}}'
     pipelinesascode.tekton.dev/max-keep-runs: "3"
     pipelinesascode.tekton.dev/on-cel-expression: event == "push" && target_branch
-      == "next" &&
+      == "release-v1.18.x" &&
       ("upstream/***".pathChanged() || ".konflux/patches/***".pathChanged() || ".konflux/rpms/***".pathChanged() ||
-      ".konflux/dockerfiles/workingdirinit.Dockerfile".pathChanged() ||
-      ".tekton/tektoncd-pipeline-next-workingdirinit-push.yaml".pathChanged())
+      ".konflux/dockerfiles/sidecarlogresults.Dockerfile".pathChanged() ||
+      ".tekton/tektoncd-pipeline-1-18-sidecarlogresults-push.yaml".pathChanged())
   creationTimestamp: null
   labels:
-    appstudio.openshift.io/application: openshift-pipelines-core-next
-    appstudio.openshift.io/component: tektoncd-pipeline-next-workingdirinit
+    appstudio.openshift.io/application: openshift-pipelines-core-1-18
+    appstudio.openshift.io/component: tektoncd-pipeline-1-18-sidecarlogresults
     pipelines.appstudio.openshift.io/type: build
-  name: tektoncd-pipeline-next-workingdirinit-on-push
+  name: tektoncd-pipeline-1-18-sidecarlogresults-on-push
   namespace: tekton-ecosystem-tenant
 spec:
   params:
@@ -30,19 +30,19 @@ spec:
   - name: revision
     value: '{{revision}}'
   - name: output-image
-    value: quay.io/redhat-user-workloads/tekton-ecosystem-tenant/pipelines-workingdirinit-rhel9:{{revision}}
+    value: quay.io/redhat-user-workloads/tekton-ecosystem-tenant/pipelines-sidecarlogresults-rhel9:{{revision}}
   - name: dockerfile
-    value: .konflux/dockerfiles/workingdirinit.Dockerfile
+    value: .konflux/dockerfiles/sidecarlogresults.Dockerfile
   - name: additional-tags
     value:
-      - "next"
+      - "v1.18.0"
   - name: prefetch-input
     value: |
       {"type": "rpm", "path": ".konflux/rpms"}
   pipelineRef:
     name: docker-build-ta
   taskRunTemplate:
-    serviceAccountName: build-pipeline-tektoncd-pipeline-next-workingdirinit
+    serviceAccountName: build-pipeline-tektoncd-pipeline-1-18-sidecarlogresults
   workspaces:
   - name: git-auth
     secret:

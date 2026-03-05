@@ -36,7 +36,7 @@ RUN chmod 0755 /sbin/tini && chown root:root /sbin/tini
 
 LABEL \
       com.redhat.component="openshift-pipelines-resolvers-rhel9-container" \
-      cpe="cpe:/a:redhat:openshift_pipelines:next::el9" \
+      cpe="cpe:/a:redhat:openshift_pipelines:1.18::el9" \
       description="Red Hat OpenShift Pipelines tektoncd-pipeline resolvers" \
       io.k8s.description="Red Hat OpenShift Pipelines tektoncd-pipeline resolvers" \
       io.k8s.display-name="Red Hat OpenShift Pipelines tektoncd-pipeline resolvers" \
@@ -44,7 +44,7 @@ LABEL \
       maintainer="pipelines-extcomm@redhat.com" \
       name="openshift-pipelines/pipelines-resolvers-rhel9" \
       summary="Red Hat OpenShift Pipelines tektoncd-pipeline resolvers" \
-      version="next"
+      version="v1.18.0"
 
 RUN microdnf update && microdnf install -y git && microdnf clean all
 

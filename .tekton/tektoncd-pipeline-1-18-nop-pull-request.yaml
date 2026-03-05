@@ -11,15 +11,15 @@ metadata:
     build.appstudio.redhat.com/target_branch: '{{target_branch}}'
     pipelinesascode.tekton.dev/max-keep-runs: "3"
     pipelinesascode.tekton.dev/on-cel-expression: event == "pull_request" && target_branch
-      == "next" &&
+      == "release-v1.18.x" &&
       ("upstream/***".pathChanged() || ".konflux/patches/***".pathChanged() || ".konflux/rpms/***".pathChanged() ||
       ".konflux/dockerfiles/nop.Dockerfile".pathChanged() ||
-      ".tekton/tektoncd-pipeline-next-nop-pull-request.yaml".pathChanged())
+      ".tekton/tektoncd-pipeline-1-18-nop-pull-request.yaml".pathChanged())
   labels:
-    appstudio.openshift.io/application: openshift-pipelines-core-next
-    appstudio.openshift.io/component: tektoncd-pipeline-next-nop
+    appstudio.openshift.io/application: openshift-pipelines-core-1-18
+    appstudio.openshift.io/component: tektoncd-pipeline-1-18-nop
     pipelines.appstudio.openshift.io/type: build
-  name: tektoncd-pipeline-next-nop-on-pull-request
+  name: tektoncd-pipeline-1-18-nop-on-pull-request
   namespace: tekton-ecosystem-tenant
 spec:
   params:
@@ -37,7 +37,7 @@ spec:
     value: .konflux/dockerfiles/nop.Dockerfile
   - name: additional-tags
     value:
-      - "on-pr-next"
+      - "on-pr-v1.18.0"
   - name: build-platforms
     value:
     - linux/x86_64
@@ -47,7 +47,7 @@ spec:
   pipelineRef:
     name: docker-build-ta
   taskRunTemplate:
-    serviceAccountName: build-pipeline-tektoncd-pipeline-next-nop
+    serviceAccountName: build-pipeline-tektoncd-pipeline-1-18-nop
   workspaces:
   - name: git-auth
     secret:
