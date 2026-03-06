@@ -1,4 +1,4 @@
-ARG GO_BUILDER=brew.registry.redhat.io/rh-osbs/openshift-golang-builder:v1.24 
+ARG GO_BUILDER=registry.access.redhat.com/ubi9/go-toolset:1.25
 ARG RUNTIME=scratch
 # Add FIPS compliance layer
 ARG FIPS_BUILDER=registry.access.redhat.com/ubi9/ubi-minimal:latest@sha256:6fc28bcb6776e387d7a35a2056d9d2b985dc4e26031e98a2bd35a7137cd6fd71
@@ -17,7 +17,7 @@ RUN go build -ldflags="-X 'knative.dev/pkg/changeset.rev=$(cat HEAD)'" -mod=vend
     ./cmd/nop
 
 FROM $RUNTIME
-ARG VERSION=pipeline-1.21
+ARG VERSION=1.21
 
 ENV NOP=/usr/local/bin/nop \
     KO_APP=/ko-app \
@@ -35,20 +35,20 @@ COPY --from=fips_builder /usr/lib64/ossl-modules/fips.so /usr/lib64/ossl-modules
 COPY --from=fips_builder /etc/redhat-release /etc/
 
 LABEL \
-      com.redhat.component="openshift-pipelines-nop-rhel9-container" \
-      cpe="cpe:/a:redhat:openshift_pipelines:1.21::el9" \
-      description="Red Hat OpenShift Pipelines tektoncd-pipeline nop" \
-      distribution-scope="public" \
-      io.k8s.description="Red Hat OpenShift Pipelines tektoncd-pipeline nop" \
-      io.k8s.display-name="Red Hat OpenShift Pipelines tektoncd-pipeline nop" \
-      io.openshift.tags="tekton,openshift,tektoncd-pipeline,nop" \
-      maintainer="pipelines-extcomm@redhat.com" \
-      name="openshift-pipelines/pipelines-nop-rhel9" \
-      release="1227.1725849298" \
-      summary="Red Hat OpenShift Pipelines tektoncd-pipeline nop" \
-      url="https://access.redhat.com/containers/#/registry.access.redhat.com/ubi9-minimal/images/9.4-1227.1725849298" \
-      vendor="Red Hat, Inc." \
-      version="v1.21.1"
+    com.redhat.component="openshift-pipelines-nop-rhel9-container" \
+    cpe="cpe:/a:redhat:openshift_pipelines:1.21::el9" \
+    description="Red Hat OpenShift Pipelines tektoncd-pipeline nop" \
+    distribution-scope="public" \
+    io.k8s.description="Red Hat OpenShift Pipelines tektoncd-pipeline nop" \
+    io.k8s.display-name="Red Hat OpenShift Pipelines tektoncd-pipeline nop" \
+    io.openshift.tags="tekton,openshift,tektoncd-pipeline,nop" \
+    maintainer="pipelines-extcomm@redhat.com" \
+    name="openshift-pipelines/pipelines-nop-rhel9" \
+    release="1227.1725849298" \
+    summary="Red Hat OpenShift Pipelines tektoncd-pipeline nop" \
+    url="https://access.redhat.com/containers/#/registry.access.redhat.com/ubi9-minimal/images/9.4-1227.1725849298" \
+    vendor="Red Hat, Inc." \
+    version="v1.21.1"
 
 USER 65532
 
