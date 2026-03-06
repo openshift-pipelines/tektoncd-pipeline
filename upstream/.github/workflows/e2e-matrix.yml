@@ -70,7 +70,7 @@ jobs:
       with:
         go-version-file: "go.mod"
     - name: Cache ko build cache
-      uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684  # v4.2.3
+      uses: actions/cache@cdf6c1fa76f9f475f3d7449005a359c84ca0f306  # v5.0.3
       with:
         path: /tmp/ko-cache
         key: ${{ runner.os }}-${{ runner.arch }}-ko-${{ hashFiles('go.sum') }}
@@ -111,7 +111,7 @@ jobs:
         name: ${{ matrix.k8s-version }}-${{ matrix.feature-flags }}-${{ matrix.os }}
         path: ${{ env.ARTIFACTS }}
 
-    - uses: chainguard-dev/actions/kind-diag@18e5e3427cf9d6bcfbefe60dca48e40292f000c5 # v1.5.13
+    - uses: chainguard-dev/actions/kind-diag@eab208ef2d05b13404296a5e194a6b237e8bb213 # v1.6.4
       if: ${{ failure() }}
       with:
         artifact-name: ${{ matrix.k8s-version }}-${{ matrix.feature-flags }}-${{ matrix.os }}-logs
