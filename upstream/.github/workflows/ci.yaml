@@ -111,7 +111,7 @@ jobs:
       uses: golangci/golangci-lint-action@1e7e51e771db61008b38414a730f564565cf7c20 # v9.2.0
       if: ${{ needs.changes.outputs.non-docs == 'true' }}
       with:
-        version: v2.1.6
+        version: v2.8.0
         args: --new-from-merge-base=origin/${{ github.base_ref }} --timeout=10m
     - name: yamllint
       if: ${{ needs.changes.outputs.yaml == 'true' }}
@@ -159,7 +159,7 @@ jobs:
       with:
         go-version-file: "go.mod"
     - name: Cache ko build cache
-      uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684  # v4.2.3
+      uses: actions/cache@cdf6c1fa76f9f475f3d7449005a359c84ca0f306  # v5.0.3
       with:
         path: /tmp/ko-cache
         key: ${{ runner.os }}-${{ runner.arch }}-ko-${{ hashFiles('go.sum') }}
@@ -174,3 +174,37 @@ jobs:
   e2e-tests:
     needs: [build]
     uses: ./.github/workflows/e2e-matrix.yml
+
+  ci-summary:
+    name: CI summary
+    needs: [build, buildFips, linting, tests, generated, multi-arch-build, e2e-tests]
+    runs-on: ubuntu-latest
+    if: always()
+    steps:
+    - name: Check CI results
+      run: |
+        results=(
+          "build=${{ needs.build.result }}"
+          "buildFips=${{ needs.buildFips.result }}"
+          "linting=${{ needs.linting.result }}"
+          "tests=${{ needs.tests.result }}"
+          "generated=${{ needs.generated.result }}"
+          "multi-arch-build=${{ needs.multi-arch-build.result }}"
+          "e2e-tests=${{ needs.e2e-tests.result }}"
+        )
+        failed=0
+        for r in "${results[@]}"; do
+          name="${r%%=*}"
+          result="${r#*=}"
+          echo "${name}: ${result}"
+          if [ "$result" != "success" ] && [ "$result" != "skipped" ]; then
+            failed=1
+          fi
+        done
+        if [ "$failed" -eq 1 ]; then
+          echo ""
+          echo "Some CI jobs failed or were cancelled"
+          exit 1
+        fi
+        echo ""
+        echo "All CI checks passed"

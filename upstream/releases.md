@@ -41,11 +41,11 @@ Further documentation available:
 
 ## Release
 
-### v1.7
-- **Latest Release**: [v1.7.0][v1.7-0] (2025-12-03) ([docs][v1.7-0-docs], [examples][v1.7-0-examples])
-- **Initial Release**: [v1.7.0][v1.7-0] (2025-12-03)
-- **End of Life**: 2025-12-31
-- **Patch Releases**: [v1.7.0][v1.7-0]
+### v1.9 (LTS)
+- **Latest Release**: [v1.9.0][v1.9-0] (2026-01-30) ([docs][v1.9-0-docs], [examples][v1.9-0-examples])
+- **Initial Release**: [v1.9.0][v1.9-0] (2026-01-30)
+- **End of Life**: 2027-01-30
+- **Patch Releases**: [v1.9.0][v1.9-0]
 
 ### v1.6 (LTS)
 - **Latest Release**: [v1.6.0][v1.6-0] (2025-10-31) ([docs][v1.6-0-docs], [examples][v1.6-0-examples])
@@ -65,13 +65,13 @@ Further documentation available:
 - **End of Life**: 2026-04-29
 - **Patch Releases**: [v1.0.0][v1.0-0]
 
-### v0.68 (LTS)
-- **Latest Release**: [v0.68.1][v0.68-1] (2025-03-20) ([docs][v0.68-1-docs], [examples][v0.68-1-examples])
-- **Initial Release**: [v0.68.0][v0.68-0] (2025-01-30)
-- **End of Life**: 2026-01-30
-- **Patch Releases**: [v0.68.0][v0.68-0], [v0.68.1][v0.68-1]
-
 ## End of Life Releases
+
+### v1.7
+- **Latest Release**: [v1.7.0][v1.7-0] (2025-12-03) ([docs][v1.7-0-docs], [examples][v1.7-0-examples])
+- **Initial Release**: [v1.7.0][v1.7-0] (2025-12-03)
+- **End of Life**: 2026-01-30
+- **Patch Releases**: [v1.7.0][v1.7-0]
 
 ### v1.5
 - **Latest Release**: [v1.5.0][v1.5-0] (2025-10-02) ([docs][v1.5-0-docs], [examples][v1.5-0-examples])
@@ -108,6 +108,12 @@ Further documentation available:
 - **Initial Release**: [v0.69.0][v0.69-0] (2025-03-07)
 - **End of Life**: 2025-03-28
 - **Patch Releases**: [v0.69.0][v0.69-0]
+
+### v0.68 (LTS)
+- **Latest Release**: [v0.68.1][v0.68-1] (2025-03-20) ([docs][v0.68-1-docs], [examples][v0.68-1-examples])
+- **Initial Release**: [v0.68.0][v0.68-0] (2025-01-30)
+- **End of Life**: 2026-01-30
+- **Patch Releases**: [v0.68.0][v0.68-0], [v0.68.1][v0.68-1]
 
 ### v0.66
 - **Latest Release**: [v0.66.0][v0.66-0] (2024-12-04) ([docs][v0.66-0-docs], [examples][v0.66-0-examples])
@@ -316,6 +322,7 @@ Older releases are EOL and available on [GitHub][tekton-pipeline-releases].
 [release-notes-standards]:
     https://github.com/tektoncd/community/blob/main/standards.md#release-notes
 
+[v1.9-0]: https://github.com/tektoncd/pipeline/releases/tag/v1.9.0
 [v1.7-0]: https://github.com/tektoncd/pipeline/releases/tag/v1.7.0
 [v1.6-0]: https://github.com/tektoncd/pipeline/releases/tag/v1.6.0
 [v1.5-0]: https://github.com/tektoncd/pipeline/releases/tag/v1.5.0
@@ -419,6 +426,7 @@ Older releases are EOL and available on [GitHub][tekton-pipeline-releases].
 [v0-37-5]: https://github.com/tektoncd/pipeline/releases/tag/v0.37.5
 [v0-37-0]: https://github.com/tektoncd/pipeline/releases/tag/v0.37.0
 
+[v1.9-0-docs]: https://github.com/tektoncd/pipeline/tree/v1.9.0/docs#tekton-pipelines
 [v1.7-0-docs]: https://github.com/tektoncd/pipeline/tree/v1.7.0/docs#tekton-pipelines
 [v1.6-0-docs]: https://github.com/tektoncd/pipeline/tree/v1.6.0/docs#tekton-pipelines
 [v1.5-0-docs]: https://github.com/tektoncd/pipeline/tree/v1.5.0/docs#tekton-pipelines
@@ -465,6 +473,7 @@ Older releases are EOL and available on [GitHub][tekton-pipeline-releases].
 [v0-38-4-docs]: https://github.com/tektoncd/pipeline/tree/v0.38.4/docs#tekton-pipelines
 [v0-37-5-docs]: https://github.com/tektoncd/pipeline/tree/v0.37.5/docs#tekton-pipelines
 
+[v1.9-0-examples]: https://github.com/tektoncd/pipeline/tree/v1.9.0/examples#examples
 [v1.7-0-examples]: https://github.com/tektoncd/pipeline/tree/v1.7.0/examples#examples
 [v1.6-0-examples]: https://github.com/tektoncd/pipeline/tree/v1.6.0/examples#examples
 [v1.5-0-examples]: https://github.com/tektoncd/pipeline/tree/v1.5.0/examples#examples
