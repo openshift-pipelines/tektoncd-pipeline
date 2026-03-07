@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"github.com/go-git/go-billy/v5/osfs"
-
 	"github.com/go-git/go-git/v5/config"
 	"github.com/go-git/go-git/v5/internal/url"
 	"github.com/go-git/go-git/v5/plumbing"
@@ -83,7 +82,7 @@ func (r *Remote) String() string {
 	var fetch, push string
 	if len(r.c.URLs) > 0 {
 		fetch = r.c.URLs[0]
-		push = r.c.URLs[len(r.c.URLs)-1]
+		push = r.c.URLs[0]
 	}
 
 	return fmt.Sprintf("%s\t%s (fetch)\n%[1]s\t%[3]s (push)", r.c.Name, fetch, push)
@@ -110,8 +109,8 @@ func (r *Remote) PushContext(ctx context.Context, o *PushOptions) (err error) {
 		return fmt.Errorf("remote names don't match: %s != %s", o.RemoteName, r.c.Name)
 	}
 
-	if o.RemoteURL == "" && len(r.c.URLs) > 0 {
-		o.RemoteURL = r.c.URLs[len(r.c.URLs)-1]
+	if o.RemoteURL == "" {
+		o.RemoteURL = r.c.URLs[0]
 	}
 
 	s, err := newSendPackSession(o.RemoteURL, o.Auth, o.InsecureSkipTLS, o.CABundle, o.ProxyOptions)
@@ -492,18 +491,7 @@ func (r *Remote) fetch(ctx context.Context, o *FetchOptions) (sto storer.Referen
 	}
 
 	if !updated && !updatedPrune {
-		// No references updated, but may have fetched new objects, check if we now have any of our wants
-		for _, hash := range req.Wants {
-			exists, _ := objectExists(r.s, hash)
-			if exists {
-				updated = true
-				break
-			}
-		}
-
-		if !updated {
-			return remoteRefs, NoErrAlreadyUpToDate
-		}
+		return remoteRefs, NoErrAlreadyUpToDate
 	}
 
 	return remoteRefs, nil
@@ -890,12 +878,17 @@ func getHavesFromRef(
 		return nil
 	}
 
+	// No need to load the commit if we know the remote already
+	// has this hash.
+	if remoteRefs[h] {
+		haves[h] = true
+		return nil
+	}
+
 	commit, err := object.GetCommit(s, h)
 	if err != nil {
-		if !errors.Is(err, plumbing.ErrObjectNotFound) {
-			// Ignore the error if this isn't a commit.
-			haves[ref.Hash()] = true
-		}
+		// Ignore the error if this isn't a commit.
+		haves[ref.Hash()] = true
 		return nil
 	}
 
