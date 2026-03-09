@@ -1,5 +1,5 @@
 # Rebuild trigger: 1.15.4 release 2026-01-19
-ARG GO_BUILDER=brew.registry.redhat.io/rh-osbs/openshift-golang-builder:v1.23
+ARG GO_BUILDER=registry.access.redhat.com/ubi9/go-toolset:1.25
 ARG RUNTIME=registry.redhat.io/ubi8/ubi:latest@sha256:7dee295fba93ab1a9dfcb6e94e47e1050c6b51242449c33421ea3244d977e802
 
 FROM $GO_BUILDER AS builder
@@ -16,7 +16,7 @@ RUN CGO_ENABLED=0 \
     ./cmd/entrypoint
 
 FROM $RUNTIME
-ARG VERSION=pipeline-1.15.4
+ARG VERSION=1.15
 
 ENV ENTRYPOINT=/usr/local/bin/entrypoint \
     KO_APP=/ko-app \
@@ -26,16 +26,16 @@ COPY --from=builder /tmp/entrypoint /ko-app/entrypoint
 COPY head ${KO_DATA_PATH}/HEAD
 
 LABEL \
-      com.redhat.component="openshift-pipelines-entrypoint-rhel8-container" \
-      name="openshift-pipelines/pipelines-entrypoint-rhel8" \
-      version=$VERSION \
-      summary="Red Hat OpenShift Pipelines Entrypoint" \
-      maintainer="pipelines-extcomm@redhat.com" \
-      description="Red Hat OpenShift Pipelines Entrypoint" \
-      io.k8s.display-name="Red Hat OpenShift Pipelines Entrypoint" \
-      io.k8s.description="Red Hat OpenShift Pipelines Entrypoint" \
-      io.openshift.tags="pipelines,tekton,openshift" \
-      cpe="cpe:/a:redhat:openshift_pipelines:1.15::el8"
+    com.redhat.component="openshift-pipelines-entrypoint-rhel9-container" \
+    cpe="cpe:/a:redhat:openshift_pipelines:1.15::el9" \
+    description="Red Hat OpenShift Pipelines tektoncd-pipeline entrypoint" \
+    io.k8s.description="Red Hat OpenShift Pipelines tektoncd-pipeline entrypoint" \
+    io.k8s.display-name="Red Hat OpenShift Pipelines tektoncd-pipeline entrypoint" \
+    io.openshift.tags="tekton,openshift,tektoncd-pipeline,entrypoint" \
+    maintainer="pipelines-extcomm@redhat.com" \
+    name="openshift-pipelines/pipelines-entrypoint-rhel9" \
+    summary="Red Hat OpenShift Pipelines tektoncd-pipeline entrypoint" \
+    version="v1.15.5"
 
 RUN groupadd -r -g 65532 nonroot && useradd --no-log-init -r -u 65532 -g nonroot nonroot
 USER 65532
