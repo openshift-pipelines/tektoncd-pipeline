@@ -57,7 +57,7 @@ spec:
       description: The precise commit SHA that was fetched by this Task
   steps:
     - name: clone
-      image: gcr.io/tekton-releases/github.com/tektoncd/pipeline/cmd/git-init:latest
+      image: ghcr.io/tektoncd-catalog/git-clone:v1.1.0
       securityContext:
         runAsUser: 0  # This needs root, and git-init is nonroot by default
       script: |
@@ -116,18 +116,18 @@ spec:
     - name: source
   steps:
     - name: check-application-dir-has-source
-      image: ubuntu
+      image: mirror.gcr.io/ubuntu
       script: |
         if [ ! -d "$(workspaces.source.path)/application/" ]; then
           echo "Something went wrong and could not find application source under $(workspaces.source.path)/application/"
           exit 1
         fi
     - name: cleanup-workspace
-      image: ubuntu
+      image: mirror.gcr.io/ubuntu
       script: |
         rm -rf $(workspaces.source.path)/application/
     - name: verify-application-dir-has-gone
-      image: ubuntu
+      image: mirror.gcr.io/ubuntu
       script: |
         if [ -d "$(workspaces.source.path)/application/" ]; then
           echo "Something went wrong cleaning up and the application source still exists under $(workspaces.source.path)/application/"
@@ -174,7 +174,7 @@ spec:
           - name: commit
         steps:
           - name: check-commit-initialized
-            image: alpine
+            image: mirror.gcr.io/alpine
             script: |
               if [[ ! $(params.commit) ]]; then
                 exit 1

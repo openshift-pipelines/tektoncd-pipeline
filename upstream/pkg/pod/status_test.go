@@ -17,15 +17,14 @@ limitations under the License.
 package pod
 
 import (
-	"context"
 	"fmt"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
-	"github.com/hashicorp/go-multierror"
 	"github.com/tektoncd/pipeline/internal/sidecarlogresults"
 	"github.com/tektoncd/pipeline/pkg/apis/config"
 	v1 "github.com/tektoncd/pipeline/pkg/apis/pipeline/v1"
@@ -47,14 +46,15 @@ func TestSetTaskRunStatusBasedOnStepStatus(t *testing.T) {
 		ContainerStatuses []corev1.ContainerStatus
 	}{{
 		desc: "test result with large pipeline result",
-		ContainerStatuses: []corev1.ContainerStatus{{
-			Name: "step-bar-0",
-			State: corev1.ContainerState{
-				Terminated: &corev1.ContainerStateTerminated{
-					Message: `[{"key":"resultName","value":"resultValue", "type":1}, {"key":"digest","value":"sha256:1234","resourceName":"source-image"}]`,
+		ContainerStatuses: []corev1.ContainerStatus{
+			{
+				Name: "step-bar-0",
+				State: corev1.ContainerState{
+					Terminated: &corev1.ContainerStateTerminated{
+						Message: `[{"key":"resultName","value":"resultValue", "type":1}, {"key":"digest","value":"sha256:1234","resourceName":"source-image"}]`,
+					},
 				},
 			},
-		},
 			{
 				Name: "step-bar1",
 				State: corev1.ContainerState{
@@ -70,7 +70,8 @@ func TestSetTaskRunStatusBasedOnStepStatus(t *testing.T) {
 						Message: `[{"key":"resultName","value":"resultValue", "type":1}, {"key":"digest","value":"sha256:1234` + strings.Repeat("a", 3072) + `","resourceName":"source-image"}]`,
 					},
 				},
-			}},
+			},
+		},
 	}, {
 		desc: "The ExitCode in the result cannot modify the original ExitCode",
 		ContainerStatuses: []corev1.ContainerStatus{{
@@ -103,9 +104,9 @@ func TestSetTaskRunStatusBasedOnStepStatus(t *testing.T) {
 			for _, cs := range c.ContainerStatuses {
 				originalStatuses = append(originalStatuses, *cs.DeepCopy())
 			}
-			merr := setTaskRunStatusBasedOnStepStatus(context.Background(), logger, c.ContainerStatuses, &tr, corev1.PodRunning, kubeclient, &v1.TaskSpec{})
-			if merr != nil {
-				t.Errorf("setTaskRunStatusBasedOnStepStatus: %s", merr)
+			gotErr := setTaskRunStatusBasedOnStepStatus(t.Context(), logger, c.ContainerStatuses, &tr, corev1.PodRunning, kubeclient, &v1.TaskSpec{})
+			if gotErr != nil {
+				t.Errorf("setTaskRunStatusBasedOnStepStatus: %s", gotErr)
 			}
 			if d := cmp.Diff(originalStatuses, c.ContainerStatuses); d != "" {
 				t.Errorf("container statuses changed:  %s", diff.PrintWantGot(d))
@@ -116,36 +117,87 @@ func TestSetTaskRunStatusBasedOnStepStatus(t *testing.T) {
 
 func TestSetTaskRunStatusBasedOnStepStatus_sidecar_logs(t *testing.T) {
 	for _, c := range []struct {
-		desc          string
-		maxResultSize int
-		wantErr       error
+		desc            string
+		maxResultSize   int
+		wantErr         error
+		enableArtifacts bool
+		tr              v1.TaskRun
 	}{{
-		desc:          "test result with sidecar logs too large",
+		desc: "test result with sidecar logs too large",
+		tr: v1.TaskRun{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "task-run",
+				Namespace: "foo",
+			},
+			Status: v1.TaskRunStatus{
+				TaskRunStatusFields: v1.TaskRunStatusFields{
+					TaskSpec: &v1.TaskSpec{
+						Results: []v1.TaskResult{{
+							Name: "result1",
+						}},
+					},
+					PodName: "task-run-pod",
+				},
+			},
+		},
 		maxResultSize: 1,
-		wantErr:       sidecarlogresults.ErrSizeExceeded,
+		wantErr:       fmt.Errorf("%d bytes %w of %d bytes", 9, sidecarlogresults.ErrSizeExceeded, 1),
 	}, {
-		desc:          "test result with sidecar logs bad format",
+		desc: "test result with sidecar logs bad format",
+		tr: v1.TaskRun{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "task-run",
+				Namespace: "foo",
+			},
+			Status: v1.TaskRunStatus{
+				TaskRunStatusFields: v1.TaskRunStatusFields{
+					TaskSpec: &v1.TaskSpec{
+						Results: []v1.TaskResult{{
+							Name: "result1",
+						}},
+					},
+					PodName: "task-run-pod",
+				},
+			},
+		},
 		maxResultSize: 4096,
 		wantErr:       fmt.Errorf("%s", "invalid result \"\": invalid character 'k' in literal false (expecting 'l')"),
+	}, {
+		desc: "test artifact with sidecar logs too large",
+		tr: v1.TaskRun{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "task-run",
+				Namespace: "foo",
+			},
+			Status: v1.TaskRunStatus{
+				TaskRunStatusFields: v1.TaskRunStatusFields{
+					TaskSpec: &v1.TaskSpec{},
+					PodName:  "task-run-pod",
+				},
+			},
+		},
+		maxResultSize:   1,
+		wantErr:         fmt.Errorf("%d bytes %w of %d bytes", 9, sidecarlogresults.ErrSizeExceeded, 1),
+		enableArtifacts: true,
+	}, {
+		desc: "test artifact with sidecar logs bad format",
+		tr: v1.TaskRun{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "task-run",
+				Namespace: "foo",
+			},
+			Status: v1.TaskRunStatus{
+				TaskRunStatusFields: v1.TaskRunStatusFields{
+					TaskSpec: &v1.TaskSpec{},
+					PodName:  "task-run-pod",
+				},
+			},
+		},
+		maxResultSize:   4096,
+		wantErr:         fmt.Errorf("%s", "invalid result \"\": invalid character 'k' in literal false (expecting 'l')"),
+		enableArtifacts: true,
 	}} {
 		t.Run(c.desc, func(t *testing.T) {
-			tr := v1.TaskRun{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "task-run",
-					Namespace: "foo",
-				},
-				Status: v1.TaskRunStatus{
-					TaskRunStatusFields: v1.TaskRunStatusFields{
-						TaskSpec: &v1.TaskSpec{
-							Results: []v1.TaskResult{{
-								Name: "result1",
-							}},
-						},
-						PodName: "task-run-pod",
-					},
-				},
-			}
-
 			logger, _ := logging.NewLogger("", "status")
 			kubeclient := fakek8s.NewSimpleClientset()
 			pod := &corev1.Pod{
@@ -169,21 +221,27 @@ func TestSetTaskRunStatusBasedOnStepStatus_sidecar_logs(t *testing.T) {
 					Phase: corev1.PodRunning,
 				},
 			}
-			pod, err := kubeclient.CoreV1().Pods(pod.Namespace).Create(context.TODO(), pod, metav1.CreateOptions{})
+			pod, err := kubeclient.CoreV1().Pods(pod.Namespace).Create(t.Context(), pod, metav1.CreateOptions{})
 			if err != nil {
 				t.Errorf("Error occurred while creating pod %s: %s", pod.Name, err.Error())
 			}
-			ctx := config.ToContext(context.Background(), &config.Config{
-				FeatureFlags: &config.FeatureFlags{
-					ResultExtractionMethod: config.ResultExtractionMethodSidecarLogs,
-					MaxResultSize:          c.maxResultSize,
-				},
+			featureFlags := &config.FeatureFlags{
+				ResultExtractionMethod: config.ResultExtractionMethodSidecarLogs,
+				MaxResultSize:          c.maxResultSize,
+			}
+			ts := &v1.TaskSpec{}
+			if c.enableArtifacts {
+				featureFlags.EnableArtifacts = true
+				ts.Steps = []v1.Step{{Name: "name", Script: `echo aaa >> /tekton/steps/step-name/artifacts/provenance.json`}}
+			}
+			ctx := config.ToContext(t.Context(), &config.Config{
+				FeatureFlags: featureFlags,
 			})
-			var wantErr *multierror.Error
-			wantErr = multierror.Append(wantErr, c.wantErr)
-			merr := setTaskRunStatusBasedOnStepStatus(ctx, logger, []corev1.ContainerStatus{{}}, &tr, pod.Status.Phase, kubeclient, &v1.TaskSpec{})
-
-			if d := cmp.Diff(wantErr.Error(), merr.Error()); d != "" {
+			gotErr := setTaskRunStatusBasedOnStepStatus(ctx, logger, []corev1.ContainerStatus{{}}, &c.tr, pod.Status.Phase, kubeclient, ts)
+			if gotErr == nil {
+				t.Fatalf("Expected error but got nil")
+			}
+			if d := cmp.Diff(c.wantErr.Error(), gotErr.Error()); d != "" {
 				t.Errorf("Got unexpected error  %s", diff.PrintWantGot(d))
 			}
 		})
@@ -242,7 +300,8 @@ func TestMakeTaskRunStatus_StepResults(t *testing.T) {
 					ContainerState: corev1.ContainerState{
 						Terminated: &corev1.ContainerStateTerminated{
 							Message: `[{"key":"uri","value":"https://foo.bar\n","type":4}]`,
-						}},
+						},
+					},
 					Name:      "one",
 					Container: "step-one",
 					Results: []v1.TaskRunStepResult{{
@@ -251,7 +310,8 @@ func TestMakeTaskRunStatus_StepResults(t *testing.T) {
 						Value: *v1.NewStructuredValues("https://foo.bar\n"),
 					}},
 				}},
-				Sidecars: []v1.SidecarState{},
+				Sidecars:  []v1.SidecarState{},
+				Artifacts: &v1.Artifacts{},
 				Results: []v1.TaskRunResult{{
 					Name:  "task-result",
 					Type:  v1.ResultsTypeString,
@@ -306,7 +366,8 @@ func TestMakeTaskRunStatus_StepResults(t *testing.T) {
 					ContainerState: corev1.ContainerState{
 						Terminated: &corev1.ContainerStateTerminated{
 							Message: `[{"key":"array","value":"[\"hello\",\"world\"]","type":4}]`,
-						}},
+						},
+					},
 					Name:      "one",
 					Container: "step-one",
 					Results: []v1.TaskRunStepResult{{
@@ -315,7 +376,8 @@ func TestMakeTaskRunStatus_StepResults(t *testing.T) {
 						Value: *v1.NewStructuredValues("hello", "world"),
 					}},
 				}},
-				Sidecars: []v1.SidecarState{},
+				Sidecars:  []v1.SidecarState{},
+				Artifacts: &v1.Artifacts{},
 				Results: []v1.TaskRunResult{{
 					Name:  "resultName",
 					Type:  v1.ResultsTypeArray,
@@ -373,7 +435,8 @@ func TestMakeTaskRunStatus_StepResults(t *testing.T) {
 					ContainerState: corev1.ContainerState{
 						Terminated: &corev1.ContainerStateTerminated{
 							Message: `[{"key":"digest","value":"sha256:1234","type":4},{"key":"resultName","value":"resultValue","type":4}]`,
-						}},
+						},
+					},
 					Name:      "one",
 					Container: "step-one",
 					Results: []v1.TaskRunStepResult{{
@@ -386,7 +449,8 @@ func TestMakeTaskRunStatus_StepResults(t *testing.T) {
 						Value: *v1.NewStructuredValues("resultValue"),
 					}},
 				}},
-				Sidecars: []v1.SidecarState{},
+				Sidecars:  []v1.SidecarState{},
+				Artifacts: &v1.Artifacts{},
 				Results: []v1.TaskRunResult{{
 					Name:  "resultDigest",
 					Type:  v1.ResultsTypeString,
@@ -412,7 +476,180 @@ func TestMakeTaskRunStatus_StepResults(t *testing.T) {
 
 			logger, _ := logging.NewLogger("", "status")
 			kubeclient := fakek8s.NewSimpleClientset()
-			got, err := MakeTaskRunStatus(context.Background(), logger, c.tr, &c.pod, kubeclient, c.tr.Spec.TaskSpec)
+			got, err := MakeTaskRunStatus(t.Context(), logger, c.tr, &c.pod, kubeclient, c.tr.Spec.TaskSpec)
+			if err != nil {
+				t.Errorf("MakeTaskRunResult: %s", err)
+			}
+
+			// Common traits, set for test case brevity.
+			c.want.PodName = "pod"
+
+			ensureTimeNotNil := cmp.Comparer(func(x, y *metav1.Time) bool {
+				if x == nil {
+					return y == nil
+				}
+				return y != nil
+			})
+			if d := cmp.Diff(c.want, got, ignoreVolatileTime, ensureTimeNotNil); d != "" {
+				t.Errorf("Diff %s", diff.PrintWantGot(d))
+			}
+		})
+	}
+}
+
+func TestMakeTaskRunStatus_StepProvenance(t *testing.T) {
+	for _, c := range []struct {
+		desc      string
+		podStatus corev1.PodStatus
+		pod       corev1.Pod
+		tr        v1.TaskRun
+		want      v1.TaskRunStatus
+	}{{
+		desc: "provenance in step",
+		podStatus: corev1.PodStatus{
+			Phase: corev1.PodSucceeded,
+			ContainerStatuses: []corev1.ContainerStatus{{
+				Name: "step-one",
+				State: corev1.ContainerState{
+					Terminated: &corev1.ContainerStateTerminated{},
+				},
+			}},
+		},
+		tr: v1.TaskRun{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "task-run",
+				Namespace: "foo",
+			},
+			Spec: v1.TaskRunSpec{
+				TaskSpec: &v1.TaskSpec{
+					Steps: []v1.Step{{
+						Name:  "one",
+						Image: "bash",
+					}},
+				},
+			},
+			Status: v1.TaskRunStatus{
+				TaskRunStatusFields: v1.TaskRunStatusFields{
+					Steps: []v1.StepState{{
+						Name: "one",
+						Provenance: &v1.Provenance{RefSource: &v1.RefSource{
+							URI:    "pkg://foo/bar",
+							Digest: map[string]string{"sha256": "digest"},
+						}},
+					}},
+				},
+			},
+		},
+		want: v1.TaskRunStatus{
+			Status: statusSuccess(),
+			TaskRunStatusFields: v1.TaskRunStatusFields{
+				Steps: []v1.StepState{{
+					ContainerState: corev1.ContainerState{
+						Terminated: &corev1.ContainerStateTerminated{},
+					},
+					Name:      "one",
+					Container: "step-one",
+					Results:   []v1.TaskRunResult{},
+					Provenance: &v1.Provenance{RefSource: &v1.RefSource{
+						URI:    "pkg://foo/bar",
+						Digest: map[string]string{"sha256": "digest"},
+					}},
+				}},
+				Sidecars:  []v1.SidecarState{},
+				Artifacts: &v1.Artifacts{},
+				// We don't actually care about the time, just that it's not nil
+				CompletionTime: &metav1.Time{Time: time.Now()},
+			},
+		},
+	}, {
+		desc: "provenance in some steps",
+		podStatus: corev1.PodStatus{
+			Phase: corev1.PodSucceeded,
+			ContainerStatuses: []corev1.ContainerStatus{{
+				Name: "step-one",
+				State: corev1.ContainerState{
+					Terminated: &corev1.ContainerStateTerminated{},
+				},
+			}, {
+				Name: "step-two",
+				State: corev1.ContainerState{
+					Terminated: &corev1.ContainerStateTerminated{},
+				},
+			}},
+		},
+		tr: v1.TaskRun{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "task-run",
+				Namespace: "foo",
+			},
+			Spec: v1.TaskRunSpec{
+				TaskSpec: &v1.TaskSpec{
+					Steps: []v1.Step{{
+						Name:  "one",
+						Image: "bash",
+					}, {
+						Name:  "two",
+						Image: "bash",
+					}},
+				},
+			},
+			Status: v1.TaskRunStatus{
+				TaskRunStatusFields: v1.TaskRunStatusFields{
+					Steps: []v1.StepState{{
+						Name: "one",
+						Provenance: &v1.Provenance{RefSource: &v1.RefSource{
+							URI:    "pkg://foo/bar",
+							Digest: map[string]string{"sha256": "digest"},
+						}},
+					}},
+				},
+			},
+		},
+		want: v1.TaskRunStatus{
+			Status: statusSuccess(),
+			TaskRunStatusFields: v1.TaskRunStatusFields{
+				Steps: []v1.StepState{{
+					ContainerState: corev1.ContainerState{
+						Terminated: &corev1.ContainerStateTerminated{},
+					},
+					Name:      "one",
+					Container: "step-one",
+					Results:   []v1.TaskRunResult{},
+					Provenance: &v1.Provenance{RefSource: &v1.RefSource{
+						URI:    "pkg://foo/bar",
+						Digest: map[string]string{"sha256": "digest"},
+					}},
+				}, {
+					ContainerState: corev1.ContainerState{
+						Terminated: &corev1.ContainerStateTerminated{},
+					},
+					Name:      "two",
+					Container: "step-two",
+					Results:   []v1.TaskRunResult{},
+				}},
+				Sidecars:  []v1.SidecarState{},
+				Artifacts: &v1.Artifacts{},
+				// We don't actually care about the time, just that it's not nil
+				CompletionTime: &metav1.Time{Time: time.Now()},
+			},
+		},
+	}} {
+		t.Run(c.desc, func(t *testing.T) {
+			now := metav1.Now()
+			if cmp.Diff(c.pod, corev1.Pod{}) == "" {
+				c.pod = corev1.Pod{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:              "pod",
+						Namespace:         "foo",
+						CreationTimestamp: now,
+					},
+					Status: c.podStatus,
+				}
+			}
+
+			logger, _ := logging.NewLogger("", "status")
+			kubeclient := fakek8s.NewSimpleClientset()
+			got, err := MakeTaskRunStatus(t.Context(), logger, c.tr, &c.pod, kubeclient, c.tr.Spec.TaskSpec)
 			if err != nil {
 				t.Errorf("MakeTaskRunResult: %s", err)
 			}
@@ -474,34 +711,64 @@ func TestMakeTaskRunStatus_StepArtifacts(t *testing.T) {
 						ContainerState: corev1.ContainerState{
 							Terminated: &corev1.ContainerStateTerminated{
 								Message: `[{"key":"/tekton/run/0/status/artifacts/provenance.json","value":"{\n  \"inputs\":[\n    {\n      \"name\":\"input-artifacts\",\n      \"values\":[\n        {\n          \"uri\":\"git:jjjsss\",\n          \"digest\":{\n            \"sha256\":\"b35cacccfdb1e24dc497d15d553891345fd155713ffe647c281c583269eaaae0\"\n          }\n        }\n      ]\n    }\n  ],\n  \"outputs\":[\n    {\n      \"name\":\"build-results\",\n      \"values\":[\n        {\n          \"uri\":\"pkg:balba\",\n          \"digest\":{\n            \"sha256\":\"df85b9e3983fe2ce20ef76ad675ecf435cc99fc9350adc54fa230bae8c32ce48\",\n            \"sha1\":\"95588b8f34c31eb7d62c92aaa4e6506639b06ef2\"\n          }\n        }\n      ]\n    }\n  ]\n}\n","type":5}]`,
-							}},
+							},
+						},
 						Name:      "one",
 						Container: "step-one",
 						Inputs: []v1.Artifact{
 							{
 								Name: "input-artifacts",
-								Values: []v1.ArtifactValue{{
-									Digest: map[v1.Algorithm]string{"sha256": "b35cacccfdb1e24dc497d15d553891345fd155713ffe647c281c583269eaaae0"},
-									Uri:    "git:jjjsss",
-								},
+								Values: []v1.ArtifactValue{
+									{
+										Digest: map[v1.Algorithm]string{"sha256": "b35cacccfdb1e24dc497d15d553891345fd155713ffe647c281c583269eaaae0"},
+										Uri:    "git:jjjsss",
+									},
 								},
 							},
 						},
 						Outputs: []v1.Artifact{
 							{
 								Name: "build-results",
-								Values: []v1.ArtifactValue{{
-									Digest: map[v1.Algorithm]string{
-										"sha1":   "95588b8f34c31eb7d62c92aaa4e6506639b06ef2",
-										"sha256": "df85b9e3983fe2ce20ef76ad675ecf435cc99fc9350adc54fa230bae8c32ce48",
+								Values: []v1.ArtifactValue{
+									{
+										Digest: map[v1.Algorithm]string{
+											"sha1":   "95588b8f34c31eb7d62c92aaa4e6506639b06ef2",
+											"sha256": "df85b9e3983fe2ce20ef76ad675ecf435cc99fc9350adc54fa230bae8c32ce48",
+										},
+										Uri: "pkg:balba",
 									},
-									Uri: "pkg:balba",
-								},
 								},
 							},
 						},
 						Results: []v1.TaskRunResult{},
 					}},
+					Artifacts: &v1.Artifacts{
+						Inputs: []v1.Artifact{
+							{
+								Name: "input-artifacts",
+								Values: []v1.ArtifactValue{
+									{
+										Digest: map[v1.Algorithm]string{"sha256": "b35cacccfdb1e24dc497d15d553891345fd155713ffe647c281c583269eaaae0"},
+										Uri:    "git:jjjsss",
+									},
+								},
+							},
+						},
+						Outputs: []v1.Artifact{
+							{
+								Name: "build-results",
+								Values: []v1.ArtifactValue{
+									{
+										Digest: map[v1.Algorithm]string{
+											"sha1":   "95588b8f34c31eb7d62c92aaa4e6506639b06ef2",
+											"sha256": "df85b9e3983fe2ce20ef76ad675ecf435cc99fc9350adc54fa230bae8c32ce48",
+										},
+										Uri: "pkg:balba",
+									},
+								},
+							},
+						},
+					},
 					Sidecars: []v1.SidecarState{},
 					// We don't actually care about the time, just that it's not nil
 					CompletionTime: &metav1.Time{Time: time.Now()},
@@ -524,7 +791,7 @@ func TestMakeTaskRunStatus_StepArtifacts(t *testing.T) {
 
 			logger, _ := logging.NewLogger("", "status")
 			kubeclient := fakek8s.NewSimpleClientset()
-			got, err := MakeTaskRunStatus(context.Background(), logger, c.tr, &c.pod, kubeclient, c.tr.Spec.TaskSpec)
+			got, err := MakeTaskRunStatus(t.Context(), logger, c.tr, &c.pod, kubeclient, c.tr.Spec.TaskSpec)
 			if err != nil {
 				t.Errorf("MakeTaskRunResult: %s", err)
 			}
@@ -547,18 +814,17 @@ func TestMakeTaskRunStatus_StepArtifacts(t *testing.T) {
 
 func TestMakeTaskRunStatus(t *testing.T) {
 	for _, c := range []struct {
-		desc      string
-		podStatus corev1.PodStatus
-		pod       corev1.Pod
-		want      v1.TaskRunStatus
+		desc       string
+		podStatus  corev1.PodStatus
+		pod        corev1.Pod
+		stepStates []v1.StepState
+		want       v1.TaskRunStatus
 	}{{
 		desc:      "empty",
 		podStatus: corev1.PodStatus{},
-
 		want: v1.TaskRunStatus{
 			Status: statusRunning(),
 			TaskRunStatusFields: v1.TaskRunStatusFields{
-				Steps:    []v1.StepState{},
 				Sidecars: []v1.SidecarState{},
 			},
 		},
@@ -586,11 +852,13 @@ func TestMakeTaskRunStatus(t *testing.T) {
 					ContainerState: corev1.ContainerState{
 						Terminated: &corev1.ContainerStateTerminated{
 							ExitCode: 123,
-						}},
+						},
+					},
 					Name:      "state-name",
 					Container: "step-state-name",
 				}},
-				Sidecars: []v1.SidecarState{},
+				Sidecars:  []v1.SidecarState{},
+				Artifacts: nil,
 			},
 		},
 	}, {
@@ -620,12 +888,14 @@ func TestMakeTaskRunStatus(t *testing.T) {
 					ContainerState: corev1.ContainerState{
 						Terminated: &corev1.ContainerStateTerminated{
 							ExitCode: 123,
-						}},
+						},
+					},
 					Name:      "state-name",
 					Container: "step-state-name",
 					ImageID:   "image-id",
 				}},
-				Sidecars: []v1.SidecarState{},
+				Sidecars:  []v1.SidecarState{},
+				Artifacts: nil,
 			},
 		},
 	}, {
@@ -649,12 +919,14 @@ func TestMakeTaskRunStatus(t *testing.T) {
 					ContainerState: corev1.ContainerState{
 						Terminated: &corev1.ContainerStateTerminated{
 							ExitCode: 0,
-						}},
+						},
+					},
 					Name:      "step-push",
 					Container: "step-step-push",
 					ImageID:   "image-id",
 				}},
-				Sidecars: []v1.SidecarState{},
+				Sidecars:  []v1.SidecarState{},
+				Artifacts: &v1.Artifacts{},
 				// We don't actually care about the time, just that it's not nil
 				CompletionTime: &metav1.Time{Time: time.Now()},
 			},
@@ -708,13 +980,15 @@ func TestMakeTaskRunStatus(t *testing.T) {
 					ContainerState: corev1.ContainerState{
 						Terminated: &corev1.ContainerStateTerminated{
 							ExitCode: 123,
-						}},
+						},
+					},
 
 					Name:      "failure",
 					Container: "step-failure",
 					ImageID:   "image-id",
 				}},
-				Sidecars: []v1.SidecarState{},
+				Sidecars:  []v1.SidecarState{},
+				Artifacts: &v1.Artifacts{},
 				// We don't actually care about the time, just that it's not nil
 				CompletionTime: &metav1.Time{Time: time.Now()},
 			},
@@ -728,8 +1002,8 @@ func TestMakeTaskRunStatus(t *testing.T) {
 		want: v1.TaskRunStatus{
 			Status: statusFailure(v1.TaskRunReasonFailed.String(), "boom"),
 			TaskRunStatusFields: v1.TaskRunStatusFields{
-				Steps:    []v1.StepState{},
-				Sidecars: []v1.SidecarState{},
+				Sidecars:  []v1.SidecarState{},
+				Artifacts: &v1.Artifacts{},
 				// We don't actually care about the time, just that it's not nil
 				CompletionTime: &metav1.Time{Time: time.Now()},
 			},
@@ -757,12 +1031,14 @@ func TestMakeTaskRunStatus(t *testing.T) {
 						Terminated: &corev1.ContainerStateTerminated{
 							Reason:   "OOMKilled",
 							ExitCode: 0,
-						}},
+						},
+					},
 					Name:      "step-push",
 					Container: "step-step-push",
 					ImageID:   "image-id",
 				}},
-				Sidecars: []v1.SidecarState{},
+				Sidecars:  []v1.SidecarState{},
+				Artifacts: &v1.Artifacts{},
 				// We don't actually care about the time, just that it's not nil
 				CompletionTime: &metav1.Time{Time: time.Now()},
 			},
@@ -773,8 +1049,8 @@ func TestMakeTaskRunStatus(t *testing.T) {
 		want: v1.TaskRunStatus{
 			Status: statusFailure(v1.TaskRunReasonFailed.String(), "build failed for unspecified reasons."),
 			TaskRunStatusFields: v1.TaskRunStatusFields{
-				Steps:    []v1.StepState{},
-				Sidecars: []v1.SidecarState{},
+				Sidecars:  []v1.SidecarState{},
+				Artifacts: &v1.Artifacts{},
 				// We don't actually care about the time, just that it's not nil
 				CompletionTime: &metav1.Time{Time: time.Now()},
 			},
@@ -823,7 +1099,6 @@ func TestMakeTaskRunStatus(t *testing.T) {
 		want: v1.TaskRunStatus{
 			Status: statusPending("Pending", `pod status "the type":"Unknown"; message: "the message"`),
 			TaskRunStatusFields: v1.TaskRunStatusFields{
-				Steps:    []v1.StepState{},
 				Sidecars: []v1.SidecarState{},
 			},
 		},
@@ -836,7 +1111,6 @@ func TestMakeTaskRunStatus(t *testing.T) {
 		want: v1.TaskRunStatus{
 			Status: statusPending("Pending", "pod status message"),
 			TaskRunStatusFields: v1.TaskRunStatusFields{
-				Steps:    []v1.StepState{},
 				Sidecars: []v1.SidecarState{},
 			},
 		},
@@ -846,7 +1120,6 @@ func TestMakeTaskRunStatus(t *testing.T) {
 		want: v1.TaskRunStatus{
 			Status: statusPending("Pending", "Pending"),
 			TaskRunStatusFields: v1.TaskRunStatusFields{
-				Steps:    []v1.StepState{},
 				Sidecars: []v1.SidecarState{},
 			},
 		},
@@ -862,7 +1135,6 @@ func TestMakeTaskRunStatus(t *testing.T) {
 		want: v1.TaskRunStatus{
 			Status: statusPending(ReasonExceededNodeResources, "TaskRun Pod exceeded available resources"),
 			TaskRunStatusFields: v1.TaskRunStatusFields{
-				Steps:    []v1.StepState{},
 				Sidecars: []v1.SidecarState{},
 			},
 		},
@@ -881,8 +1153,8 @@ func TestMakeTaskRunStatus(t *testing.T) {
 		want: v1.TaskRunStatus{
 			Status: statusFailure(ReasonCreateContainerConfigError, "Failed to create pod due to config error"),
 			TaskRunStatusFields: v1.TaskRunStatusFields{
-				Steps:    []v1.StepState{},
-				Sidecars: []v1.SidecarState{},
+				Sidecars:  []v1.SidecarState{},
+				Artifacts: &v1.Artifacts{},
 			},
 		},
 	}, {
@@ -1039,11 +1311,13 @@ func TestMakeTaskRunStatus(t *testing.T) {
 					ContainerState: corev1.ContainerState{
 						Terminated: &corev1.ContainerStateTerminated{
 							Message: `[{"key":"digest","value":"sha256:12345","resourceName":"source-image"}]`,
-						}},
+						},
+					},
 					Name:      "foo",
 					Container: "step-foo",
 				}},
-				Sidecars: []v1.SidecarState{},
+				Sidecars:  []v1.SidecarState{},
+				Artifacts: &v1.Artifacts{},
 				// We don't actually care about the time, just that it's not nil
 				CompletionTime: &metav1.Time{Time: time.Now()},
 			},
@@ -1068,11 +1342,13 @@ func TestMakeTaskRunStatus(t *testing.T) {
 					ContainerState: corev1.ContainerState{
 						Terminated: &corev1.ContainerStateTerminated{
 							Message: `[{"key":"digest","value":"sha256:1234","resourceName":"source-image"},{"key":"resultName","value":"resultValue","type":1}]`,
-						}},
+						},
+					},
 					Name:      "bar",
 					Container: "step-bar",
 				}},
-				Sidecars: []v1.SidecarState{},
+				Sidecars:  []v1.SidecarState{},
+				Artifacts: &v1.Artifacts{},
 				Results: []v1.TaskRunResult{{
 					Name:  "resultName",
 					Type:  v1.ResultsTypeString,
@@ -1102,11 +1378,13 @@ func TestMakeTaskRunStatus(t *testing.T) {
 					ContainerState: corev1.ContainerState{
 						Terminated: &corev1.ContainerStateTerminated{
 							Message: `[{"key":"digest","value":"sha256:1234","resourceName":"source-image"},{"key":"resultName","value":"resultValue","type":1}]`,
-						}},
+						},
+					},
 					Name:      "banana",
 					Container: "step-banana",
 				}},
-				Sidecars: []v1.SidecarState{},
+				Sidecars:  []v1.SidecarState{},
+				Artifacts: &v1.Artifacts{},
 				Results: []v1.TaskRunResult{{
 					Name:  "resultName",
 					Type:  v1.ResultsTypeString,
@@ -1143,18 +1421,21 @@ func TestMakeTaskRunStatus(t *testing.T) {
 					ContainerState: corev1.ContainerState{
 						Terminated: &corev1.ContainerStateTerminated{
 							Message: `[{"key":"resultNameOne","value":"resultValueOne","type":1},{"key":"resultNameTwo","value":"resultValueTwo","type":1}]`,
-						}},
+						},
+					},
 					Name:      "one",
 					Container: "step-one",
 				}, {
 					ContainerState: corev1.ContainerState{
 						Terminated: &corev1.ContainerStateTerminated{
 							Message: `[{"key":"resultNameOne","value":"resultValueThree","type":1},{"key":"resultNameTwo","value":"resultValueTwo","type":1}]`,
-						}},
+						},
+					},
 					Name:      "two",
 					Container: "step-two",
 				}},
-				Sidecars: []v1.SidecarState{},
+				Sidecars:  []v1.SidecarState{},
+				Artifacts: &v1.Artifacts{},
 				Results: []v1.TaskRunResult{{
 					Name:  "resultNameOne",
 					Type:  v1.ResultsTypeString,
@@ -1164,6 +1445,46 @@ func TestMakeTaskRunStatus(t *testing.T) {
 					Type:  v1.ResultsTypeString,
 					Value: *v1.NewStructuredValues("resultValueTwo"),
 				}},
+				// We don't actually care about the time, just that it's not nil
+				CompletionTime: &metav1.Time{Time: time.Now()},
+			},
+		},
+	}, {
+		desc: "oom occurred in the pod",
+		podStatus: corev1.PodStatus{
+			Phase: corev1.PodRunning,
+			ContainerStatuses: []corev1.ContainerStatus{{
+				Name: "step-one",
+				State: corev1.ContainerState{
+					Terminated: &corev1.ContainerStateTerminated{
+						Reason:   oomKilled,
+						ExitCode: 137,
+					},
+				},
+			}, {
+				Name:  "step-two",
+				State: corev1.ContainerState{},
+			}},
+		},
+		want: v1.TaskRunStatus{
+			Status: statusFailure(v1.TaskRunReasonFailed.String(), "\"step-one\" exited with code 137: OOMKilled"),
+			TaskRunStatusFields: v1.TaskRunStatusFields{
+				Steps: []v1.StepState{{
+					ContainerState: corev1.ContainerState{
+						Terminated: &corev1.ContainerStateTerminated{
+							Reason:   oomKilled,
+							ExitCode: 137,
+						},
+					},
+					Name:      "one",
+					Container: "step-one",
+				}, {
+					ContainerState: corev1.ContainerState{},
+					Name:           "two",
+					Container:      "step-two",
+				}},
+				Sidecars:  []v1.SidecarState{},
+				Artifacts: &v1.Artifacts{},
 				// We don't actually care about the time, just that it's not nil
 				CompletionTime: &metav1.Time{Time: time.Now()},
 			},
@@ -1194,6 +1515,7 @@ func TestMakeTaskRunStatus(t *testing.T) {
 					Container: "step-task-result",
 				}},
 				Sidecars:       []v1.SidecarState{},
+				Artifacts:      &v1.Artifacts{},
 				CompletionTime: &metav1.Time{Time: time.Now()},
 				Results: []v1.TaskRunResult{{
 					Name:  "resultName",
@@ -1218,11 +1540,13 @@ func TestMakeTaskRunStatus(t *testing.T) {
 			TaskRunStatusFields: v1.TaskRunStatusFields{
 				Steps: []v1.StepState{{
 					ContainerState: corev1.ContainerState{
-						Terminated: &corev1.ContainerStateTerminated{}},
+						Terminated: &corev1.ContainerStateTerminated{},
+					},
 					Name:      "mango",
 					Container: "step-mango",
 				}},
-				Sidecars: []v1.SidecarState{},
+				Sidecars:  []v1.SidecarState{},
+				Artifacts: &v1.Artifacts{},
 				// We don't actually care about the time, just that it's not nil
 				CompletionTime: &metav1.Time{Time: time.Now()},
 			},
@@ -1245,11 +1569,13 @@ func TestMakeTaskRunStatus(t *testing.T) {
 			TaskRunStatusFields: v1.TaskRunStatusFields{
 				Steps: []v1.StepState{{
 					ContainerState: corev1.ContainerState{
-						Terminated: &corev1.ContainerStateTerminated{}},
+						Terminated: &corev1.ContainerStateTerminated{},
+					},
 					Name:      "pineapple",
 					Container: "step-pineapple",
 				}},
-				Sidecars: []v1.SidecarState{},
+				Sidecars:  []v1.SidecarState{},
+				Artifacts: &v1.Artifacts{},
 				// We don't actually care about the time, just that it's not nil
 				CompletionTime: &metav1.Time{Time: time.Now()},
 			},
@@ -1262,7 +1588,8 @@ func TestMakeTaskRunStatus(t *testing.T) {
 				Name: "step-pear",
 				State: corev1.ContainerState{
 					Terminated: &corev1.ContainerStateTerminated{
-						Message: `[{"key":"resultNameOne","value":"","type":3}, {"key":"resultNameThree","value":"","type":1}]`},
+						Message: `[{"key":"resultNameOne","value":"","type":3}, {"key":"resultNameThree","value":"","type":1}]`,
+					},
 				},
 			}},
 		},
@@ -1273,11 +1600,13 @@ func TestMakeTaskRunStatus(t *testing.T) {
 					ContainerState: corev1.ContainerState{
 						Terminated: &corev1.ContainerStateTerminated{
 							Message: `[{"key":"resultNameThree","value":"","type":1}]`,
-						}},
+						},
+					},
 					Name:      "pear",
 					Container: "step-pear",
 				}},
-				Sidecars: []v1.SidecarState{},
+				Sidecars:  []v1.SidecarState{},
+				Artifacts: &v1.Artifacts{},
 				Results: []v1.TaskRunResult{{
 					Name:  "resultNameThree",
 					Type:  v1.ResultsTypeString,
@@ -1307,11 +1636,13 @@ func TestMakeTaskRunStatus(t *testing.T) {
 					ContainerState: corev1.ContainerState{
 						Terminated: &corev1.ContainerStateTerminated{
 							Message: `[{"key":"resultNameThree","value":"","type":1}]`,
-						}},
+						},
+					},
 					Name:      "pear",
 					Container: "step-pear",
 				}},
-				Sidecars: []v1.SidecarState{},
+				Sidecars:  []v1.SidecarState{},
+				Artifacts: &v1.Artifacts{},
 				Results: []v1.TaskRunResult{{
 					Name:  "resultNameThree",
 					Type:  v1.ResultsTypeString,
@@ -1381,26 +1712,162 @@ func TestMakeTaskRunStatus(t *testing.T) {
 					Container: "step-first",
 				}, {
 					ContainerState: corev1.ContainerState{
-						Terminated: &corev1.ContainerStateTerminated{}},
+						Terminated: &corev1.ContainerStateTerminated{},
+					},
 					Name:      "second",
 					Container: "step-second",
 				}, {
 					ContainerState: corev1.ContainerState{
-						Terminated: &corev1.ContainerStateTerminated{}},
+						Terminated: &corev1.ContainerStateTerminated{},
+					},
 					Name:      "third",
 					Container: "step-third",
 				}, {
 					ContainerState: corev1.ContainerState{
-						Terminated: &corev1.ContainerStateTerminated{}},
+						Terminated: &corev1.ContainerStateTerminated{},
+					},
 					Name:      "",
 					Container: "step-",
 				}, {
 					ContainerState: corev1.ContainerState{
-						Terminated: &corev1.ContainerStateTerminated{}},
+						Terminated: &corev1.ContainerStateTerminated{},
+					},
 					Name:      "fourth",
 					Container: "step-fourth",
 				}},
-				Sidecars: []v1.SidecarState{},
+				Sidecars:  []v1.SidecarState{},
+				Artifacts: &v1.Artifacts{},
+				// We don't actually care about the time, just that it's not nil
+				CompletionTime: &metav1.Time{Time: time.Now()},
+			},
+		},
+	}, {
+		desc: "TaskRun status steps ordering based on pod spec containers",
+		pod: corev1.Pod{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: "pod",
+			},
+			Spec: corev1.PodSpec{
+				Containers: []corev1.Container{{
+					Name: "step-first-inline",
+				}, {
+					Name: "step-second-remote",
+				}, {
+					Name: "step-third-inline",
+				}, {
+					Name: "step--inline",
+				}, {
+					Name: "step-fourth-remote",
+				}, {
+					Name: "step-fifth-remote",
+				}},
+			},
+			Status: corev1.PodStatus{
+				Phase: corev1.PodSucceeded,
+				ContainerStatuses: []corev1.ContainerStatus{{
+					Name: "step-second-remote",
+					State: corev1.ContainerState{
+						Terminated: &corev1.ContainerStateTerminated{},
+					},
+				}, {
+					Name: "step-fourth-remote",
+					State: corev1.ContainerState{
+						Terminated: &corev1.ContainerStateTerminated{},
+					},
+				}, {
+					Name: "step--inline",
+					State: corev1.ContainerState{
+						Terminated: &corev1.ContainerStateTerminated{},
+					},
+				}, {
+					Name: "step-first-inline",
+					State: corev1.ContainerState{
+						Terminated: &corev1.ContainerStateTerminated{},
+					},
+				}, {
+					Name: "step-fifth-remote",
+					State: corev1.ContainerState{
+						Terminated: &corev1.ContainerStateTerminated{},
+					},
+				}, {
+					Name: "step-third-inline",
+					State: corev1.ContainerState{
+						Terminated: &corev1.ContainerStateTerminated{},
+					},
+				}},
+			},
+		},
+		stepStates: []v1.StepState{
+			{
+				Name: "second-remote",
+				Provenance: &v1.Provenance{
+					RefSource: &v1.RefSource{
+						URI:    "test-uri",
+						Digest: map[string]string{"sha256": "digest"},
+					},
+				},
+			},
+			{
+				Name: "fourth-remote",
+			},
+			{
+				Name: "fifth-remote",
+				Provenance: &v1.Provenance{
+					RefSource: nil,
+				},
+			},
+		},
+		want: v1.TaskRunStatus{
+			Status: statusSuccess(),
+			TaskRunStatusFields: v1.TaskRunStatusFields{
+				Steps: []v1.StepState{{
+					ContainerState: corev1.ContainerState{
+						Terminated: &corev1.ContainerStateTerminated{},
+					},
+					Name:      "first-inline",
+					Container: "step-first-inline",
+				}, {
+					ContainerState: corev1.ContainerState{
+						Terminated: &corev1.ContainerStateTerminated{},
+					},
+					Name:      "second-remote",
+					Container: "step-second-remote",
+					Provenance: &v1.Provenance{
+						RefSource: &v1.RefSource{
+							URI:    "test-uri",
+							Digest: map[string]string{"sha256": "digest"},
+						},
+					},
+				}, {
+					ContainerState: corev1.ContainerState{
+						Terminated: &corev1.ContainerStateTerminated{},
+					},
+					Name:      "third-inline",
+					Container: "step-third-inline",
+				}, {
+					ContainerState: corev1.ContainerState{
+						Terminated: &corev1.ContainerStateTerminated{},
+					},
+					Name:      "-inline",
+					Container: "step--inline",
+				}, {
+					ContainerState: corev1.ContainerState{
+						Terminated: &corev1.ContainerStateTerminated{},
+					},
+					Name:      "fourth-remote",
+					Container: "step-fourth-remote",
+				}, {
+					ContainerState: corev1.ContainerState{
+						Terminated: &corev1.ContainerStateTerminated{},
+					},
+					Name:      "fifth-remote",
+					Container: "step-fifth-remote",
+					Provenance: &v1.Provenance{
+						RefSource: nil,
+					},
+				}},
+				Sidecars:  []v1.SidecarState{},
+				Artifacts: &v1.Artifacts{},
 				// We don't actually care about the time, just that it's not nil
 				CompletionTime: &metav1.Time{Time: time.Now()},
 			},
@@ -1451,11 +1918,13 @@ func TestMakeTaskRunStatus(t *testing.T) {
 					ContainerState: corev1.ContainerState{
 						Terminated: &corev1.ContainerStateTerminated{
 							ExitCode: 0,
-						}},
+						},
+					},
 					Name:      "second",
 					Container: "step-second",
 				}},
-				Sidecars: []v1.SidecarState{},
+				Sidecars:  []v1.SidecarState{},
+				Artifacts: &v1.Artifacts{},
 				// We don't actually care about the time, just that it's not nil
 				CompletionTime: &metav1.Time{Time: time.Now()},
 			},
@@ -1523,7 +1992,8 @@ func TestMakeTaskRunStatus(t *testing.T) {
 					State: corev1.ContainerState{
 						Terminated: &corev1.ContainerStateTerminated{
 							ExitCode: 1,
-						}},
+						},
+					},
 				}},
 				ContainerStatuses: []corev1.ContainerStatus{{
 					Name:    "step-A",
@@ -1550,6 +2020,7 @@ func TestMakeTaskRunStatus(t *testing.T) {
 					ImageID:   "image-id-A",
 				}},
 				Sidecars:       []v1.SidecarState{},
+				Artifacts:      &v1.Artifacts{},
 				CompletionTime: &metav1.Time{Time: time.Now()},
 			},
 		},
@@ -1572,15 +2043,17 @@ func TestMakeTaskRunStatus(t *testing.T) {
 				Phase:   corev1.PodFailed,
 				Reason:  "Evicted",
 				Message: `Usage of EmptyDir volume "ws-b6dfk" exceeds the limit "10Gi".`,
-				ContainerStatuses: []corev1.ContainerStatus{{
-					Name: "step-A",
-					State: corev1.ContainerState{
-						Terminated: &corev1.ContainerStateTerminated{
-							ExitCode: 137,
+				ContainerStatuses: []corev1.ContainerStatus{
+					{
+						Name: "step-A",
+						State: corev1.ContainerState{
+							Terminated: &corev1.ContainerStateTerminated{
+								ExitCode: 137,
+							},
 						},
 					},
 				},
-				}},
+			},
 		},
 		want: v1.TaskRunStatus{
 			Status: statusFailure(v1.TaskRunReasonFailed.String(), "Usage of EmptyDir volume \"ws-b6dfk\" exceeds the limit \"10Gi\"."),
@@ -1589,11 +2062,13 @@ func TestMakeTaskRunStatus(t *testing.T) {
 					ContainerState: corev1.ContainerState{
 						Terminated: &corev1.ContainerStateTerminated{
 							ExitCode: 137,
-						}},
+						},
+					},
 					Name:      "A",
 					Container: "step-A",
 				}},
 				Sidecars:       []v1.SidecarState{},
+				Artifacts:      &v1.Artifacts{},
 				CompletionTime: &metav1.Time{Time: time.Now()},
 			},
 		},
@@ -1620,12 +2095,13 @@ func TestMakeTaskRunStatus(t *testing.T) {
 				Status: v1.TaskRunStatus{
 					TaskRunStatusFields: v1.TaskRunStatusFields{
 						StartTime: &metav1.Time{Time: startTime},
+						Steps:     c.stepStates,
 					},
 				},
 			}
 			logger, _ := logging.NewLogger("", "status")
 			kubeclient := fakek8s.NewSimpleClientset()
-			got, err := MakeTaskRunStatus(context.Background(), logger, tr, &c.pod, kubeclient, &v1.TaskSpec{})
+			got, err := MakeTaskRunStatus(t.Context(), logger, tr, &c.pod, kubeclient, &v1.TaskSpec{})
 			if err != nil {
 				t.Errorf("MakeTaskRunResult: %s", err)
 			}
@@ -1712,7 +2188,7 @@ func TestMakeRunStatus_OnError(t *testing.T) {
 
 			logger, _ := logging.NewLogger("", "status")
 			kubeclient := fakek8s.NewSimpleClientset()
-			got, err := MakeTaskRunStatus(context.Background(), logger, tr, &pod, kubeclient, &v1.TaskSpec{})
+			got, err := MakeTaskRunStatus(t.Context(), logger, tr, &pod, kubeclient, &v1.TaskSpec{})
 			if err != nil {
 				t.Errorf("Unexpected err in MakeTaskRunResult: %s", err)
 			}
@@ -1836,10 +2312,235 @@ func TestMakeTaskRunStatus_SidecarNotCompleted(t *testing.T) {
 			}
 			logger, _ := logging.NewLogger("", "status")
 			kubeclient := fakek8s.NewSimpleClientset()
-			ctx := config.ToContext(context.Background(), &config.Config{
+			ctx := config.ToContext(t.Context(), &config.Config{
 				FeatureFlags: &config.FeatureFlags{
 					ResultExtractionMethod: config.ResultExtractionMethodSidecarLogs,
 					MaxResultSize:          1024,
+				},
+			})
+			got, _ := MakeTaskRunStatus(ctx, logger, tr, &c.pod, kubeclient, &c.taskSpec)
+			if d := cmp.Diff(c.want.Status, got.Status, ignoreVolatileTime); d != "" {
+				t.Errorf("Unexpected status: %s", diff.PrintWantGot(d))
+			}
+		})
+	}
+}
+
+func TestMakeTaskRunStatus_KubernetesNativeSidecar(t *testing.T) {
+	for _, c := range []struct {
+		desc      string
+		podStatus corev1.PodStatus
+		pod       corev1.Pod
+		taskSpec  v1.TaskSpec
+		want      v1.TaskRunStatus
+	}{{
+		desc: "test sidecar not completed - single sidecar",
+		podStatus: corev1.PodStatus{
+			Phase: corev1.PodRunning,
+			ContainerStatuses: []corev1.ContainerStatus{
+				{
+					Name: "step-foo",
+					State: corev1.ContainerState{
+						Terminated: &corev1.ContainerStateTerminated{
+							Message: `[{"key":"resultName","value":"", "type":1}, {"key":"digest","value":"sha256:1234","resourceName":"source-image"}]`,
+						},
+					},
+				},
+				{
+					Name: "step-bar",
+					State: corev1.ContainerState{
+						Terminated: &corev1.ContainerStateTerminated{
+							Message: `[{"key":"digest","value":"sha256:1234","resourceName":"source-image"}]`,
+						},
+					},
+				}},
+			InitContainerStatuses: []corev1.ContainerStatus{
+				{
+					Name: "sidecar-baz-1",
+					State: corev1.ContainerState{
+						Terminated: nil,
+					},
+				},
+			},
+		},
+		taskSpec: v1.TaskSpec{
+			Steps:    []v1.Step{{Name: "step-foo"}, {Name: "step-bar"}},
+			Sidecars: []v1.Sidecar{{Name: "sidecar-baz"}},
+			Results: []v1.TaskResult{
+				{
+					Name: "resultName",
+					Type: v1.ResultsTypeString,
+				},
+			},
+		},
+		pod: corev1.Pod{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:              "pod",
+				Namespace:         "foo",
+				CreationTimestamp: metav1.Now(),
+			},
+			Spec: corev1.PodSpec{
+				Containers: []corev1.Container{{
+					Name: "step-foo",
+				}, {
+					Name: "step-bar",
+				}},
+				InitContainers: []corev1.Container{{
+					Name: "sidecar-baz-1",
+				}},
+			},
+		},
+		want: v1.TaskRunStatus{
+			Status: statusRunning(),
+		},
+	}, {
+		desc: "test sidecar not completed - two sidecars",
+		podStatus: corev1.PodStatus{
+			Phase: corev1.PodRunning,
+			ContainerStatuses: []corev1.ContainerStatus{
+				{
+					Name: "step-foo",
+					State: corev1.ContainerState{
+						Terminated: &corev1.ContainerStateTerminated{
+							Message: `[{"key":"resultName","value":"", "type":1}, {"key":"digest","value":"sha256:1234","resourceName":"source-image"}]`,
+						},
+					},
+				},
+				{
+					Name: "step-bar",
+					State: corev1.ContainerState{
+						Terminated: &corev1.ContainerStateTerminated{
+							Message: `[{"key":"digest","value":"sha256:1234","resourceName":"source-image"}]`,
+						},
+					},
+				}},
+			InitContainerStatuses: []corev1.ContainerStatus{
+				{
+					Name: "sidecar-baz-1",
+					State: corev1.ContainerState{
+						Terminated: nil,
+					},
+				},
+				{
+					Name: "sidecar-baz-2",
+					State: corev1.ContainerState{
+						Terminated: &corev1.ContainerStateTerminated{
+							ExitCode: 0,
+						},
+					},
+				},
+			},
+		},
+		taskSpec: v1.TaskSpec{
+			Steps:    []v1.Step{{Name: "step-foo"}, {Name: "step-bar"}},
+			Sidecars: []v1.Sidecar{{Name: "sidecar-baz"}},
+			Results: []v1.TaskResult{
+				{
+					Name: "resultName",
+					Type: v1.ResultsTypeString,
+				},
+			},
+		},
+		want: v1.TaskRunStatus{
+			Status: statusRunning(),
+		},
+	}, {
+		desc: "test sidecar already completed",
+		podStatus: corev1.PodStatus{
+			Phase: corev1.PodRunning,
+			ContainerStatuses: []corev1.ContainerStatus{
+				{
+					Name: "step-foo",
+					State: corev1.ContainerState{
+						Terminated: &corev1.ContainerStateTerminated{
+							Message: `[{"key":"digest","value":"sha256:1234","resourceName":"source-image"}]`,
+						},
+					},
+				},
+				{
+					Name: "step-bar",
+					State: corev1.ContainerState{
+						Terminated: &corev1.ContainerStateTerminated{
+							Message: `[{"key":"resultName","value":"", "type":1}, {"key":"digest","value":"sha256:1234","resourceName":"source-image"}]`,
+						},
+					},
+				}},
+			InitContainerStatuses: []corev1.ContainerStatus{
+				{
+					Name: "sidecar-baz-1",
+					State: corev1.ContainerState{
+						Terminated: &corev1.ContainerStateTerminated{
+							ExitCode: 0,
+						},
+					},
+				},
+				{
+					Name: "sidecar-baz-2",
+					State: corev1.ContainerState{
+						Terminated: &corev1.ContainerStateTerminated{
+							ExitCode: 0,
+						},
+					},
+				},
+			},
+		},
+		taskSpec: v1.TaskSpec{
+			Steps:    []v1.Step{{Name: "step-bar"}},
+			Sidecars: []v1.Sidecar{{Name: "sidecar-baz"}},
+			Results: []v1.TaskResult{
+				{
+					Name: "resultName",
+					Type: v1.ResultsTypeString,
+				},
+			},
+		},
+		want: v1.TaskRunStatus{
+			Status: statusSuccess(),
+		},
+	}} {
+		t.Run(c.desc, func(t *testing.T) {
+			if reflect.DeepEqual(c.pod, corev1.Pod{}) {
+				c.pod = corev1.Pod{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:              "pod",
+						Namespace:         "foo",
+						CreationTimestamp: metav1.Now(),
+					},
+					Spec: corev1.PodSpec{
+						Containers: []corev1.Container{{
+							Name: "step-foo",
+						}, {
+							Name: "step-bar",
+						}},
+						InitContainers: []corev1.Container{{
+							Name: "sidecar-baz-1",
+						}, {
+							Name: "sidecar-baz-2",
+						}},
+					},
+				}
+			}
+
+			c.pod.Status = c.podStatus
+
+			tr := v1.TaskRun{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "task-run",
+					Namespace: "foo",
+				},
+				Status: v1.TaskRunStatus{
+					TaskRunStatusFields: v1.TaskRunStatusFields{
+						TaskSpec: &c.taskSpec,
+					},
+				},
+			}
+			logger, _ := logging.NewLogger("", "status")
+			kubeclient := fakek8s.NewSimpleClientset()
+			ctx := config.ToContext(t.Context(), &config.Config{
+				FeatureFlags: &config.FeatureFlags{
+					ResultExtractionMethod:  config.ResultExtractionMethodSidecarLogs,
+					MaxResultSize:           1024,
+					EnableKubernetesSidecar: true,
 				},
 			})
 			got, _ := MakeTaskRunStatus(ctx, logger, tr, &c.pod, kubeclient, &c.taskSpec)
@@ -1885,11 +2586,13 @@ func TestMakeTaskRunStatusAlpha(t *testing.T) {
 					ContainerState: corev1.ContainerState{
 						Terminated: &corev1.ContainerStateTerminated{
 							Message: `[{"key":"digest","value":"sha256:1234","resourceName":"source-image"},{"key":"resultName","value":"","type":1}]`,
-						}},
+						},
+					},
 					Name:      "bar",
 					Container: "step-bar",
 				}},
-				Sidecars: []v1.SidecarState{},
+				Sidecars:  []v1.SidecarState{},
+				Artifacts: &v1.Artifacts{},
 				Results: []v1.TaskRunResult{{
 					Name:  "resultName",
 					Type:  v1.ResultsTypeString,
@@ -1927,11 +2630,13 @@ func TestMakeTaskRunStatusAlpha(t *testing.T) {
 					ContainerState: corev1.ContainerState{
 						Terminated: &corev1.ContainerStateTerminated{
 							Message: `[{"key":"digest","value":"sha256:1234","resourceName":"source-image"},{"key":"resultName","value":"hello","type":1}]`,
-						}},
+						},
+					},
 					Name:      "bar",
 					Container: "step-bar",
 				}},
-				Sidecars: []v1.SidecarState{},
+				Sidecars:  []v1.SidecarState{},
+				Artifacts: &v1.Artifacts{},
 				Results: []v1.TaskRunResult{{
 					Name:  "resultName",
 					Type:  v1.ResultsTypeString,
@@ -1969,11 +2674,13 @@ func TestMakeTaskRunStatusAlpha(t *testing.T) {
 					ContainerState: corev1.ContainerState{
 						Terminated: &corev1.ContainerStateTerminated{
 							Message: `[{"key":"digest","value":"sha256:1234","resourceName":"source-image"},{"key":"resultName","value":"[\"hello\",\"world\"]","type":1}]`,
-						}},
+						},
+					},
 					Name:      "bar",
 					Container: "step-bar",
 				}},
-				Sidecars: []v1.SidecarState{},
+				Sidecars:  []v1.SidecarState{},
+				Artifacts: &v1.Artifacts{},
 				Results: []v1.TaskRunResult{{
 					Name:  "resultName",
 					Type:  v1.ResultsTypeArray,
@@ -2011,11 +2718,13 @@ func TestMakeTaskRunStatusAlpha(t *testing.T) {
 					ContainerState: corev1.ContainerState{
 						Terminated: &corev1.ContainerStateTerminated{
 							Message: `[{"key":"digest","value":"sha256:1234","resourceName":"source-image"},{"key":"resultName","value":"{\"hello\":\"world\"}","type":1}]`,
-						}},
+						},
+					},
 					Name:      "bar",
 					Container: "step-bar",
 				}},
-				Sidecars: []v1.SidecarState{},
+				Sidecars:  []v1.SidecarState{},
+				Artifacts: &v1.Artifacts{},
 				Results: []v1.TaskRunResult{{
 					Name:  "resultName",
 					Type:  v1.ResultsTypeObject,
@@ -2057,11 +2766,13 @@ func TestMakeTaskRunStatusAlpha(t *testing.T) {
 					ContainerState: corev1.ContainerState{
 						Terminated: &corev1.ContainerStateTerminated{
 							Message: `[{"key":"resultName","value":"{\"hello\":\"world\"}","type":1},{"key":"resultName2","value":"[\"hello\",\"world\"]","type":1}]`,
-						}},
+						},
+					},
 					Name:      "bar",
 					Container: "step-bar",
 				}},
-				Sidecars: []v1.SidecarState{},
+				Sidecars:  []v1.SidecarState{},
+				Artifacts: &v1.Artifacts{},
 				Results: []v1.TaskRunResult{{
 					Name:  "resultName",
 					Type:  v1.ResultsTypeString,
@@ -2103,7 +2814,7 @@ func TestMakeTaskRunStatusAlpha(t *testing.T) {
 			}
 			logger, _ := logging.NewLogger("", "status")
 			kubeclient := fakek8s.NewSimpleClientset()
-			got, err := MakeTaskRunStatus(context.Background(), logger, tr, &c.pod, kubeclient, &c.taskSpec)
+			got, err := MakeTaskRunStatus(t.Context(), logger, tr, &c.pod, kubeclient, &c.taskSpec)
 			if err != nil {
 				t.Errorf("MakeTaskRunResult: %s", err)
 			}
@@ -2191,34 +2902,39 @@ func TestMakeRunStatusJSONError(t *testing.T) {
 					Terminated: &corev1.ContainerStateTerminated{
 						ExitCode: 1,
 						Message:  "this is a non-json termination message. dont panic!",
-					}},
+					},
+				},
 				Name:      "non-json",
 				Container: "step-non-json",
 				Results:   []v1.TaskRunResult{},
 				ImageID:   "image",
 			}, {
 				ContainerState: corev1.ContainerState{
-					Terminated: &corev1.ContainerStateTerminated{}},
+					Terminated: &corev1.ContainerStateTerminated{},
+				},
 				Name:      "after-non-json",
 				Container: "step-after-non-json",
 				Results:   []v1.TaskRunResult{},
 				ImageID:   "image",
 			}, {
 				ContainerState: corev1.ContainerState{
-					Terminated: &corev1.ContainerStateTerminated{}},
+					Terminated: &corev1.ContainerStateTerminated{},
+				},
 				Name:      "this-step-might-panic",
 				Container: "step-this-step-might-panic",
 				Results:   []v1.TaskRunResult{},
 				ImageID:   "image",
 			}, {
 				ContainerState: corev1.ContainerState{
-					Terminated: &corev1.ContainerStateTerminated{}},
+					Terminated: &corev1.ContainerStateTerminated{},
+				},
 				Name:      "foo",
 				Container: "step-foo",
 				Results:   []v1.TaskRunResult{},
 				ImageID:   "image",
 			}},
-			Sidecars: []v1.SidecarState{},
+			Sidecars:  []v1.SidecarState{},
+			Artifacts: &v1.Artifacts{},
 			// We don't actually care about the time, just that it's not nil
 			CompletionTime: &metav1.Time{Time: time.Now()},
 		},
@@ -2232,7 +2948,7 @@ func TestMakeRunStatusJSONError(t *testing.T) {
 
 	logger, _ := logging.NewLogger("", "status")
 	kubeclient := fakek8s.NewSimpleClientset()
-	gotTr, err := MakeTaskRunStatus(context.Background(), logger, tr, pod, kubeclient, &v1.TaskSpec{})
+	gotTr, err := MakeTaskRunStatus(t.Context(), logger, tr, pod, kubeclient, &v1.TaskSpec{})
 	if err == nil {
 		t.Error("Expected error, got nil")
 	}
@@ -2409,10 +3125,12 @@ func TestIsPodArchived(t *testing.T) {
 	}, {
 		name:    "Pod is in the retriesStatus",
 		podName: "pod",
-		retriesStatus: []v1.TaskRunStatus{{
-			TaskRunStatusFields: v1.TaskRunStatusFields{
-				PodName: "pod",
-			}},
+		retriesStatus: []v1.TaskRunStatus{
+			{
+				TaskRunStatusFields: v1.TaskRunStatusFields{
+					PodName: "pod",
+				},
+			},
 		},
 		want: true,
 	}} {
@@ -2561,7 +3279,7 @@ func TestGetStepResultsFromSidecarLogs(t *testing.T) {
 		t.Errorf("did not expect an error but got: %v", err)
 	}
 	if d := cmp.Diff(want, got); d != "" {
-		t.Errorf(diff.PrintWantGot(d))
+		t.Error(diff.PrintWantGot(d))
 	}
 }
 
@@ -2576,7 +3294,7 @@ func TestGetStepResultsFromSidecarLogs_Error(t *testing.T) {
 	_, err := getStepResultsFromSidecarLogs(sidecarLogResults, stepName)
 	wantErr := fmt.Errorf("invalid string %s-%s : expected somtthing that looks like <stepName>.<resultName>", stepName, resultName)
 	if d := cmp.Diff(wantErr.Error(), err.Error()); d != "" {
-		t.Errorf(diff.PrintWantGot(d))
+		t.Error(diff.PrintWantGot(d))
 	}
 }
 
@@ -2764,7 +3482,7 @@ func TestGetStepTerminationReasonFromContainerStatus(t *testing.T) {
 			logger, _ := logging.NewLogger("", "status")
 			kubeclient := fakek8s.NewSimpleClientset()
 
-			trs, err := MakeTaskRunStatus(context.Background(), logger, tr, &test.pod, kubeclient, &v1.TaskSpec{})
+			trs, err := MakeTaskRunStatus(t.Context(), logger, tr, &test.pod, kubeclient, &v1.TaskSpec{})
 			if err != nil {
 				t.Errorf("MakeTaskRunResult: %s", err)
 			}
@@ -2800,6 +3518,144 @@ func TestGetTaskResultsFromSidecarLogs(t *testing.T) {
 	}}
 	got := getTaskResultsFromSidecarLogs(sidecarLogResults)
 	if d := cmp.Diff(want, got); d != "" {
-		t.Errorf(diff.PrintWantGot(d))
+		t.Error(diff.PrintWantGot(d))
+	}
+}
+
+func TestIsSubPathDirectoryError(t *testing.T) {
+	tests := []struct {
+		name     string
+		pod      *corev1.Pod
+		expected bool
+	}{
+		{
+			name: "container has subPath directory error",
+			pod: &corev1.Pod{
+				Status: corev1.PodStatus{
+					ContainerStatuses: []corev1.ContainerStatus{
+						{
+							State: corev1.ContainerState{
+								Waiting: &corev1.ContainerStateWaiting{
+									Reason:  "CreateContainerConfigError",
+									Message: "failed to create subPath directory",
+								},
+							},
+						},
+					},
+				},
+			},
+			expected: true,
+		},
+		{
+			name: "container has different config error",
+			pod: &corev1.Pod{
+				Status: corev1.PodStatus{
+					ContainerStatuses: []corev1.ContainerStatus{
+						{
+							State: corev1.ContainerState{
+								Waiting: &corev1.ContainerStateWaiting{
+									Reason:  "CreateContainerConfigError",
+									Message: "some other error",
+								},
+							},
+						},
+					},
+				},
+			},
+			expected: false,
+		},
+		{
+			name: "container is running normally",
+			pod: &corev1.Pod{
+				Status: corev1.PodStatus{
+					ContainerStatuses: []corev1.ContainerStatus{
+						{
+							State: corev1.ContainerState{
+								Running: &corev1.ContainerStateRunning{},
+							},
+						},
+					},
+				},
+			},
+			expected: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := isSubPathDirectoryError(tt.pod)
+			if got != tt.expected {
+				t.Errorf("isSubPathDirectoryError() = %v, want %v", got, tt.expected)
+			}
+		})
+	}
+}
+
+func TestUpdateIncompleteTaskRunStatus_SubPathError(t *testing.T) {
+	tests := []struct {
+		name     string
+		pod      *corev1.Pod
+		trs      *v1.TaskRunStatus
+		expected *apis.Condition
+	}{
+		{
+			name: "subPath directory error should mark as running",
+			pod: &corev1.Pod{
+				Status: corev1.PodStatus{
+					Phase: corev1.PodPending,
+					ContainerStatuses: []corev1.ContainerStatus{
+						{
+							State: corev1.ContainerState{
+								Waiting: &corev1.ContainerStateWaiting{
+									Reason:  "CreateContainerConfigError",
+									Message: "failed to create subPath directory",
+								},
+							},
+						},
+					},
+				},
+			},
+			trs: &v1.TaskRunStatus{},
+			expected: &apis.Condition{
+				Type:    apis.ConditionSucceeded,
+				Status:  corev1.ConditionUnknown,
+				Reason:  "Pending",
+				Message: "Waiting for subPath directory creation to complete",
+			},
+		},
+		{
+			name: "other config error should mark as failure",
+			pod: &corev1.Pod{
+				Status: corev1.PodStatus{
+					Phase: corev1.PodPending,
+					ContainerStatuses: []corev1.ContainerStatus{
+						{
+							State: corev1.ContainerState{
+								Waiting: &corev1.ContainerStateWaiting{
+									Reason:  "CreateContainerConfigError",
+									Message: "some other config error",
+								},
+							},
+						},
+					},
+				},
+			},
+			trs: &v1.TaskRunStatus{},
+			expected: &apis.Condition{
+				Type:    apis.ConditionSucceeded,
+				Status:  corev1.ConditionFalse,
+				Reason:  "CreateContainerConfigError",
+				Message: "Failed to create pod due to config error",
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			updateIncompleteTaskRunStatus(tt.trs, tt.pod)
+			if d := cmp.Diff(tt.expected, tt.trs.GetCondition(apis.ConditionSucceeded), cmpopts.IgnoreFields(apis.Condition{}, "LastTransitionTime.Inner.Time")); d != "" {
+				t.Errorf("Unexpected status: %s", diff.PrintWantGot(d))
+			}
+		})
 	}
 }
