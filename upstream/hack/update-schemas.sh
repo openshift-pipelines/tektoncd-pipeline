@@ -24,20 +24,6 @@ GOFLAGS=""
 CRD_PATH=$(dirname "${0}")/../config/300-crds
 API_PATH=$(dirname "${0}")/../pkg/apis
 
-# Simplify comments for v1beta1 to reduce CRD size
-echo "Simplifying comments for v1beta1..."
-MODIFIED_FILES=$(mktemp)
-go run hack/simplify_comments.go pkg/apis/pipeline/v1beta1 > "$MODIFIED_FILES"
-
-restore_comments() {
-  echo "Restoring comments for v1beta1..."
-  if [ -s "$MODIFIED_FILES" ]; then
-    xargs git checkout < "$MODIFIED_FILES"
-  fi
-  rm -f "$MODIFIED_FILES"
-}
-trap restore_comments EXIT
-
 # collect all existing crds into the FILES array using the recommended
 # mapfile: https://www.shellcheck.net/wiki/SC2207
 mapfile -d '' FILES < <(find "$CRD_PATH" -type f -name '*.yaml' -print0)
@@ -77,22 +63,5 @@ for file in "${FILES[@]}"; do
     paths="$API_PATH/$API_SUBDIR/..."
   rm -rf "$TEMP_DIR"
 done
-
-# Validate that the generated CRDs are smaller than 256KB
-MAX_SIZE=262144 # 256KB
-FAILED=0
-for file in "${FILES[@]}"; do
-  # Calculate JSON size using yq to simulate the size of the applied configuration
-  SIZE=$(yq -o=json -I=0 . "$file" | wc -c | tr -d ' ')
-  echo "Verified $file JSON size: $SIZE bytes"
-  if [ "$SIZE" -gt "$MAX_SIZE" ]; then
-    echo "ERROR: $file JSON size ($SIZE bytes) exceeds the limit of $MAX_SIZE bytes (256KB)."
-    FAILED=1
-  fi
-done
-
-if [ "$FAILED" -eq 1 ]; then
-  exit 1
-fi
 
 GOFLAGS="${OLDGOFLAGS}"

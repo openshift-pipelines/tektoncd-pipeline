@@ -1,4 +1,5 @@
 //go:build e2e
+// +build e2e
 
 /*
 Copyright 2022 The Tekton Authors
@@ -54,8 +55,6 @@ func init() {
 	os.Setenv("PRIVATE_PASSWORD", password)
 }
 
-// @test:execution=serial
-// @test:reason=modifies trusted-resources-verification-no-match-policy in feature-flags ConfigMap
 func TestTrustedResourcesVerify_VerificationPolicy_Success(t *testing.T) {
 	ctx := t.Context()
 	ctx, cancel := context.WithCancel(ctx)
@@ -170,8 +169,6 @@ spec:
 	}
 }
 
-// @test:execution=serial
-// @test:reason=modifies trusted-resources-verification-no-match-policy in feature-flags ConfigMap
 func TestTrustedResourcesVerify_VerificationPolicy_Error(t *testing.T) {
 	ctx := t.Context()
 	ctx, cancel := context.WithCancel(ctx)

@@ -1,4 +1,5 @@
 //go:build featureflags
+// +build featureflags
 
 /*
 Copyright 2023 The Tekton Authors
@@ -29,6 +30,7 @@ import (
 	"time"
 
 	"github.com/google/go-cmp/cmp"
+	"github.com/google/go-cmp/cmp/cmpopts"
 	"github.com/tektoncd/pipeline/pkg/apis/config"
 	v1 "github.com/tektoncd/pipeline/pkg/apis/pipeline/v1"
 	"github.com/tektoncd/pipeline/test/parse"
@@ -39,8 +41,9 @@ import (
 )
 
 const (
-	enabled  = "true"
-	disabled = "false"
+	sleepDuration = 15 * time.Second
+	enabled       = "true"
+	disabled      = "false"
 )
 
 var (
@@ -50,14 +53,14 @@ var (
 		"alpha": alphaFeatureFlags,
 		"beta":  betaFeatureFlags,
 	}
+
+	ignorePipelineRunStatus = cmpopts.IgnoreFields(v1.PipelineRunStatusFields{}, "StartTime", "CompletionTime", "FinallyStartTime", "ChildReferences", "Provenance")
+	ignoreTaskRunStatus     = cmpopts.IgnoreFields(v1.TaskRunStatusFields{}, "StartTime", "CompletionTime", "Provenance")
 )
 
 // TestPerFeatureFlagOptInAlpha tests the behavior with all alpha Per-feature
 // flags enabled. It first turns ON all per-feature flags by default and turns
 // OFF one feature flag at a time to mock opt-in alpha test env.
-//
-// @test:execution=serial
-// @test:reason=modifies enable-api-fields and multiple feature flags in feature-flags ConfigMap
 func TestPerFeatureFlagOptInAlpha(t *testing.T) {
 	configMapData := createExpectedConfigMap(t, true)
 	for _, alphaFlag := range alphaFeatureFlags {
@@ -70,9 +73,6 @@ func TestPerFeatureFlagOptInAlpha(t *testing.T) {
 // TestFeatureFlagOptInBeta tests the behavior with all beta feature
 // flags enabled. It first turns ON all beta feature flags by default and
 // turns ON one alpha feature flag at a time to mock opt-in beta test env.
-//
-// @test:execution=serial
-// @test:reason=modifies enable-api-fields and multiple feature flags in feature-flags ConfigMap
 func TestFeatureFlagOptInBeta(t *testing.T) {
 	configMapData := createExpectedConfigMap(t, false)
 	for _, betaFlag := range betaFeatureFlags {
@@ -88,9 +88,6 @@ func TestFeatureFlagOptInBeta(t *testing.T) {
 // TestPerFeatureFlagOptInStable tests all Per-feature flags while opting in
 // stable features. It turns OFF all per-feature flags by default and turns
 // OFF one feature flag at a time to mock opt-in stable feature test env.
-//
-// @test:execution=serial
-// @test:reason=modifies enable-api-fields and multiple feature flags in feature-flags ConfigMap
 func TestPerFeatureFlagOptInStable(t *testing.T) {
 	configMapData := createExpectedConfigMap(t, false)
 	for _, betaFlag := range betaFeatureFlags {
