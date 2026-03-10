@@ -19,13 +19,13 @@ limitations under the License.
 package v1alpha1
 
 import (
-	"context"
+	context "context"
 	time "time"
 
-	resourcev1alpha1 "github.com/tektoncd/pipeline/pkg/apis/resource/v1alpha1"
+	apisresourcev1alpha1 "github.com/tektoncd/pipeline/pkg/apis/resource/v1alpha1"
 	versioned "github.com/tektoncd/pipeline/pkg/client/resource/clientset/versioned"
 	internalinterfaces "github.com/tektoncd/pipeline/pkg/client/resource/informers/externalversions/internalinterfaces"
-	v1alpha1 "github.com/tektoncd/pipeline/pkg/client/resource/listers/resource/v1alpha1"
+	resourcev1alpha1 "github.com/tektoncd/pipeline/pkg/client/resource/listers/resource/v1alpha1"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	runtime "k8s.io/apimachinery/pkg/runtime"
 	watch "k8s.io/apimachinery/pkg/watch"
@@ -36,7 +36,7 @@ import (
 // PipelineResources.
 type PipelineResourceInformer interface {
 	Informer() cache.SharedIndexInformer
-	Lister() v1alpha1.PipelineResourceLister
+	Lister() resourcev1alpha1.PipelineResourceLister
 }
 
 type pipelineResourceInformer struct {
@@ -62,16 +62,28 @@ func NewFilteredPipelineResourceInformer(client versioned.Interface, namespace s
 				if tweakListOptions != nil {
 					tweakListOptions(&options)
 				}
-				return client.TektonV1alpha1().PipelineResources(namespace).List(context.TODO(), options)
+				return client.TektonV1alpha1().PipelineResources(namespace).List(context.Background(), options)
 			},
 			WatchFunc: func(options v1.ListOptions) (watch.Interface, error) {
 				if tweakListOptions != nil {
 					tweakListOptions(&options)
 				}
-				return client.TektonV1alpha1().PipelineResources(namespace).Watch(context.TODO(), options)
+				return client.TektonV1alpha1().PipelineResources(namespace).Watch(context.Background(), options)
+			},
+			ListWithContextFunc: func(ctx context.Context, options v1.ListOptions) (runtime.Object, error) {
+				if tweakListOptions != nil {
+					tweakListOptions(&options)
+				}
+				return client.TektonV1alpha1().PipelineResources(namespace).List(ctx, options)
+			},
+			WatchFuncWithContext: func(ctx context.Context, options v1.ListOptions) (watch.Interface, error) {
+				if tweakListOptions != nil {
+					tweakListOptions(&options)
+				}
+				return client.TektonV1alpha1().PipelineResources(namespace).Watch(ctx, options)
 			},
 		},
-		&resourcev1alpha1.PipelineResource{},
+		&apisresourcev1alpha1.PipelineResource{},
 		resyncPeriod,
 		indexers,
 	)
@@ -82,9 +94,9 @@ func (f *pipelineResourceInformer) defaultInformer(client versioned.Interface, r
 }
 
 func (f *pipelineResourceInformer) Informer() cache.SharedIndexInformer {
-	return f.factory.InformerFor(&resourcev1alpha1.PipelineResource{}, f.defaultInformer)
+	return f.factory.InformerFor(&apisresourcev1alpha1.PipelineResource{}, f.defaultInformer)
 }
 
-func (f *pipelineResourceInformer) Lister() v1alpha1.PipelineResourceLister {
-	return v1alpha1.NewPipelineResourceLister(f.Informer().GetIndexer())
+func (f *pipelineResourceInformer) Lister() resourcev1alpha1.PipelineResourceLister {
+	return resourcev1alpha1.NewPipelineResourceLister(f.Informer().GetIndexer())
 }

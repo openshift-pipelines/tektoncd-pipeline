@@ -1,5 +1,4 @@
 //go:build featureflags
-// +build featureflags
 
 /*
 Copyright 2023 The Tekton Authors
@@ -30,7 +29,6 @@ import (
 	"time"
 
 	"github.com/google/go-cmp/cmp"
-	"github.com/google/go-cmp/cmp/cmpopts"
 	"github.com/tektoncd/pipeline/pkg/apis/config"
 	v1 "github.com/tektoncd/pipeline/pkg/apis/pipeline/v1"
 	"github.com/tektoncd/pipeline/test/parse"
@@ -41,26 +39,25 @@ import (
 )
 
 const (
-	sleepDuration = 15 * time.Second
-	enabled       = "true"
-	disabled      = "false"
+	enabled  = "true"
+	disabled = "false"
 )
 
 var (
-	alphaFeatureFlags = []string{"enable-param-enum", "enable-step-actions", "keep-pod-enabled-cancel", "enable-cel-in-whenexpression", "enable-artifacts"}
+	alphaFeatureFlags = []string{"enable-param-enum", "keep-pod-enabled-cancel", "enable-cel-in-whenexpression", "enable-artifacts"}
 	betaFeatureFlags  = []string{}
 	perFeatureFlags   = map[string][]string{
 		"alpha": alphaFeatureFlags,
 		"beta":  betaFeatureFlags,
 	}
-
-	ignorePipelineRunStatus = cmpopts.IgnoreFields(v1.PipelineRunStatusFields{}, "StartTime", "CompletionTime", "FinallyStartTime", "ChildReferences", "Provenance")
-	ignoreTaskRunStatus     = cmpopts.IgnoreFields(v1.TaskRunStatusFields{}, "StartTime", "CompletionTime", "Provenance")
 )
 
 // TestPerFeatureFlagOptInAlpha tests the behavior with all alpha Per-feature
 // flags enabled. It first turns ON all per-feature flags by default and turns
 // OFF one feature flag at a time to mock opt-in alpha test env.
+//
+// @test:execution=serial
+// @test:reason=modifies enable-api-fields and multiple feature flags in feature-flags ConfigMap
 func TestPerFeatureFlagOptInAlpha(t *testing.T) {
 	configMapData := createExpectedConfigMap(t, true)
 	for _, alphaFlag := range alphaFeatureFlags {
@@ -70,9 +67,12 @@ func TestPerFeatureFlagOptInAlpha(t *testing.T) {
 	}
 }
 
-// TestPerFeatureFlagOptInBeta tests the behavior with all beta Per-feature
-// flags enabled. It first turns ON all beta per-feature flags by default and
+// TestFeatureFlagOptInBeta tests the behavior with all beta feature
+// flags enabled. It first turns ON all beta feature flags by default and
 // turns ON one alpha feature flag at a time to mock opt-in beta test env.
+//
+// @test:execution=serial
+// @test:reason=modifies enable-api-fields and multiple feature flags in feature-flags ConfigMap
 func TestFeatureFlagOptInBeta(t *testing.T) {
 	configMapData := createExpectedConfigMap(t, false)
 	for _, betaFlag := range betaFeatureFlags {
@@ -88,6 +88,9 @@ func TestFeatureFlagOptInBeta(t *testing.T) {
 // TestPerFeatureFlagOptInStable tests all Per-feature flags while opting in
 // stable features. It turns OFF all per-feature flags by default and turns
 // OFF one feature flag at a time to mock opt-in stable feature test env.
+//
+// @test:execution=serial
+// @test:reason=modifies enable-api-fields and multiple feature flags in feature-flags ConfigMap
 func TestPerFeatureFlagOptInStable(t *testing.T) {
 	configMapData := createExpectedConfigMap(t, false)
 	for _, betaFlag := range betaFeatureFlags {
@@ -124,7 +127,7 @@ func testMinimumEndToEndSubSet(t *testing.T, configMapData map[string]string) {
 // testFanInFanOut tests DAG built with a small fan-in fan-out pipeline and
 // examines the sequence of the PipelineTasks being run.
 func testFanInFanOut(t *testing.T, configMapData map[string]string) {
-	ctx := context.Background()
+	ctx := t.Context()
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	c, namespace := setup(ctx, t)
@@ -152,9 +155,9 @@ spec:
   results:
   - name: result
   steps:
-  - image: busybox
+  - image: mirror.gcr.io/busybox
     script: 'echo $(params["text"])'
-  - image: busybox
+  - image: mirror.gcr.io/busybox
     # Sleep for N seconds so that we can check that tasks that
     # should be run in parallel have overlap.
     script: |
@@ -241,7 +244,7 @@ spec:
 // verifies the TaskRun produced by the Finally Task after a failed TaskRun
 // with its results.
 func testResultsAndFinally(t *testing.T, configMapData map[string]string) {
-	ctx := context.Background()
+	ctx := t.Context()
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	c, namespace := setup(ctx, t)
@@ -269,7 +272,7 @@ spec:
         - name: result1
         steps:
         - name: failing-step
-          image: busybox
+          image: mirror.gcr.io/busybox
           script: 'echo -n 123 | tee $(results.result1.path); exit 1'
     finally:
     - name: finaltask1
@@ -280,7 +283,7 @@ spec:
         params:
         - name: param1
         steps:
-        - image: busybox
+        - image: mirror.gcr.io/busybox
           script: 'echo $(params.param1);exit 0'
 `, helpers.ObjectNameForTest(t)))
 
@@ -326,7 +329,7 @@ spec:
 // testParams tests the parameter propagation by comparing the expected
 // TaskRuns run from the PipelineRun specified in Finally Task.
 func testParams(t *testing.T, configMapData map[string]string) {
-	ctx := context.Background()
+	ctx := t.Context()
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	c, namespace := setup(ctx, t)
@@ -356,14 +359,14 @@ spec:
       taskSpec:
         steps:
         - name: echo
-          image: ubuntu
+          image: mirror.gcr.io/ubuntu
           script: echo $(params.HELLO)
     finally:
     - name: echo-hello-finally
       taskSpec:
         steps:
         - name: echo
-          image: ubuntu
+          image: mirror.gcr.io/ubuntu
           script: echo $(params.HELLO)
 `, namespace))
 
@@ -397,14 +400,14 @@ spec:
         taskSpec:
           steps:
             - name: echo
-              image: ubuntu
+              image: mirror.gcr.io/ubuntu
               script: echo $(params.HELLO)
     finally:
       - name: echo-hello-finally
         taskSpec:
           steps:
             - name: echo
-              image: ubuntu
+              image: mirror.gcr.io/ubuntu
               script: echo $(params.HELLO)
 status:
   pipelineSpec:
@@ -413,14 +416,14 @@ status:
         taskSpec:
           steps:
             - name: echo
-              image: ubuntu
+              image: mirror.gcr.io/ubuntu
               script: echo Hello World!
     finally:
       - name: echo-hello-finally
         taskSpec:
           steps:
             - name: echo
-              image: ubuntu
+              image: mirror.gcr.io/ubuntu
               script: echo Hello World!
 `, namespace))
 
@@ -443,7 +446,7 @@ spec:
   taskSpec:
     steps:
       - name: echo
-        image: ubuntu
+        image: mirror.gcr.io/ubuntu
         script: echo Hello World!
 status:
    podName: propagated-parameters-fully-echo-hello-pod
@@ -453,7 +456,7 @@ status:
    taskSpec:
      steps:
        - name: echo
-         image: ubuntu
+         image: mirror.gcr.io/ubuntu
          script: echo Hello World!
 `, namespace))
 
@@ -466,7 +469,7 @@ spec:
   taskSpec:
     steps:
       - name: echo
-        image: ubuntu
+        image: mirror.gcr.io/ubuntu
         script: echo Hello World!
 status:
    podName: propagated-parameters-fully-echo-hello-finally-pod
@@ -476,7 +479,7 @@ status:
    taskSpec:
      steps:
        - name: echo
-         image: ubuntu
+         image: mirror.gcr.io/ubuntu
          script: echo Hello World!
 `, namespace))
 

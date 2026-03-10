@@ -22,6 +22,8 @@ import (
 	"fmt"
 	"testing"
 
+	"knative.dev/pkg/ptr"
+
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
 	"github.com/tektoncd/pipeline/pkg/apis/config"
@@ -30,6 +32,7 @@ import (
 	"github.com/tektoncd/pipeline/pkg/apis/pipeline/pod"
 	v1 "github.com/tektoncd/pipeline/pkg/apis/pipeline/v1"
 	aa "github.com/tektoncd/pipeline/pkg/internal/affinityassistant"
+	pipelinePod "github.com/tektoncd/pipeline/pkg/pod"
 	"github.com/tektoncd/pipeline/pkg/reconciler/volumeclaim"
 	"github.com/tektoncd/pipeline/pkg/workspace"
 	"github.com/tektoncd/pipeline/test/diff"
@@ -49,11 +52,29 @@ import (
 	_ "knative.dev/pkg/system/testing" // Setup system.Namespace()
 )
 
-var podSpecFilter cmp.Option = cmpopts.IgnoreFields(corev1.PodSpec{}, "Containers", "Affinity")
-var podTemplateSpecFilter cmp.Option = cmpopts.IgnoreFields(corev1.PodTemplateSpec{}, "ObjectMeta")
+var (
+	podSpecFilter         cmp.Option = cmpopts.IgnoreFields(corev1.PodSpec{}, "Affinity")
+	podTemplateSpecFilter cmp.Option = cmpopts.IgnoreFields(corev1.PodTemplateSpec{}, "ObjectMeta")
+	podContainerFilter    cmp.Option = cmpopts.IgnoreFields(corev1.Container{}, "Resources", "Args", "VolumeMounts")
 
-var workspacePVCName = "test-workspace-pvc"
-var workspaceVolumeClaimTemplateName = "test-workspace-vct"
+	containerConfigWithoutSecurityContext = aa.ContainerConfig{
+		Image: "nginx",
+		SecurityContextConfig: pipelinePod.SecurityContextConfig{
+			SetSecurityContext:        false,
+			SetReadOnlyRootFilesystem: false,
+		},
+	}
+
+	securityContextConfigEnabledWithReadOnlyRootFilesystem = pipelinePod.SecurityContextConfig{
+		SetSecurityContext:        true,
+		SetReadOnlyRootFilesystem: true,
+	}
+)
+
+var (
+	workspacePVCName                 = "test-workspace-pvc"
+	workspaceVolumeClaimTemplateName = "test-workspace-vct"
+)
 
 var testPRWithPVC = &v1.PipelineRun{
 	TypeMeta: metav1.TypeMeta{Kind: "PipelineRun"},
@@ -69,6 +90,7 @@ var testPRWithPVC = &v1.PipelineRun{
 		}},
 	},
 }
+
 var testPRWithVolumeClaimTemplate = &v1.PipelineRun{
 	TypeMeta: metav1.TypeMeta{Kind: "PipelineRun"},
 	ObjectMeta: metav1.ObjectMeta{
@@ -81,26 +103,45 @@ var testPRWithVolumeClaimTemplate = &v1.PipelineRun{
 		}},
 	},
 }
+
 var testPRWithVolumeClaimTemplateAndPVC = &v1.PipelineRun{
 	TypeMeta: metav1.TypeMeta{Kind: "PipelineRun"},
 	ObjectMeta: metav1.ObjectMeta{
 		Name: "pipelinerun-with-volumeClaimTemplate-and-pvc",
 	},
 	Spec: v1.PipelineRunSpec{
-		Workspaces: []v1.WorkspaceBinding{{
-			Name:                workspaceVolumeClaimTemplateName,
-			VolumeClaimTemplate: &corev1.PersistentVolumeClaim{},
-		}, {
-			Name: workspacePVCName,
-			PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{
-				ClaimName: "myclaim",
-			}},
+		Workspaces: []v1.WorkspaceBinding{
+			{
+				Name:                workspaceVolumeClaimTemplateName,
+				VolumeClaimTemplate: &corev1.PersistentVolumeClaim{},
+			}, {
+				Name: workspacePVCName,
+				PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{
+					ClaimName: "myclaim",
+				},
+			},
 		},
 	},
 }
+
 var testPRWithEmptyDir = &v1.PipelineRun{
 	ObjectMeta: metav1.ObjectMeta{Name: "pipelinerun-with-emptyDir"},
 	Spec: v1.PipelineRunSpec{
+		Workspaces: []v1.WorkspaceBinding{{
+			Name:     "EmptyDir Workspace",
+			EmptyDir: &corev1.EmptyDirVolumeSource{},
+		}},
+	},
+}
+
+var testPRWithWindowsOs = &v1.PipelineRun{
+	ObjectMeta: metav1.ObjectMeta{Name: "pipelinerun-with-windows"},
+	Spec: v1.PipelineRunSpec{
+		TaskRunTemplate: v1.PipelineTaskRunTemplate{
+			PodTemplate: &pod.PodTemplate{
+				NodeSelector: map[string]string{pipelinePod.OsSelectorLabel: "windows"},
+			},
+		},
 		Workspaces: []v1.WorkspaceBinding{{
 			Name:     "EmptyDir Workspace",
 			EmptyDir: &corev1.EmptyDirVolumeSource{},
@@ -112,10 +153,12 @@ var testPRWithEmptyDir = &v1.PipelineRun{
 // per pipelinerun for a given PipelineRun
 func TestCreateOrUpdateAffinityAssistantsAndPVCsPerPipelineRun(t *testing.T) {
 	replicas := int32(1)
+
 	tests := []struct {
 		name                  string
 		pr                    *v1.PipelineRun
 		expectStatefulSetSpec *appsv1.StatefulSetSpec
+		featureFlags          map[string]string
 	}{{
 		name: "PersistentVolumeClaim Workspace type",
 		pr:   testPRWithPVC,
@@ -130,6 +173,10 @@ func TestCreateOrUpdateAffinityAssistantsAndPVCsPerPipelineRun(t *testing.T) {
 			},
 			Template: corev1.PodTemplateSpec{
 				Spec: corev1.PodSpec{
+					Containers: []corev1.Container{{
+						Name:            "affinity-assistant",
+						SecurityContext: &corev1.SecurityContext{},
+					}},
 					Volumes: []corev1.Volume{{
 						Name: "workspace-0",
 						VolumeSource: corev1.VolumeSource{
@@ -149,6 +196,14 @@ func TestCreateOrUpdateAffinityAssistantsAndPVCsPerPipelineRun(t *testing.T) {
 					pipeline.PipelineRunLabelKey: testPRWithVolumeClaimTemplate.Name,
 					workspace.LabelInstance:      "affinity-assistant-426b306c50",
 					workspace.LabelComponent:     workspace.ComponentNameAffinityAssistant,
+				},
+			},
+			Template: corev1.PodTemplateSpec{
+				Spec: corev1.PodSpec{
+					Containers: []corev1.Container{{
+						Name:            "affinity-assistant",
+						SecurityContext: &corev1.SecurityContext{},
+					}},
 				},
 			},
 			VolumeClaimTemplates: []corev1.PersistentVolumeClaim{{
@@ -172,6 +227,10 @@ func TestCreateOrUpdateAffinityAssistantsAndPVCsPerPipelineRun(t *testing.T) {
 			}},
 			Template: corev1.PodTemplateSpec{
 				Spec: corev1.PodSpec{
+					Containers: []corev1.Container{{
+						Name:            "affinity-assistant",
+						SecurityContext: &corev1.SecurityContext{},
+					}},
 					Volumes: []corev1.Volume{{
 						Name: "workspace-0",
 						VolumeSource: corev1.VolumeSource{
@@ -193,17 +252,105 @@ func TestCreateOrUpdateAffinityAssistantsAndPVCsPerPipelineRun(t *testing.T) {
 					workspace.LabelComponent:     workspace.ComponentNameAffinityAssistant,
 				},
 			},
+			Template: corev1.PodTemplateSpec{
+				Spec: corev1.PodSpec{
+					Containers: []corev1.Container{{
+						Name:            "affinity-assistant",
+						SecurityContext: &corev1.SecurityContext{},
+					}},
+				},
+			},
 		},
-	}}
+	}, {
+		name: "set-security-context and set-security-context-read-only-root-filesystem feature enabled and os is Windows",
+		pr:   testPRWithWindowsOs,
+		featureFlags: map[string]string{
+			"set-security-context": "true",
+		},
+		expectStatefulSetSpec: &appsv1.StatefulSetSpec{
+			Replicas: &replicas,
+			Selector: &metav1.LabelSelector{
+				MatchLabels: map[string]string{
+					pipeline.PipelineRunLabelKey: testPRWithWindowsOs.Name,
+					workspace.LabelInstance:      "affinity-assistant-01cecfbdec",
+					workspace.LabelComponent:     workspace.ComponentNameAffinityAssistant,
+				},
+			},
+			Template: corev1.PodTemplateSpec{
+				Spec: corev1.PodSpec{
+					NodeSelector: map[string]string{pipelinePod.OsSelectorLabel: "windows"},
+					Containers: []corev1.Container{{
+						Name:            "affinity-assistant",
+						SecurityContext: pipelinePod.WindowsSecurityContext,
+					}},
+				},
+			},
+		},
+	}, {
+		name: "set-security-context and set-security-context-read-only-root-filesystem feature enabled and os is Linux",
+		pr:   testPRWithEmptyDir,
+		featureFlags: map[string]string{
+			"set-security-context":                           "true",
+			"set-security-context-read-only-root-filesystem": "true",
+		},
+		expectStatefulSetSpec: &appsv1.StatefulSetSpec{
+			Replicas: &replicas,
+			Selector: &metav1.LabelSelector{
+				MatchLabels: map[string]string{
+					pipeline.PipelineRunLabelKey: testPRWithEmptyDir.Name,
+					workspace.LabelInstance:      "affinity-assistant-c655a0c8a2",
+					workspace.LabelComponent:     workspace.ComponentNameAffinityAssistant,
+				},
+			},
+			Template: corev1.PodTemplateSpec{
+				Spec: corev1.PodSpec{
+					Containers: []corev1.Container{{
+						Name:            "affinity-assistant",
+						SecurityContext: securityContextConfigEnabledWithReadOnlyRootFilesystem.GetSecurityContext(false),
+					}},
+				},
+			},
+		},
+	},
+		{
+			name: "set-security-context feature enabled and set-security-context-read-only-root-filesystem feature disabled and os is Linux",
+			pr:   testPRWithEmptyDir,
+			featureFlags: map[string]string{
+				"set-security-context":                           "true",
+				"set-security-context-read-only-root-filesystem": "false",
+			},
+			expectStatefulSetSpec: &appsv1.StatefulSetSpec{
+				Replicas: &replicas,
+				Selector: &metav1.LabelSelector{
+					MatchLabels: map[string]string{
+						pipeline.PipelineRunLabelKey: testPRWithEmptyDir.Name,
+						workspace.LabelInstance:      "affinity-assistant-c655a0c8a2",
+						workspace.LabelComponent:     workspace.ComponentNameAffinityAssistant,
+					},
+				},
+				Template: corev1.PodTemplateSpec{
+					Spec: corev1.PodSpec{
+						Containers: []corev1.Container{{
+							Name:            "affinity-assistant",
+							SecurityContext: pipelinePod.LinuxSecurityContext,
+						}},
+					},
+				},
+			},
+		}}
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			configMap := map[string]string{
-				"disable-affinity-assistant": "true",
-				"coschedule":                 "pipelineruns",
+			featureFlags := map[string]string{
+				"coschedule": "pipelineruns",
 			}
+
+			for k, v := range tc.featureFlags {
+				featureFlags[k] = v
+			}
+
 			kubeClientSet := fakek8s.NewSimpleClientset()
-			ctx := cfgtesting.SetFeatureFlags(context.Background(), t, configMap)
+			ctx := cfgtesting.SetFeatureFlags(t.Context(), t, featureFlags)
 			c := Reconciler{
 				KubeClientSet: kubeClientSet,
 				pvcHandler:    volumeclaim.NewPVCHandler(kubeClientSet, zap.NewExample().Sugar()),
@@ -255,6 +402,10 @@ func TestCreateOrUpdateAffinityAssistantsAndPVCsPerWorkspaceOrDisabled(t *testin
 			},
 			Template: corev1.PodTemplateSpec{
 				Spec: corev1.PodSpec{
+					Containers: []corev1.Container{{
+						Name:            "affinity-assistant",
+						SecurityContext: &corev1.SecurityContext{},
+					}},
 					Volumes: []corev1.Volume{{
 						Name: "workspace-0",
 						VolumeSource: corev1.VolumeSource{
@@ -280,6 +431,10 @@ func TestCreateOrUpdateAffinityAssistantsAndPVCsPerWorkspaceOrDisabled(t *testin
 			},
 			Template: corev1.PodTemplateSpec{
 				Spec: corev1.PodSpec{
+					Containers: []corev1.Container{{
+						Name:            "affinity-assistant",
+						SecurityContext: &corev1.SecurityContext{},
+					}},
 					Volumes: []corev1.Volume{{
 						Name: "workspace-0",
 						VolumeSource: corev1.VolumeSource{
@@ -310,6 +465,10 @@ func TestCreateOrUpdateAffinityAssistantsAndPVCsPerWorkspaceOrDisabled(t *testin
 			},
 			Template: corev1.PodTemplateSpec{
 				Spec: corev1.PodSpec{
+					Containers: []corev1.Container{{
+						Name:            "affinity-assistant",
+						SecurityContext: &corev1.SecurityContext{},
+					}},
 					Volumes: []corev1.Volume{{
 						Name: "workspace-0",
 						VolumeSource: corev1.VolumeSource{
@@ -317,7 +476,8 @@ func TestCreateOrUpdateAffinityAssistantsAndPVCsPerWorkspaceOrDisabled(t *testin
 						},
 					}},
 				},
-			}}, {
+			},
+		}, {
 			Replicas: &replicas,
 			Selector: &metav1.LabelSelector{
 				MatchLabels: map[string]string{
@@ -328,6 +488,10 @@ func TestCreateOrUpdateAffinityAssistantsAndPVCsPerWorkspaceOrDisabled(t *testin
 			},
 			Template: corev1.PodTemplateSpec{
 				Spec: corev1.PodSpec{
+					Containers: []corev1.Container{{
+						Name:            "affinity-assistant",
+						SecurityContext: &corev1.SecurityContext{},
+					}},
 					Volumes: []corev1.Volume{{
 						Name: "workspace-0",
 						VolumeSource: corev1.VolumeSource{
@@ -345,9 +509,8 @@ func TestCreateOrUpdateAffinityAssistantsAndPVCsPerWorkspaceOrDisabled(t *testin
 	}}
 
 	for _, tc := range tests {
-		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
-			ctx := context.Background()
+			ctx := t.Context()
 			kubeClientSet := fakek8s.NewSimpleClientset()
 			c := Reconciler{
 				KubeClientSet: kubeClientSet,
@@ -414,59 +577,56 @@ func TestCreateOrUpdateAffinityAssistantsAndPVCs_Failure(t *testing.T) {
 		name:        "pvc creation failed - per workspace",
 		failureType: "pvc",
 		aaBehavior:  aa.AffinityAssistantPerWorkspace,
-		expectedErr: fmt.Errorf("%w: failed to create PVC pvc-b9eea16dce: error creating persistentvolumeclaims", ErrPvcCreationFailed),
+		expectedErr: fmt.Errorf("%w for pvc-b9eea16dce: error creating persistentvolumeclaims", ErrPvcCreationFailed),
 	}, {
 		name:        "pvc creation failed - disabled",
 		failureType: "pvc",
 		aaBehavior:  aa.AffinityAssistantDisabled,
-		expectedErr: fmt.Errorf("%w: failed to create PVC pvc-b9eea16dce: error creating persistentvolumeclaims", ErrPvcCreationFailed),
+		expectedErr: fmt.Errorf("%w for pvc-b9eea16dce: error creating persistentvolumeclaims", ErrPvcCreationFailed),
 	}}
 
 	for _, tc := range testCases {
-		ctx := context.Background()
-		kubeClientSet := fakek8s.NewSimpleClientset()
-		c := Reconciler{
-			KubeClientSet: kubeClientSet,
-			pvcHandler:    volumeclaim.NewPVCHandler(kubeClientSet, zap.NewExample().Sugar()),
-		}
-
-		switch tc.failureType {
-		case "pvc":
-			c.KubeClientSet.CoreV1().(*fake.FakeCoreV1).PrependReactor("create", "persistentvolumeclaims",
-				func(action testing2.Action) (handled bool, ret runtime.Object, err error) {
-					return true, &corev1.PersistentVolumeClaim{}, errors.New("error creating persistentvolumeclaims")
-				})
-		case "statefulset":
-			c.KubeClientSet.CoreV1().(*fake.FakeCoreV1).PrependReactor("create", "statefulsets",
-				func(action testing2.Action) (handled bool, ret runtime.Object, err error) {
-					return true, &appsv1.StatefulSet{}, errors.New("error creating statefulsets")
-				})
-		}
-
-		err := c.createOrUpdateAffinityAssistantsAndPVCs(ctx, testPRWithVolumeClaimTemplate, tc.aaBehavior)
-
-		if err == nil {
-			t.Errorf("expect error from createOrUpdateAffinityAssistantsAndPVCs but got nil")
-		}
-
-		switch tc.failureType {
-		case "pvc":
-			if !errors.Is(err, ErrPvcCreationFailed) {
-				t.Errorf("expected err type mismatching, expecting %v but got: %v", ErrPvcCreationFailed, err)
+		t.Run(tc.name, func(t *testing.T) {
+			ctx := t.Context()
+			kubeClientSet := fakek8s.NewSimpleClientset()
+			c := Reconciler{
+				KubeClientSet: kubeClientSet,
+				pvcHandler:    volumeclaim.NewPVCHandler(kubeClientSet, zap.NewExample().Sugar()),
 			}
-		case "statefulset":
-			if !errors.Is(err, ErrAffinityAssistantCreationFailed) {
-				t.Errorf("expected err type mismatching, expecting %v but got: %v", ErrAffinityAssistantCreationFailed, err)
+
+			switch tc.failureType {
+			case "pvc":
+				c.KubeClientSet.CoreV1().(*fake.FakeCoreV1).PrependReactor("create", "persistentvolumeclaims",
+					func(action testing2.Action) (handled bool, ret runtime.Object, err error) {
+						return true, &corev1.PersistentVolumeClaim{}, errors.New("error creating persistentvolumeclaims")
+					})
+			case "statefulset":
+				c.KubeClientSet.CoreV1().(*fake.FakeCoreV1).PrependReactor("create", "statefulsets",
+					func(action testing2.Action) (handled bool, ret runtime.Object, err error) {
+						return true, &appsv1.StatefulSet{}, errors.New("error creating statefulsets")
+					})
 			}
-		}
-		if d := cmp.Diff(tc.expectedErr.Error(), err.Error()); d != "" {
-			t.Errorf("expected err mismatching: %v", diff.PrintWantGot(d))
-		}
+
+			err := c.createOrUpdateAffinityAssistantsAndPVCs(ctx, testPRWithVolumeClaimTemplate, tc.aaBehavior)
+
+			if err == nil {
+				t.Errorf("expect error from createOrUpdateAffinityAssistantsAndPVCs but got nil")
+			}
+
+			if tc.failureType == "statefulset" {
+				if !errors.Is(err, ErrAffinityAssistantCreationFailed) {
+					t.Errorf("expected err type mismatching, expecting %v but got: %v", ErrAffinityAssistantCreationFailed, err)
+				}
+			}
+			if d := cmp.Diff(tc.expectedErr.Error(), err.Error()); d != "" {
+				t.Errorf("expected err mismatching: %v", diff.PrintWantGot(d))
+			}
+		})
 	}
 }
 
 // TestCreateOrUpdateAffinityAssistantWhenNodeIsCordoned tests an existing Affinity Assistant can identify the node failure and
-// can migrate the affinity assistant pod to a healthy node so that the existing pipelineRun runs to competition
+// can migrate the affinity assistant pod to a healthy node so that the existing pipelineRun runs to compleition
 func TestCreateOrUpdateAffinityAssistantWhenNodeIsCordoned(t *testing.T) {
 	expectedAffinityAssistantName := GetAffinityAssistantName(workspacePVCName, testPRWithPVC.Name)
 
@@ -607,23 +767,31 @@ func TestPipelineRunPodTemplatesArePropagatedToAffinityAssistant(t *testing.T) {
 					ImagePullSecrets: []corev1.LocalObjectReference{{
 						Name: "reg-creds",
 					}},
+					SecurityContext: &corev1.PodSecurityContext{
+						RunAsNonRoot:   ptr.Bool(true),
+						SeccompProfile: &corev1.SeccompProfile{Type: corev1.SeccompProfileTypeRuntimeDefault},
+					},
 				},
 			},
 		},
 	}
 
-	stsWithTolerationsAndNodeSelector := affinityAssistantStatefulSet(aa.AffinityAssistantPerWorkspace, "test-assistant", prWithCustomPodTemplate, []corev1.PersistentVolumeClaim{}, []string{}, "nginx", nil)
+	stsWithOverridenTemplateFields := affinityAssistantStatefulSet(aa.AffinityAssistantPerWorkspace, "test-assistant", prWithCustomPodTemplate, []corev1.PersistentVolumeClaim{}, []string{}, containerConfigWithoutSecurityContext, nil)
 
-	if len(stsWithTolerationsAndNodeSelector.Spec.Template.Spec.Tolerations) != 1 {
+	if len(stsWithOverridenTemplateFields.Spec.Template.Spec.Tolerations) != 1 {
 		t.Errorf("expected Tolerations in the StatefulSet")
 	}
 
-	if len(stsWithTolerationsAndNodeSelector.Spec.Template.Spec.NodeSelector) != 1 {
+	if len(stsWithOverridenTemplateFields.Spec.Template.Spec.NodeSelector) != 1 {
 		t.Errorf("expected a NodeSelector in the StatefulSet")
 	}
 
-	if len(stsWithTolerationsAndNodeSelector.Spec.Template.Spec.ImagePullSecrets) != 1 {
+	if len(stsWithOverridenTemplateFields.Spec.Template.Spec.ImagePullSecrets) != 1 {
 		t.Errorf("expected ImagePullSecrets in the StatefulSet")
+	}
+
+	if stsWithOverridenTemplateFields.Spec.Template.Spec.SecurityContext == nil {
+		t.Errorf("expected a SecurityContext in the StatefulSet")
 	}
 }
 
@@ -633,7 +801,15 @@ func TestDefaultPodTemplatesArePropagatedToAffinityAssistant(t *testing.T) {
 		ObjectMeta: metav1.ObjectMeta{
 			Name: "pipelinerun-with-custom-podtemplate",
 		},
+		Spec: v1.PipelineRunSpec{
+			TaskRunTemplate: v1.PipelineTaskRunTemplate{
+				PodTemplate: &pod.PodTemplate{
+					HostNetwork: true,
+				},
+			},
+		},
 	}
+	priorityClassName := "test-priority"
 
 	defaultTpl := &pod.AffinityAssistantTemplate{
 		Tolerations: []corev1.Toleration{{
@@ -648,20 +824,33 @@ func TestDefaultPodTemplatesArePropagatedToAffinityAssistant(t *testing.T) {
 		ImagePullSecrets: []corev1.LocalObjectReference{{
 			Name: "reg-creds",
 		}},
+		SecurityContext: &corev1.PodSecurityContext{
+			RunAsNonRoot:   ptr.Bool(true),
+			SeccompProfile: &corev1.SeccompProfile{Type: corev1.SeccompProfileTypeRuntimeDefault},
+		},
+		PriorityClassName: &priorityClassName,
 	}
 
-	stsWithTolerationsAndNodeSelector := affinityAssistantStatefulSet(aa.AffinityAssistantPerWorkspace, "test-assistant", prWithCustomPodTemplate, []corev1.PersistentVolumeClaim{}, []string{}, "nginx", defaultTpl)
+	stsWithOverridenTemplateFields := affinityAssistantStatefulSet(aa.AffinityAssistantPerWorkspace, "test-assistant", prWithCustomPodTemplate, []corev1.PersistentVolumeClaim{}, []string{}, containerConfigWithoutSecurityContext, defaultTpl)
 
-	if len(stsWithTolerationsAndNodeSelector.Spec.Template.Spec.Tolerations) != 1 {
+	if len(stsWithOverridenTemplateFields.Spec.Template.Spec.Tolerations) != 1 {
 		t.Errorf("expected Tolerations in the StatefulSet")
 	}
 
-	if len(stsWithTolerationsAndNodeSelector.Spec.Template.Spec.NodeSelector) != 1 {
+	if len(stsWithOverridenTemplateFields.Spec.Template.Spec.NodeSelector) != 1 {
 		t.Errorf("expected a NodeSelector in the StatefulSet")
 	}
 
-	if len(stsWithTolerationsAndNodeSelector.Spec.Template.Spec.ImagePullSecrets) != 1 {
+	if len(stsWithOverridenTemplateFields.Spec.Template.Spec.ImagePullSecrets) != 1 {
 		t.Errorf("expected ImagePullSecrets in the StatefulSet")
+	}
+
+	if stsWithOverridenTemplateFields.Spec.Template.Spec.SecurityContext == nil {
+		t.Errorf("expected SecurityContext in the StatefulSet")
+	}
+
+	if stsWithOverridenTemplateFields.Spec.Template.Spec.PriorityClassName == "" {
+		t.Errorf("expected PriorityClassName in the StatefulSet")
 	}
 }
 
@@ -684,7 +873,9 @@ func TestMergedPodTemplatesArePropagatedToAffinityAssistant(t *testing.T) {
 						{Name: "reg-creds"},
 						{Name: "alt-creds"},
 					},
-				}},
+					SecurityContext: &corev1.PodSecurityContext{RunAsNonRoot: ptr.Bool(true)},
+				},
+			},
 		},
 	}
 
@@ -695,20 +886,27 @@ func TestMergedPodTemplatesArePropagatedToAffinityAssistant(t *testing.T) {
 		ImagePullSecrets: []corev1.LocalObjectReference{{
 			Name: "reg-creds",
 		}},
+		SecurityContext: &corev1.PodSecurityContext{
+			RunAsNonRoot: ptr.Bool(false),
+		},
 	}
 
-	stsWithTolerationsAndNodeSelector := affinityAssistantStatefulSet(aa.AffinityAssistantPerWorkspace, "test-assistant", prWithCustomPodTemplate, []corev1.PersistentVolumeClaim{}, []string{}, "nginx", defaultTpl)
+	stsWithOverridenTemplateFields := affinityAssistantStatefulSet(aa.AffinityAssistantPerWorkspace, "test-assistant", prWithCustomPodTemplate, []corev1.PersistentVolumeClaim{}, []string{}, containerConfigWithoutSecurityContext, defaultTpl)
 
-	if len(stsWithTolerationsAndNodeSelector.Spec.Template.Spec.Tolerations) != 1 {
+	if len(stsWithOverridenTemplateFields.Spec.Template.Spec.Tolerations) != 1 {
 		t.Errorf("expected Tolerations from spec in the StatefulSet")
 	}
 
-	if len(stsWithTolerationsAndNodeSelector.Spec.Template.Spec.NodeSelector) != 1 {
+	if len(stsWithOverridenTemplateFields.Spec.Template.Spec.NodeSelector) != 1 {
 		t.Errorf("expected NodeSelector from defaults in the StatefulSet")
 	}
 
-	if len(stsWithTolerationsAndNodeSelector.Spec.Template.Spec.ImagePullSecrets) != 2 {
+	if len(stsWithOverridenTemplateFields.Spec.Template.Spec.ImagePullSecrets) != 2 {
 		t.Errorf("expected ImagePullSecrets from spec to overwrite default in the StatefulSet")
+	}
+
+	if stsWithOverridenTemplateFields.Spec.Template.Spec.SecurityContext.RunAsNonRoot == ptr.Bool(true) {
+		t.Errorf("expected SecurityContext from spec to overwrite default in the StatefulSet")
 	}
 }
 
@@ -731,17 +929,18 @@ func TestOnlySelectPodTemplateFieldsArePropagatedToAffinityAssistant(t *testing.
 						IP:        "1.2.3.4",
 						Hostnames: []string{"localhost"},
 					}},
-				}},
+				},
+			},
 		},
 	}
 
-	stsWithTolerationsAndNodeSelector := affinityAssistantStatefulSet(aa.AffinityAssistantPerWorkspace, "test-assistant", prWithCustomPodTemplate, []corev1.PersistentVolumeClaim{}, []string{}, "nginx", nil)
+	stsWithOverridenTemplateFields := affinityAssistantStatefulSet(aa.AffinityAssistantPerWorkspace, "test-assistant", prWithCustomPodTemplate, []corev1.PersistentVolumeClaim{}, []string{}, containerConfigWithoutSecurityContext, nil)
 
-	if len(stsWithTolerationsAndNodeSelector.Spec.Template.Spec.Tolerations) != 1 {
+	if len(stsWithOverridenTemplateFields.Spec.Template.Spec.Tolerations) != 1 {
 		t.Errorf("expected Tolerations from spec in the StatefulSet")
 	}
 
-	if len(stsWithTolerationsAndNodeSelector.Spec.Template.Spec.HostAliases) != 0 {
+	if len(stsWithOverridenTemplateFields.Spec.Template.Spec.HostAliases) != 0 {
 		t.Errorf("expected HostAliases to not be passed from pod template")
 	}
 }
@@ -755,7 +954,7 @@ func TestThatTheAffinityAssistantIsWithoutNodeSelectorAndTolerations(t *testing.
 		Spec: v1.PipelineRunSpec{},
 	}
 
-	stsWithoutTolerationsAndNodeSelector := affinityAssistantStatefulSet(aa.AffinityAssistantPerWorkspace, "test-assistant", prWithoutCustomPodTemplate, []corev1.PersistentVolumeClaim{}, []string{}, "nginx", nil)
+	stsWithoutTolerationsAndNodeSelector := affinityAssistantStatefulSet(aa.AffinityAssistantPerWorkspace, "test-assistant", prWithoutCustomPodTemplate, []corev1.PersistentVolumeClaim{}, []string{}, containerConfigWithoutSecurityContext, nil)
 
 	if len(stsWithoutTolerationsAndNodeSelector.Spec.Template.Spec.Tolerations) != 0 {
 		t.Errorf("unexpected Tolerations in the StatefulSet")
@@ -763,6 +962,10 @@ func TestThatTheAffinityAssistantIsWithoutNodeSelectorAndTolerations(t *testing.
 
 	if len(stsWithoutTolerationsAndNodeSelector.Spec.Template.Spec.NodeSelector) != 0 {
 		t.Errorf("unexpected NodeSelector in the StatefulSet")
+	}
+
+	if stsWithoutTolerationsAndNodeSelector.Spec.Template.Spec.SecurityContext != nil {
+		t.Errorf("unexpected SecurityContext in the StatefulSet")
 	}
 }
 
@@ -813,8 +1016,7 @@ func TestCleanupAffinityAssistants_Success(t *testing.T) {
 		name:       "Affinity Assistant Cleanup - per workspace",
 		aaBehavior: aa.AffinityAssistantPerWorkspace,
 		cfgMap: map[string]string{
-			"disable-affinity-assistant": "false",
-			"coschedule":                 "workspaces",
+			"coschedule": "workspaces",
 		},
 		affinityAssistantNames: []string{"affinity-assistant-9d8b15fa2e", "affinity-assistant-39883fc3b2"},
 		pvcNames:               []string{"pvc-a12c589442", "pvc-5ce7cd98c5"},
@@ -822,8 +1024,7 @@ func TestCleanupAffinityAssistants_Success(t *testing.T) {
 		name:       "Affinity Assistant Cleanup - per pipelinerun",
 		aaBehavior: aa.AffinityAssistantPerPipelineRun,
 		cfgMap: map[string]string{
-			"disable-affinity-assistant": "true",
-			"coschedule":                 "pipelineruns",
+			"coschedule": "pipelineruns",
 		},
 		affinityAssistantNames: []string{"affinity-assistant-62843d388a"},
 		pvcNames:               []string{"pvc-a12c589442-affinity-assistant-62843d388a-0", "pvc-5ce7cd98c5-affinity-assistant-62843d388a-0"},
@@ -865,7 +1066,7 @@ func TestCleanupAffinityAssistants_Success(t *testing.T) {
 		}
 
 		_, c, _ := seedTestData(data)
-		ctx := cfgtesting.SetFeatureFlags(context.Background(), t, tc.cfgMap)
+		ctx := cfgtesting.SetFeatureFlags(t.Context(), t, tc.cfgMap)
 
 		// mocks `kubernetes.io/pvc-protection` finalizer behavior by adding DeletionTimestamp when deleting pvcs with the finalizer
 		// see details in: https://kubernetes.io/docs/concepts/overview/working-with-objects/finalizers/#how-finalizers-work
@@ -926,7 +1127,7 @@ func TestCleanupAffinityAssistantsAndPVCs_Failure(t *testing.T) {
 		},
 	}
 
-	ctx := context.Background()
+	ctx := t.Context()
 	c := Reconciler{
 		KubeClientSet: fakek8s.NewSimpleClientset(),
 	}
@@ -950,14 +1151,12 @@ func TestCleanupAffinityAssistantsAndPVCs_Failure(t *testing.T) {
 	}
 }
 
-// TestThatCleanupIsAvoidedIfAssistantIsDisabled tests that
-// cleanup of Affinity Assistants is omitted when the
-// Affinity Assistant is disabled
-func TestThatCleanupIsAvoidedIfAssistantIsDisabled(t *testing.T) {
+// TestThatCleanupIsAvoidedtests that cleanup of Affinity Assistants is omitted
+func TestThatCleanupIsAvoided(t *testing.T) {
 	configMap := &corev1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{Name: config.GetFeatureFlagsConfigName(), Namespace: system.Namespace()},
 		Data: map[string]string{
-			featureFlagDisableAffinityAssistantKey: "true",
+			"coschedule": "disabled",
 		},
 	}
 
@@ -972,7 +1171,7 @@ func TestThatCleanupIsAvoidedIfAssistantIsDisabled(t *testing.T) {
 	store := config.NewStore(logtesting.TestLogger(t))
 	store.OnConfigChanged(configMap)
 
-	_ = c.cleanupAffinityAssistantsAndPVCs(store.ToContext(context.Background()), testPRWithPVC)
+	_ = c.cleanupAffinityAssistantsAndPVCs(store.ToContext(t.Context()), testPRWithPVC)
 
 	if len(fakeClientSet.Actions()) != 0 {
 		t.Errorf("Expected 0 k8s client requests, did %d request", len(fakeClientSet.Actions()))
@@ -1233,10 +1432,243 @@ func validateStatefulSetSpec(t *testing.T, ctx context.Context, c Reconciler, ex
 		if err != nil {
 			t.Fatalf("unexpected error when retrieving StatefulSet: %v", err)
 		}
-		if d := cmp.Diff(expectStatefulSetSpec, &aa.Spec, podSpecFilter, podTemplateSpecFilter); d != "" {
+		if d := cmp.Diff(expectStatefulSetSpec, &aa.Spec, podSpecFilter, podTemplateSpecFilter, podContainerFilter); d != "" {
 			t.Errorf("StatefulSetSpec diff: %s", diff.PrintWantGot(d))
 		}
 	} else if !apierrors.IsNotFound(err) {
 		t.Errorf("unexpected error when retrieving StatefulSet which expects nil: %v", err)
+	}
+}
+
+// TestAffinityAssistantServiceAccountInheritance tests that affinity assistant pods
+// inherit the serviceAccountName from the PipelineRun's TaskRunTemplate by default.
+func TestAffinityAssistantServiceAccountInheritance(t *testing.T) {
+	prWithServiceAccount := &v1.PipelineRun{
+		TypeMeta: metav1.TypeMeta{Kind: "PipelineRun"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "pipelinerun-with-sa",
+		},
+		Spec: v1.PipelineRunSpec{
+			TaskRunTemplate: v1.PipelineTaskRunTemplate{
+				ServiceAccountName: "my-service-account",
+			},
+		},
+	}
+
+	sts := affinityAssistantStatefulSet(
+		aa.AffinityAssistantPerWorkspace,
+		"test-assistant",
+		prWithServiceAccount,
+		[]corev1.PersistentVolumeClaim{},
+		[]string{},
+		containerConfigWithoutSecurityContext,
+		nil,
+	)
+
+	expectedSA := "my-service-account"
+	if sts.Spec.Template.Spec.ServiceAccountName != expectedSA {
+		t.Errorf("expected ServiceAccountName to be %q, got %q", expectedSA, sts.Spec.Template.Spec.ServiceAccountName)
+	}
+}
+
+// TestAffinityAssistantServiceAccountTemplateOverride tests that an explicit
+// ServiceAccountName in the AffinityAssistantTemplate takes precedence over
+// the PipelineRun's TaskRunTemplate ServiceAccountName.
+func TestAffinityAssistantServiceAccountTemplateOverride(t *testing.T) {
+	prWithServiceAccount := &v1.PipelineRun{
+		TypeMeta: metav1.TypeMeta{Kind: "PipelineRun"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "pipelinerun-with-sa",
+		},
+		Spec: v1.PipelineRunSpec{
+			TaskRunTemplate: v1.PipelineTaskRunTemplate{
+				ServiceAccountName: "pipeline-sa",
+				PodTemplate: &pod.Template{
+					NodeSelector: map[string]string{"disktype": "ssd"},
+				},
+			},
+		},
+	}
+
+	// Default template with explicit ServiceAccountName override
+	defaultAATemplate := &pod.AffinityAssistantTemplate{
+		ServiceAccountName: "affinity-assistant-sa",
+	}
+
+	sts := affinityAssistantStatefulSet(
+		aa.AffinityAssistantPerWorkspace,
+		"test-assistant",
+		prWithServiceAccount,
+		[]corev1.PersistentVolumeClaim{},
+		[]string{},
+		containerConfigWithoutSecurityContext,
+		defaultAATemplate,
+	)
+
+	expectedSA := "affinity-assistant-sa"
+	if sts.Spec.Template.Spec.ServiceAccountName != expectedSA {
+		t.Errorf("expected ServiceAccountName to be %q (from AA template), got %q", expectedSA, sts.Spec.Template.Spec.ServiceAccountName)
+	}
+}
+
+// TestAffinityAssistantServiceAccountBackwardCompatibility tests that when no
+// ServiceAccountName is specified anywhere, the affinity assistant pod defaults
+// to an empty string (which makes Kubernetes use the "default" ServiceAccount).
+// This ensures backward compatibility with existing PipelineRuns.
+func TestAffinityAssistantServiceAccountBackwardCompatibility(t *testing.T) {
+	prWithoutServiceAccount := &v1.PipelineRun{
+		TypeMeta: metav1.TypeMeta{Kind: "PipelineRun"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "pipelinerun-no-sa",
+		},
+		Spec: v1.PipelineRunSpec{
+			TaskRunTemplate: v1.PipelineTaskRunTemplate{
+				// No ServiceAccountName specified
+			},
+		},
+	}
+
+	sts := affinityAssistantStatefulSet(
+		aa.AffinityAssistantPerWorkspace,
+		"test-assistant",
+		prWithoutServiceAccount,
+		[]corev1.PersistentVolumeClaim{},
+		[]string{},
+		containerConfigWithoutSecurityContext,
+		nil,
+	)
+
+	expectedSA := "" // Empty string means Kubernetes will default to "default" SA
+	if sts.Spec.Template.Spec.ServiceAccountName != expectedSA {
+		t.Errorf("expected ServiceAccountName to be empty (backward compatible), got %q", sts.Spec.Template.Spec.ServiceAccountName)
+	}
+}
+
+// TestAffinityAssistantServiceAccountClusterWideDefault tests that a cluster-wide
+// default ServiceAccountName from the AffinityAssistantTemplate is applied when
+// the PipelineRun doesn't specify a ServiceAccountName.
+func TestAffinityAssistantServiceAccountClusterWideDefault(t *testing.T) {
+	prWithoutServiceAccount := &v1.PipelineRun{
+		TypeMeta: metav1.TypeMeta{Kind: "PipelineRun"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "pipelinerun-no-sa",
+		},
+		Spec: v1.PipelineRunSpec{
+			TaskRunTemplate: v1.PipelineTaskRunTemplate{
+				// No ServiceAccountName specified
+			},
+		},
+	}
+
+	// Cluster-wide default AA template
+	defaultAATemplate := &pod.AffinityAssistantTemplate{
+		ServiceAccountName: "cluster-default-aa-sa",
+	}
+
+	sts := affinityAssistantStatefulSet(
+		aa.AffinityAssistantPerWorkspace,
+		"test-assistant",
+		prWithoutServiceAccount,
+		[]corev1.PersistentVolumeClaim{},
+		[]string{},
+		containerConfigWithoutSecurityContext,
+		defaultAATemplate,
+	)
+
+	expectedSA := "cluster-default-aa-sa"
+	if sts.Spec.Template.Spec.ServiceAccountName != expectedSA {
+		t.Errorf("expected ServiceAccountName to be %q (from cluster default), got %q", expectedSA, sts.Spec.Template.Spec.ServiceAccountName)
+	}
+}
+
+// TestAffinityAssistantServiceAccountPriorityOrder tests the complete 3-tier
+// priority system: AA template override > PipelineRun SA > cluster default > empty
+func TestAffinityAssistantServiceAccountPriorityOrder(t *testing.T) {
+	tests := []struct {
+		name             string
+		pipelineRunSA    string
+		aaTemplateSA     string
+		clusterDefaultSA string
+		expectedSA       string
+		description      string
+	}{
+		{
+			name:             "AA template takes highest priority",
+			pipelineRunSA:    "pipeline-sa",
+			aaTemplateSA:     "aa-override-sa",
+			clusterDefaultSA: "cluster-default-sa",
+			expectedSA:       "aa-override-sa",
+			description:      "When AA template has SA, it overrides everything",
+		},
+		{
+			name:             "PipelineRun SA when no AA template override",
+			pipelineRunSA:    "pipeline-sa",
+			aaTemplateSA:     "",
+			clusterDefaultSA: "cluster-default-sa",
+			expectedSA:       "pipeline-sa",
+			description:      "When no AA template SA, inherit from PipelineRun",
+		},
+		{
+			name:             "Cluster default when neither PR nor AA template have SA",
+			pipelineRunSA:    "",
+			aaTemplateSA:     "",
+			clusterDefaultSA: "cluster-default-sa",
+			expectedSA:       "cluster-default-sa",
+			description:      "When no PR or AA template SA, use cluster default",
+		},
+		{
+			name:             "Empty when nothing specified",
+			pipelineRunSA:    "",
+			aaTemplateSA:     "",
+			clusterDefaultSA: "",
+			expectedSA:       "",
+			description:      "When nothing specified, empty (K8s defaults to 'default')",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			pr := &v1.PipelineRun{
+				TypeMeta: metav1.TypeMeta{Kind: "PipelineRun"},
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "test-pr",
+				},
+				Spec: v1.PipelineRunSpec{
+					TaskRunTemplate: v1.PipelineTaskRunTemplate{
+						ServiceAccountName: tc.pipelineRunSA,
+					},
+				},
+			}
+
+			var defaultAATemplate *pod.AffinityAssistantTemplate
+			// Set default template only when we have explicit values to set
+			if tc.aaTemplateSA != "" {
+				// AA template has explicit override
+				defaultAATemplate = &pod.AffinityAssistantTemplate{
+					ServiceAccountName: tc.aaTemplateSA,
+				}
+			} else if tc.clusterDefaultSA != "" && tc.pipelineRunSA == "" {
+				// Cluster default, but only when PR doesn't have SA
+				// (simulates cluster-wide default template)
+				defaultAATemplate = &pod.AffinityAssistantTemplate{
+					ServiceAccountName: tc.clusterDefaultSA,
+				}
+			}
+
+			sts := affinityAssistantStatefulSet(
+				aa.AffinityAssistantPerWorkspace,
+				"test-assistant",
+				pr,
+				[]corev1.PersistentVolumeClaim{},
+				[]string{},
+				containerConfigWithoutSecurityContext,
+				defaultAATemplate,
+			)
+
+			if sts.Spec.Template.Spec.ServiceAccountName != tc.expectedSA {
+				t.Errorf("%s: expected ServiceAccountName to be %q, got %q",
+					tc.description, tc.expectedSA, sts.Spec.Template.Spec.ServiceAccountName)
+			}
+		})
 	}
 }
