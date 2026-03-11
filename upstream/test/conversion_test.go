@@ -1,4 +1,5 @@
 //go:build e2e
+// +build e2e
 
 /*
 Copyright 2022 The Tekton Authors
@@ -37,13 +38,13 @@ import (
 var (
 	filterLabels                   = cmpopts.IgnoreFields(metav1.ObjectMeta{}, "Labels")
 	filterAnnotations              = cmpopts.IgnoreFields(metav1.ObjectMeta{}, "Annotations")
-	filterV1TaskRunStatus          = cmpopts.IgnoreFields(v1.TaskRunStatusFields{}, "StartTime", "CompletionTime", "Artifacts", "Provenance")
-	filterV1PipelineRunStatus      = cmpopts.IgnoreFields(v1.PipelineRunStatusFields{}, "StartTime", "CompletionTime", "Provenance")
-	filterV1beta1TaskRunStatus     = cmpopts.IgnoreFields(v1beta1.TaskRunStatusFields{}, "StartTime", "CompletionTime", "Provenance")
-	filterV1beta1PipelineRunStatus = cmpopts.IgnoreFields(v1beta1.PipelineRunStatusFields{}, "StartTime", "CompletionTime", "Provenance")
+	filterV1TaskRunStatus          = cmpopts.IgnoreFields(v1.TaskRunStatusFields{}, "StartTime", "CompletionTime", "Artifacts")
+	filterV1PipelineRunStatus      = cmpopts.IgnoreFields(v1.PipelineRunStatusFields{}, "StartTime", "CompletionTime")
+	filterV1beta1TaskRunStatus     = cmpopts.IgnoreFields(v1beta1.TaskRunStatusFields{}, "StartTime", "CompletionTime")
+	filterV1beta1PipelineRunStatus = cmpopts.IgnoreFields(v1beta1.PipelineRunStatusFields{}, "StartTime", "CompletionTime")
 	filterContainerStateTerminated = cmpopts.IgnoreFields(corev1.ContainerStateTerminated{}, "StartedAt", "FinishedAt", "ContainerID", "Message")
-	filterV1StepState              = cmpopts.IgnoreFields(v1.StepState{}, "Name", "ImageID", "Container", "Provenance")
-	filterV1beta1StepState         = cmpopts.IgnoreFields(v1beta1.StepState{}, "Name", "ImageID", "ContainerName", "Provenance")
+	filterV1StepState              = cmpopts.IgnoreFields(v1.StepState{}, "Name", "ImageID", "Container")
+	filterV1beta1StepState         = cmpopts.IgnoreFields(v1beta1.StepState{}, "Name", "ImageID", "ContainerName")
 	filterV1TaskRunSA              = cmpopts.IgnoreFields(v1.TaskRunSpec{}, "ServiceAccountName")
 	filterV1PipelineRunSA          = cmpopts.IgnoreFields(v1.PipelineTaskRunTemplate{}, "ServiceAccountName")
 
@@ -656,7 +657,6 @@ status:
 
 // TestCRDConversionStrategy tests if webhook conversion strategy is
 // set to versioned CRDs.
-// @test:execution=parallel
 func TestCRDConversionStrategy(t *testing.T) {
 	ctx := t.Context()
 	ctx, cancel := context.WithCancel(ctx)
@@ -695,7 +695,6 @@ func TestCRDConversionStrategy(t *testing.T) {
 // requests it by v1Clients to compare with v1 if the conversion has been correctly
 // executed by the webhook for roundtrip. And then it creates the v1 Task CRD using v1Clients
 // and requests it by v1beta1Clients to compare with v1beta1.
-// @test:execution=parallel
 func TestTaskCRDConversion(t *testing.T) {
 	ctx := t.Context()
 	ctx, cancel := context.WithCancel(ctx)
@@ -760,7 +759,6 @@ func TestTaskCRDConversion(t *testing.T) {
 // and requests it by v1Clients to compare with v1 if the conversion has been correctly
 // executed by the webhook for roundtrip. And then it creates the v1 TaskRun CRD using
 // v1Clients and requests it by v1beta1Clients to compare with v1beta1.
-// @test:execution=parallel
 func TestTaskRunCRDConversion(t *testing.T) {
 	ctx := t.Context()
 	ctx, cancel := context.WithCancel(ctx)
@@ -777,6 +775,12 @@ func TestTaskRunCRDConversion(t *testing.T) {
 	v1TaskRunExpected := parse.MustParseV1TaskRun(t, fmt.Sprintf(v1TaskRunExpectedYaml, v1beta1TaskRunName, namespace, v1beta1TaskRunName))
 	v1beta1TaskRunRoundTripExpected := parse.MustParseV1beta1TaskRun(t, fmt.Sprintf(v1beta1TaskRunExpectedYaml, v1beta1TaskRunName, namespace, v1beta1TaskRunName))
 
+	v1TaskRunExpected.Status.Provenance = &v1.Provenance{
+		FeatureFlags: getFeatureFlagsBaseOnAPIFlag(t),
+	}
+	v1beta1TaskRunRoundTripExpected.Status.Provenance = &v1beta1.Provenance{
+		FeatureFlags: getFeatureFlagsBaseOnAPIFlag(t),
+	}
 	if _, err := c.V1beta1TaskRunClient.Create(ctx, v1beta1TaskRun, metav1.CreateOptions{}); err != nil {
 		t.Fatalf("Failed to create v1beta1 TaskRun: %s", err)
 	}
@@ -804,6 +808,13 @@ func TestTaskRunCRDConversion(t *testing.T) {
 	v1TaskRun := parse.MustParseV1TaskRun(t, fmt.Sprintf(v1TaskRunYaml, v1TaskRunName, namespace))
 	v1beta1TaskRunExpected := parse.MustParseV1beta1TaskRun(t, fmt.Sprintf(v1beta1TaskRunExpectedYaml, v1TaskRunName, namespace, v1TaskRunName))
 	v1TaskRunRoundTripExpected := parse.MustParseV1TaskRun(t, fmt.Sprintf(v1TaskRunExpectedYaml, v1TaskRunName, namespace, v1TaskRunName))
+
+	v1beta1TaskRunExpected.Status.Provenance = &v1beta1.Provenance{
+		FeatureFlags: getFeatureFlagsBaseOnAPIFlag(t),
+	}
+	v1TaskRunRoundTripExpected.Status.Provenance = &v1.Provenance{
+		FeatureFlags: getFeatureFlagsBaseOnAPIFlag(t),
+	}
 
 	if _, err := c.V1TaskRunClient.Create(ctx, v1TaskRun, metav1.CreateOptions{}); err != nil {
 		t.Fatalf("Failed to create v1 TaskRun: %s", err)
@@ -833,7 +844,6 @@ func TestTaskRunCRDConversion(t *testing.T) {
 // requests it by v1Clients to compare with v1 if the conversion has been correctly executed
 // by the webhook for roundtrip. And then it creates the v1 Pipeline CRD using v1Clients
 // and requests it by v1beta1Clients to compare with v1beta1.
-// @test:execution=parallel
 func TestPipelineCRDConversion(t *testing.T) {
 	ctx := t.Context()
 	ctx, cancel := context.WithCancel(ctx)
@@ -898,7 +908,6 @@ func TestPipelineCRDConversion(t *testing.T) {
 // requests it by v1Clients to compare with v1 if the conversion has been correctly executed by
 // the webhook for roundtrip. And then it creates the v1 PipelineRun CRD using v1Clients
 // and requests it by v1beta1Clients to compare with v1beta1.
-// @test:execution=parallel
 func TestPipelineRunCRDConversion(t *testing.T) {
 	ctx, cancel := context.WithCancel(t.Context())
 	defer cancel()
