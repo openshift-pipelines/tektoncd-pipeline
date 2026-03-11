@@ -320,19 +320,6 @@ func affinityAssistantStatefulSet(aaBehavior aa.AffinityAssistantBehavior, name 
 		priorityClassName = *tpl.PriorityClassName
 	}
 
-	// Determine ServiceAccountName with 3-tier priority:
-	// 1. Explicit override from AffinityAssistantTemplate
-	// 2. Inherit from PipelineRun's TaskRunTemplate (default behavior for OpenShift SCC compatibility)
-	// 3. Empty string (Kubernetes defaults to "default" ServiceAccount)
-	serviceAccountName := ""
-	if tpl.ServiceAccountName != "" {
-		// Explicit override in AffinityAssistantTemplate
-		serviceAccountName = tpl.ServiceAccountName
-	} else if pr.Spec.TaskRunTemplate.ServiceAccountName != "" {
-		// Inherit from PipelineRun's TaskRunTemplate
-		serviceAccountName = pr.Spec.TaskRunTemplate.ServiceAccountName
-	}
-
 	containers := []corev1.Container{{
 		Name:  "affinity-assistant",
 		Image: containerConfig.Image,
@@ -397,12 +384,11 @@ func affinityAssistantStatefulSet(aaBehavior aa.AffinityAssistantBehavior, name 
 				Spec: corev1.PodSpec{
 					Containers: containers,
 
-					Tolerations:        tpl.Tolerations,
-					NodeSelector:       tpl.NodeSelector,
-					ImagePullSecrets:   tpl.ImagePullSecrets,
-					SecurityContext:    tpl.SecurityContext,
-					PriorityClassName:  priorityClassName,
-					ServiceAccountName: serviceAccountName,
+					Tolerations:       tpl.Tolerations,
+					NodeSelector:      tpl.NodeSelector,
+					ImagePullSecrets:  tpl.ImagePullSecrets,
+					SecurityContext:   tpl.SecurityContext,
+					PriorityClassName: priorityClassName,
 
 					Affinity: getAssistantAffinityMergedWithPodTemplateAffinity(pr, aaBehavior),
 					Volumes:  volumes,
