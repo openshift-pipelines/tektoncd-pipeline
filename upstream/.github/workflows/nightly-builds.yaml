@@ -9,7 +9,7 @@ name: Tekton Nightly Build
       kubernetes_version:
         description: 'Kubernetes version to test with'
         required: false
-        default: 'v1.33.0'
+        default: 'v1.33.x'
       nightly_bucket:
         description: 'Oracle Cloud bucket name for builds'
         required: false
@@ -17,7 +17,7 @@ name: Tekton Nightly Build
         type: string
 
 env:
-  KUBERNETES_VERSION: ${{ inputs.kubernetes_version || 'v1.33.0' }}
+  KUBERNETES_VERSION: ${{ inputs.kubernetes_version || 'v1.33.x' }}
   REGISTRY: ghcr.io
   PACKAGE: github.com/${{ github.repository }}
   BUCKET: ${{ inputs.nightly_bucket || 'tekton-nightly' }}
@@ -27,8 +27,9 @@ env:
 
 jobs:
   build:
-    name: Nightly Build (K8s ${{ inputs.kubernetes_version || 'v1.33.0' }})
+    name: Nightly Build (K8s ${{ inputs.kubernetes_version || 'v1.33.x' }})
     runs-on: ubuntu-latest
+    if: github.repository_owner == 'tektoncd'  # do not run this elsewhere
 
     permissions:
       contents: read
@@ -37,7 +38,7 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8  # v5.0.0
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
         with:
           fetch-depth: 0
 
@@ -50,13 +51,12 @@ jobs:
           echo "latest_sha=${latest_sha}" >> "$GITHUB_OUTPUT"
 
       - name: Set up Kind cluster
-        uses: chainguard-dev/actions/setup-kind@1b32103f5aa389c31ab0be75a8edc38d7e4750d8  # v1.5.7
+        uses: chainguard-dev/actions/setup-kind@eab208ef2d05b13404296a5e194a6b237e8bb213  # v1.6.4
         with:
-          node_image: kindest/node:${{ env.KUBERNETES_VERSION }}
-          cluster_name: tekton-nightly
+          k8s-version: ${{ env.KUBERNETES_VERSION }}
 
       - name: Set up Tekton
-        uses: tektoncd/actions/setup-tektoncd@0986bcdfbaf4f83a8a7b19bc2fa360c44ee55929  # main
+        uses: tektoncd/actions/setup-tektoncd@dd92514472167b361de1c95fd31fc2ef83c282ec  # main
         with:
           pipeline_version: latest
           setup_registry: "true"
@@ -66,38 +66,33 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GHCR_TOKEN || github.token }}
         run: |
-          # Create Git authentication secret as basic-auth type for Git resolver
+          # Create Git authentication secret with proper Tekton annotations
           kubectl create secret generic git-resolver-secret \
-            --type=kubernetes.io/basic-auth \
-            --from-literal=username=git \
-            --from-literal=password="${GITHUB_TOKEN}" \
+            --from-literal=token="${GITHUB_TOKEN}" \
             -n tekton-pipelines-resolvers || true
 
           kubectl annotate secret git-resolver-secret \
             tekton.dev/git-0=github.com \
-            -n tekton-pipelines-resolvers --overwrite || true
+            -n tekton-pipelines-resolvers || true
 
-          # Configure Git resolver to use the secret
-          kubectl patch configmap git-resolver-config -n tekton-pipelines-resolvers --type=merge --patch='
+          kubectl create secret generic git-resolver-secret \
+            --from-literal=token="${GITHUB_TOKEN}" \
+            -n default || true
+
+          kubectl annotate secret git-resolver-secret \
+            tekton.dev/git-0=github.com \
+            -n default || true
+
+          kubectl patch configmap git-resolver-config -n tekton-pipelines-resolvers --patch='
           data:
-            default-url: "https://github.com"
-            fetch-timeout: "1m"
-            scm-type: "github"
-            server-url: "https://api.github.com"
-            api-secret-name: "git-resolver-secret"
-            api-secret-key: "password"
-            api-secret-namespace: "tekton-pipelines-resolvers"
+            api-token-secret-name: "git-resolver-secret"
+            api-token-secret-key: "token"
           ' || true
 
           kubectl patch configmap feature-flags -n tekton-pipelines --patch='
           data:
             enable-cel-in-whenexpression: "true"
           ' || true
-
-      - name: Install tkn CLI
-        uses: tektoncd/actions/setup-tektoncd-cli@0986bcdfbaf4f83a8a7b19bc2fa360c44ee55929  # main
-        with:
-          version: latest
 
       - name: Apply Build Pipeline Definition
         run: |

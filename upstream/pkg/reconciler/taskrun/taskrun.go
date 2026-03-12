@@ -97,16 +97,26 @@ type Reconciler struct {
 	tracerProvider           trace.TracerProvider
 }
 
-const ImagePullBackOff = "ImagePullBackOff"
+const (
+	ImagePullBackOff           = "ImagePullBackOff"
+	InvalidImageName           = "InvalidImageName"           // Invalid image reference
+	CreateContainerConfigError = "CreateContainerConfigError" // Missing ConfigMap/Secret, invalid env vars, etc.
+	CreateContainerError       = "CreateContainerError"       // Other container creation failures
+	ErrImagePull               = "ErrImagePull"               // Initial image pull failure
+)
 
 var (
 	// Check that our Reconciler implements taskrunreconciler.Interface
 	_ taskrunreconciler.Interface = (*Reconciler)(nil)
 
 	// Pod failure reasons that trigger failure of the TaskRun
+	// Note: ErrImagePull is intentionally not included as it's a transient state
+	// that Kubernetes will automatically retry before transitioning to ImagePullBackOff
 	podFailureReasons = map[string]struct{}{
-		ImagePullBackOff:   {},
-		"InvalidImageName": {},
+		ImagePullBackOff:           {},
+		InvalidImageName:           {},
+		CreateContainerConfigError: {},
+		CreateContainerError:       {},
 	}
 )
 
@@ -184,6 +194,11 @@ func (c *Reconciler) ReconcileKind(ctx context.Context, tr *v1.TaskRun) pkgrecon
 	// Check if the TaskRun has timed out; if it is, this will set its status
 	// accordingly.
 	if tr.HasTimedOut(ctx, c.Clock) {
+		// Before failing the TaskRun, ensure step statuses are populated from the pod
+		// This prevents a race condition where the timeout occurs before pod status is fetched
+		if err := c.updateStepStatusesFromPod(ctx, tr); err != nil {
+			logger.Warnf("Failed to update step statuses from pod before timeout: %v", err)
+		}
 		message := fmt.Sprintf("TaskRun %q failed to finish within %q", tr.Name, tr.GetTimeout(ctx))
 		err := c.failTaskRun(ctx, tr, v1.TaskRunReasonTimedOut, message)
 		return c.finishReconcileUpdateEmitEvents(ctx, tr, before, err)
@@ -215,8 +230,7 @@ func (c *Reconciler) ReconcileKind(ctx context.Context, tr *v1.TaskRun) pkgrecon
 	if err = c.reconcile(ctx, tr, rtr); err != nil {
 		logger.Errorf("Reconcile: %v", err.Error())
 		if errors.Is(err, sidecarlogresults.ErrSizeExceeded) {
-			cfg := config.FromContextOrDefaults(ctx)
-			message := fmt.Sprintf("%s TaskRun \"%q\" failed: results exceeded size limit %d bytes", pipelineErrors.UserErrorLabel, tr.Name, cfg.FeatureFlags.MaxResultSize)
+			message := fmt.Sprintf("%s TaskRun \"%q\" failed: %s", pipelineErrors.UserErrorLabel, tr.Name, err.Error())
 			err := c.failTaskRun(ctx, tr, v1.TaskRunReasonResultLargerThanAllowedLimit, message)
 			return c.finishReconcileUpdateEmitEvents(ctx, tr, before, err)
 		}
@@ -248,66 +262,101 @@ func (c *Reconciler) ReconcileKind(ctx context.Context, tr *v1.TaskRun) pkgrecon
 }
 
 func (c *Reconciler) checkPodFailed(ctx context.Context, tr *v1.TaskRun) (bool, v1.TaskRunReason, string) {
-	imagePullBackOffTimeoutPodConditions := []string{string(corev1.PodInitialized), "PodReadyToStartContainers"}
 	for _, step := range tr.Status.Steps {
-		if step.Waiting != nil {
-			if _, found := podFailureReasons[step.Waiting.Reason]; found {
-				if step.Waiting.Reason == ImagePullBackOff {
-					imagePullBackOffTimeOut := config.FromContextOrDefaults(ctx).Defaults.DefaultImagePullBackOffTimeout
-					// only attempt to recover from the imagePullBackOff if specified
-					if imagePullBackOffTimeOut.Seconds() != 0 {
-						p, err := c.KubeClientSet.CoreV1().Pods(tr.Namespace).Get(ctx, tr.Status.PodName, metav1.GetOptions{})
-						if err != nil {
-							message := fmt.Sprintf(`the step %q in TaskRun %q failed to pull the image %q and the pod with error: "%s."`, step.Name, tr.Name, step.ImageID, err)
-							return true, v1.TaskRunReasonImagePullFailed, message
-						}
-						for _, condition := range p.Status.Conditions {
-							// check the pod condition to get the time when the pod was ready to start containers / initialized.
-							// keep trying until the pod schedule time has exceeded the specified imagePullBackOff timeout duration
-							if slices.Contains(imagePullBackOffTimeoutPodConditions, string(condition.Type)) {
-								if c.Clock.Since(condition.LastTransitionTime.Time) < imagePullBackOffTimeOut {
-									return false, "", ""
-								}
-							}
-						}
-					}
-				}
-				image := step.ImageID
-				message := fmt.Sprintf(`the step %q in TaskRun %q failed to pull the image %q. The pod errored with the message: "%s."`, step.Name, tr.Name, image, step.Waiting.Message)
-				return true, v1.TaskRunReasonImagePullFailed, message
-			}
+		if step.Waiting == nil {
+			continue
+		}
+
+		if _, found := podFailureReasons[step.Waiting.Reason]; !found {
+			continue
+		}
+
+		failed, reason, message := c.checkContainerFailure(
+			ctx,
+			tr,
+			step.Waiting,
+			step.Name,
+			step.ImageID,
+			"step",
+		)
+		if failed {
+			return true, reason, message
 		}
 	}
+
 	for _, sidecar := range tr.Status.Sidecars {
-		if sidecar.Waiting != nil {
-			if _, found := podFailureReasons[sidecar.Waiting.Reason]; found {
-				if sidecar.Waiting.Reason == ImagePullBackOff {
-					imagePullBackOffTimeOut := config.FromContextOrDefaults(ctx).Defaults.DefaultImagePullBackOffTimeout
-					// only attempt to recover from the imagePullBackOff if specified
-					if imagePullBackOffTimeOut.Seconds() != 0 {
-						p, err := c.KubeClientSet.CoreV1().Pods(tr.Namespace).Get(ctx, tr.Status.PodName, metav1.GetOptions{})
-						if err != nil {
-							message := fmt.Sprintf(`the sidecar %q in TaskRun %q failed to pull the image %q and the pod with error: "%s."`, sidecar.Name, tr.Name, sidecar.ImageID, err)
-							return true, v1.TaskRunReasonImagePullFailed, message
-						}
-						for _, condition := range p.Status.Conditions {
-							// check the pod condition to get the time when the pod was ready to start containers / initialized.
-							// keep trying until the pod schedule time has exceeded the specified imagePullBackOff timeout duration
-							if slices.Contains(imagePullBackOffTimeoutPodConditions, string(condition.Type)) {
-								if c.Clock.Since(condition.LastTransitionTime.Time) < imagePullBackOffTimeOut {
-									return false, "", ""
-								}
-							}
-						}
-					}
-				}
-				image := sidecar.ImageID
-				message := fmt.Sprintf(`the sidecar %q in TaskRun %q failed to pull the image %q. The pod errored with the message: "%s."`, sidecar.Name, tr.Name, image, sidecar.Waiting.Message)
-				return true, v1.TaskRunReasonImagePullFailed, message
-			}
+		if sidecar.Waiting == nil {
+			continue
+		}
+
+		if _, found := podFailureReasons[sidecar.Waiting.Reason]; !found {
+			continue
+		}
+
+		failed, reason, message := c.checkContainerFailure(
+			ctx,
+			tr,
+			sidecar.Waiting,
+			sidecar.Name,
+			sidecar.ImageID,
+			"sidecar",
+		)
+		if failed {
+			return true, reason, message
 		}
 	}
+
 	return false, "", ""
+}
+
+func (c *Reconciler) checkContainerFailure(
+	ctx context.Context,
+	tr *v1.TaskRun,
+	waiting *corev1.ContainerStateWaiting,
+	name,
+	imageID,
+	containerType string,
+) (bool, v1.TaskRunReason, string) {
+	if waiting.Reason == ImagePullBackOff {
+		imagePullBackOffTimeOut := config.FromContextOrDefaults(ctx).Defaults.DefaultImagePullBackOffTimeout
+		// only attempt to recover from the imagePullBackOff if specified
+		if imagePullBackOffTimeOut.Seconds() != 0 {
+			p, err := c.KubeClientSet.CoreV1().Pods(tr.Namespace).Get(ctx, tr.Status.PodName, metav1.GetOptions{})
+			if err != nil {
+				message := fmt.Sprintf(`the %s %q in TaskRun %q failed to pull the image %q. Failed to get pod with error: "%s."`, containerType, name, tr.Name, imageID, err)
+				return true, v1.TaskRunReasonImagePullFailed, message
+			}
+			imagePullBackOffTimeoutPodConditions := []string{string(corev1.PodInitialized), "PodReadyToStartContainers"}
+			for _, condition := range p.Status.Conditions {
+				// check the pod condition to get the time when the pod was ready to start containers / initialized.
+				// keep trying until the pod schedule time has exceeded the specified imagePullBackOff timeout duration
+				if slices.Contains(imagePullBackOffTimeoutPodConditions, string(condition.Type)) {
+					if c.Clock.Since(condition.LastTransitionTime.Time) < imagePullBackOffTimeOut {
+						return false, "", ""
+					}
+				}
+			}
+		}
+		// ImagePullBackOff timeout exceeded or not configured
+		message := fmt.Sprintf(`the %s %q in TaskRun %q failed to pull the image %q. The pod errored with the message: "%s."`, containerType, name, tr.Name, imageID, waiting.Message)
+		return true, v1.TaskRunReasonImagePullFailed, message
+	}
+
+	// Handle CreateContainerConfigError (missing ConfigMap/Secret, invalid env vars, etc.)
+	if waiting.Reason == CreateContainerConfigError {
+		message := fmt.Sprintf(`the %s %q in TaskRun %q failed to start. The pod errored with the message: "%s."`, containerType, name, tr.Name, waiting.Message)
+		return true, v1.TaskRunReasonCreateContainerConfigError, message
+	}
+
+	// Handle InvalidImageName (unrecoverable error)
+	if waiting.Reason == InvalidImageName {
+		message := fmt.Sprintf(`the %s %q in TaskRun %q failed to pull the image %q. The pod errored with the message: "%s."`, containerType, name, tr.Name, imageID, waiting.Message)
+		return true, v1.TaskRunReasonImagePullFailed, message
+	}
+
+	// Handle CreateContainerError and other generic failures
+	message := fmt.Sprintf(`the %s %q in TaskRun %q failed to start. The pod errored with the message: "%s."`, containerType, name, tr.Name, waiting.Message)
+	return true, v1.TaskRunReasonPodCreationFailed, message
 }
 
 func (c *Reconciler) durationAndCountMetrics(ctx context.Context, tr *v1.TaskRun, beforeCondition *apis.Condition) {
@@ -813,8 +862,8 @@ func (c *Reconciler) failTaskRun(ctx context.Context, tr *v1.TaskRun, reason v1.
 	terminateStepsInPod(tr, reason)
 
 	var err error
-	if reason == v1.TaskRunReasonCancelled && (config.FromContextOrDefaults(ctx).FeatureFlags.EnableKeepPodOnCancel) {
-		logger.Infof("Canceling task run %q by entrypoint", tr.Name)
+	if (reason == v1.TaskRunReasonCancelled || reason == v1.TaskRunReasonTimedOut) && (config.FromContextOrDefaults(ctx).FeatureFlags.EnableKeepPodOnCancel) {
+		logger.Infof("Canceling task run %q by entrypoint, Reason: %s", tr.Name, reason)
 		err = podconvert.CancelPod(ctx, c.KubeClientSet, tr.Namespace, tr.Status.PodName)
 	} else {
 		err = c.KubeClientSet.CoreV1().Pods(tr.Namespace).Delete(ctx, tr.Status.PodName, metav1.DeleteOptions{})
@@ -824,6 +873,37 @@ func (c *Reconciler) failTaskRun(ctx context.Context, tr *v1.TaskRun, reason v1.
 		return err
 	}
 
+	return nil
+}
+
+// updateStepStatusesFromPod fetches the pod and updates step statuses in the TaskRun
+// This is called before failing a TaskRun to ensure step statuses are populated
+func (c *Reconciler) updateStepStatusesFromPod(ctx context.Context, tr *v1.TaskRun) error {
+	logger := logging.FromContext(ctx)
+
+	// If there's no pod yet, nothing to update
+	if tr.Status.PodName == "" {
+		return nil
+	}
+
+	// Fetch the pod
+	pod, err := c.podLister.Pods(tr.Namespace).Get(tr.Status.PodName)
+	if k8serrors.IsNotFound(err) {
+		// Pod doesn't exist yet, nothing to update
+		return nil
+	} else if err != nil {
+		return err
+	}
+
+	// Update step statuses from pod using the existing MakeTaskRunStatus function
+	// This ensures consistency with the normal reconciliation path
+	status, err := podconvert.MakeTaskRunStatus(ctx, logger, *tr, pod, c.KubeClientSet, tr.Status.TaskSpec)
+	if err != nil {
+		return err
+	}
+
+	// Only update the Steps field to avoid overwriting other status fields
+	tr.Status.Steps = status.Steps
 	return nil
 }
 
