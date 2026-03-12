@@ -42,7 +42,6 @@ import (
 	common "github.com/tektoncd/pipeline/pkg/resolution/common"
 	resolutionframework "github.com/tektoncd/pipeline/pkg/resolution/resolver/framework"
 	frameworktesting "github.com/tektoncd/pipeline/pkg/resolution/resolver/framework/testing"
-	"github.com/tektoncd/pipeline/pkg/resolution/resolver/git"
 	gitresolution "github.com/tektoncd/pipeline/pkg/resolution/resolver/git"
 	"github.com/tektoncd/pipeline/test"
 	"github.com/tektoncd/pipeline/test/diff"
@@ -211,50 +210,6 @@ func TestValidateParams_Failure(t *testing.T) {
 			}
 			if d := cmp.Diff(tc.expectedErr, err.Error()); d != "" {
 				t.Errorf("error did not match: %s", diff.PrintWantGot(d))
-			}
-		})
-	}
-}
-func TestResolver_IsImmutable(t *testing.T) {
-	tests := []struct {
-		name     string
-		revision string
-		want     bool
-	}{
-		{
-			name:     "valid SHA-1 format",
-			revision: "0123456789abcdef0123456789abcdef01234567",
-			want:     true,
-		},
-		{
-			name:     "valid SHA-256 format",
-			revision: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
-			want:     true,
-		},
-		{
-			name:     "between SHA-1 and SHA-256 - 50 chars",
-			revision: "a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1",
-			want:     false,
-		},
-		{
-			name:     "empty string",
-			revision: "",
-			want:     false,
-		},
-	}
-	resolver := &Resolver{}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			params := []pipelinev1.Param{
-				{
-					Name:  gitresolution.RevisionParam,
-					Value: *pipelinev1.NewStructuredValues(tt.revision),
-				},
-			}
-
-			got := resolver.IsImmutable(params)
-			if got != tt.want {
-				t.Errorf("IsImmutable() = %v, want %v for revision %q", got, tt.want, tt.revision)
 			}
 		})
 	}
@@ -710,7 +665,7 @@ func TestResolve(t *testing.T) {
 			d := test.Data{
 				ConfigMaps: []*corev1.ConfigMap{{
 					ObjectMeta: metav1.ObjectMeta{
-						Name:      git.ConfigMapName,
+						Name:      ConfigMapName,
 						Namespace: resolverconfig.ResolversNamespace(system.Namespace()),
 					},
 					Data: cfg,
@@ -722,12 +677,6 @@ func TestResolve(t *testing.T) {
 					Data: map[string]string{
 						"enable-git-resolver": "true",
 					},
-				}, {
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      "resolver-cache-config",
-						Namespace: resolverconfig.ResolversNamespace(system.Namespace()),
-					},
-					Data: map[string]string{},
 				}},
 				ResolutionRequests: []*v1beta1.ResolutionRequest{request},
 			}

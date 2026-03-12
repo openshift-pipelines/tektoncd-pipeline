@@ -98,7 +98,6 @@ func (dc *basicGitConfig) Write(directory string) error {
 	}
 	gitCredentials = append(gitCredentials, "") // Get a trailing newline
 	gitCredentialsContent := strings.Join(gitCredentials, "\n")
-	// #nosec G703 -- no path traversal with that path that is Tekton's creds directory which is a constant joined with a constant file name
 	return os.WriteFile(gitCredentialsPath, []byte(gitCredentialsContent), 0600)
 }
 

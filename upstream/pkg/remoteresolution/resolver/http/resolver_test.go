@@ -151,16 +151,6 @@ func TestResolve(t *testing.T) {
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			ctx, _ := ttesting.SetupFakeContext(t)
-
-			resolver := Resolver{}
-			if err := resolver.Initialize(ctx); err != nil {
-				t.Fatalf("failed to initialize resolver: %v", err)
-			}
-
-			// Now overlay the config context
-			ctx = contextWithConfig(defaultHttpTimeoutValue)
-
 			svr := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				if tc.expectedStatus != 0 {
 					w.WriteHeader(tc.expectedStatus)
@@ -179,11 +169,11 @@ func TestResolve(t *testing.T) {
 					Value: *pipelinev1.NewStructuredValues("bar"),
 				})
 			}
-
+			resolver := Resolver{}
 			req := v1beta1.ResolutionRequestSpec{
 				Params: params,
 			}
-			output, err := resolver.Resolve(ctx, &req)
+			output, err := resolver.Resolve(contextWithConfig(defaultHttpTimeoutValue), &req)
 			if tc.expectedErr != "" {
 				re := regexp.MustCompile(tc.expectedErr)
 				if !re.MatchString(err.Error()) {
@@ -215,30 +205,20 @@ func TestResolve(t *testing.T) {
 }
 
 func TestResolveNotEnabled(t *testing.T) {
-	ctx, _ := ttesting.SetupFakeContext(t)
-
 	var err error
 	resolver := Resolver{}
-
-	if err := resolver.Initialize(ctx); err != nil {
-		t.Fatalf("failed to initialize resolver: %v", err)
-	}
-
-	// Now overlay the disabled context
-	ctx = resolverDisabledContext()
-
 	someParams := map[string]string{"foo": "bar"}
 	req := v1beta1.ResolutionRequestSpec{
 		Params: toParams(someParams),
 	}
-	_, err = resolver.Resolve(ctx, &req)
+	_, err = resolver.Resolve(resolverDisabledContext(), &req)
 	if err == nil {
 		t.Fatalf("expected disabled err")
 	}
 	if d := cmp.Diff(disabledError, err.Error()); d != "" {
 		t.Errorf("unexpected error: %s", diff.PrintWantGot(d))
 	}
-	err = resolver.Validate(ctx, &v1beta1.ResolutionRequestSpec{Params: toParams(someParams)})
+	err = resolver.Validate(resolverDisabledContext(), &v1beta1.ResolutionRequestSpec{Params: toParams(someParams)})
 	if err == nil {
 		t.Fatalf("expected disabled err")
 	}
@@ -374,12 +354,6 @@ func TestResolverReconcileBasicAuth(t *testing.T) {
 					Data: map[string]string{
 						"enable-http-resolver": "true",
 					},
-				}, {
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      "resolver-cache-config",
-						Namespace: resolverconfig.ResolversNamespace(system.Namespace()),
-					},
-					Data: map[string]string{},
 				}},
 				ResolutionRequests: []*v1beta1.ResolutionRequest{request},
 			}
