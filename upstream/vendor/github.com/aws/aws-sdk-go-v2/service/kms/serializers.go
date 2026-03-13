@@ -3475,11 +3475,6 @@ func awsAwsjson11_serializeOpDocumentCreateCustomKeyStoreInput(v *CreateCustomKe
 		ok.String(*v.XksProxyVpcEndpointServiceName)
 	}
 
-	if v.XksProxyVpcEndpointServiceOwner != nil {
-		ok := object.Key("XksProxyVpcEndpointServiceOwner")
-		ok.String(*v.XksProxyVpcEndpointServiceOwner)
-	}
-
 	return nil
 }
 
@@ -3679,11 +3674,6 @@ func awsAwsjson11_serializeOpDocumentDeleteImportedKeyMaterialInput(v *DeleteImp
 	if v.KeyId != nil {
 		ok := object.Key("KeyId")
 		ok.String(*v.KeyId)
-	}
-
-	if v.KeyMaterialId != nil {
-		ok := object.Key("KeyMaterialId")
-		ok.String(*v.KeyMaterialId)
 	}
 
 	return nil
@@ -4197,24 +4187,9 @@ func awsAwsjson11_serializeOpDocumentImportKeyMaterialInput(v *ImportKeyMaterial
 		ok.Base64EncodeBytes(v.ImportToken)
 	}
 
-	if len(v.ImportType) > 0 {
-		ok := object.Key("ImportType")
-		ok.String(string(v.ImportType))
-	}
-
 	if v.KeyId != nil {
 		ok := object.Key("KeyId")
 		ok.String(*v.KeyId)
-	}
-
-	if v.KeyMaterialDescription != nil {
-		ok := object.Key("KeyMaterialDescription")
-		ok.String(*v.KeyMaterialDescription)
-	}
-
-	if v.KeyMaterialId != nil {
-		ok := object.Key("KeyMaterialId")
-		ok.String(*v.KeyMaterialId)
 	}
 
 	if v.ValidTo != nil {
@@ -4304,11 +4279,6 @@ func awsAwsjson11_serializeOpDocumentListKeyPoliciesInput(v *ListKeyPoliciesInpu
 func awsAwsjson11_serializeOpDocumentListKeyRotationsInput(v *ListKeyRotationsInput, value smithyjson.Value) error {
 	object := value.Object()
 	defer object.Close()
-
-	if len(v.IncludeKeyMaterial) > 0 {
-		ok := object.Key("IncludeKeyMaterial")
-		ok.String(string(v.IncludeKeyMaterial))
-	}
 
 	if v.KeyId != nil {
 		ok := object.Key("KeyId")
@@ -4734,11 +4704,6 @@ func awsAwsjson11_serializeOpDocumentUpdateCustomKeyStoreInput(v *UpdateCustomKe
 	if v.XksProxyVpcEndpointServiceName != nil {
 		ok := object.Key("XksProxyVpcEndpointServiceName")
 		ok.String(*v.XksProxyVpcEndpointServiceName)
-	}
-
-	if v.XksProxyVpcEndpointServiceOwner != nil {
-		ok := object.Key("XksProxyVpcEndpointServiceOwner")
-		ok.String(*v.XksProxyVpcEndpointServiceOwner)
 	}
 
 	return nil
