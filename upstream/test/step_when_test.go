@@ -1,5 +1,4 @@
 //go:build e2e
-// +build e2e
 
 // /*
 // Copyright 2024 The Tekton Authors
@@ -36,6 +35,8 @@ import (
 	"knative.dev/pkg/test/helpers"
 )
 
+// @test:execution=serial
+// @test:reason=modifies enable-step-actions feature flag in feature-flags ConfigMap
 func TestWhenExpressionsInStep(t *testing.T) {
 	tests := []struct {
 		desc         string
@@ -238,7 +239,7 @@ spec:
 			}
 			var ops cmp.Options
 			ops = append(ops, cmpopts.IgnoreFields(corev1.ContainerStateTerminated{}, "StartedAt", "FinishedAt", "ContainerID", "Message"))
-			ops = append(ops, cmpopts.IgnoreFields(v1.StepState{}, "ImageID"))
+			ops = append(ops, cmpopts.IgnoreFields(v1.StepState{}, "ImageID", "Provenance"))
 			if d := cmp.Diff(taskrun.Status.Steps, tc.expected, ops); d != "" {
 				t.Fatalf("-got, +want: %v", d)
 			}
@@ -246,6 +247,8 @@ spec:
 	}
 }
 
+// @test:execution=serial
+// @test:reason=modifies enable-cel-in-whenexpression feature flag in feature-flags ConfigMap
 func TestWhenExpressionsCELInStep(t *testing.T) {
 	tests := []struct {
 		desc         string
@@ -454,7 +457,7 @@ spec:
 			}
 			var ops cmp.Options
 			ops = append(ops, cmpopts.IgnoreFields(corev1.ContainerStateTerminated{}, "StartedAt", "FinishedAt", "ContainerID", "Message"))
-			ops = append(ops, cmpopts.IgnoreFields(v1.StepState{}, "ImageID"))
+			ops = append(ops, cmpopts.IgnoreFields(v1.StepState{}, "ImageID", "Provenance"))
 			if d := cmp.Diff(taskrun.Status.Steps, tc.expected, ops); d != "" {
 				t.Fatalf("-got, +want: %v", d)
 			}
