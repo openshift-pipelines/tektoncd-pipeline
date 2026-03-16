@@ -1,4 +1,5 @@
 //go:build e2e
+// +build e2e
 
 /*
 Copyright 2019 The Tekton Authors
@@ -58,7 +59,6 @@ var (
 	filterPipelineRunStatus = cmpopts.IgnoreFields(v1.PipelineRunStatusFields{}, "StartTime", "CompletionTime")
 )
 
-// @test:execution=parallel
 func TestCustomTask(t *testing.T) {
 	ctx := t.Context()
 	ctx, cancel := context.WithCancel(ctx)
@@ -268,7 +268,6 @@ func WaitForCustomRunSpecCancelled(ctx context.Context, c *clients, name string,
 
 // TestPipelineRunCustomTaskTimeout is an integration test that will
 // verify that pipelinerun timeout works and leads to the correct Run Spec.status
-// @test:execution=parallel
 func TestPipelineRunCustomTaskTimeout(t *testing.T) {
 	// cancel the context after we have waited a suitable buffer beyond the given deadline.
 	ctx, cancel := context.WithTimeout(t.Context(), timeout+2*time.Minute)
@@ -386,21 +385,11 @@ spec:
 func applyV1Beta1Controller(t *testing.T) {
 	t.Helper()
 	t.Log("Creating Wait v1beta1.CustomRun Custom Task Controller...")
-	cmd := exec.Command("ko", "apply", "--platform", "linux/amd64,linux/arm64,linux/s390x,linux/ppc64le", "-f", "./config/controller.yaml")
+	cmd := exec.Command("ko", "apply", "--platform", "linux/amd64,linux/s390x,linux/ppc64le", "-f", "./config/controller.yaml")
 	cmd.Dir = betaWaitTaskDir
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		t.Fatalf("Failed to create Wait Custom Task Controller: %s, Output: %s", err, out)
-	}
-
-	// Wait for the controller deployment to be ready before running tests.
-	// This prevents race conditions where tests create CustomRuns before the
-	// controller is ready to reconcile them.
-	t.Log("Waiting for Wait Custom Task Controller deployment to be ready...")
-	cmd = exec.CommandContext(context.Background(), "kubectl", "rollout", "status", "deployment/wait-task-controller", "-n", "wait-task-beta", "--timeout=60s")
-	out, err = cmd.CombinedOutput()
-	if err != nil {
-		t.Fatalf("Failed to wait for Wait Custom Task Controller deployment: %s, Output: %s", err, out)
 	}
 }
 
@@ -415,7 +404,6 @@ func cleanUpV1beta1Controller(t *testing.T) {
 	}
 }
 
-// @test:execution=parallel
 func TestWaitCustomTask_V1_PipelineRun(t *testing.T) {
 	ctx := t.Context()
 	ctx, cancel := context.WithCancel(ctx)

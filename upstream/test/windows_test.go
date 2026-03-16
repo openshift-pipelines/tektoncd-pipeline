@@ -1,4 +1,5 @@
 //go:build e2e && windows_e2e
+// +build e2e,windows_e2e
 
 /*
 Copyright 2021 The Tekton Authors
@@ -35,10 +36,9 @@ import (
 
 var (
 	ignoreTerminatedFields = cmpopts.IgnoreFields(corev1.ContainerStateTerminated{}, "StartedAt", "FinishedAt", "ContainerID")
-	ignoreStepFields       = cmpopts.IgnoreFields(v1.StepState{}, "ImageID", "Provenance")
+	ignoreStepFields       = cmpopts.IgnoreFields(v1.StepState{}, "ImageID")
 )
 
-// @test:execution=parallel
 func TestWindows(t *testing.T) {
 	ctx := t.Context()
 	ctx, cancel := context.WithCancel(ctx)
@@ -96,7 +96,6 @@ spec:
 	}
 }
 
-// @test:execution=parallel
 func TestWindowsFailure(t *testing.T) {
 	ctx := t.Context()
 	ctx, cancel := context.WithCancel(ctx)

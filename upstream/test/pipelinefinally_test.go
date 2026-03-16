@@ -1,4 +1,5 @@
 //go:build e2e
+// +build e2e
 
 /*
 Copyright 2019 The Tekton Authors
@@ -35,7 +36,6 @@ import (
 	"knative.dev/pkg/test/helpers"
 )
 
-// @test:execution=parallel
 func TestPipelineLevelFinally_OneDAGTaskFailed_InvalidTaskResult_Failure(t *testing.T) {
 	ctx := t.Context()
 	ctx, cancel := context.WithCancel(ctx)
@@ -386,7 +386,6 @@ spec:
 	}
 }
 
-// @test:execution=parallel
 func TestPipelineLevelFinally_OneFinalTaskFailed_Failure(t *testing.T) {
 	ctx := t.Context()
 	ctx, cancel := context.WithCancel(ctx)
@@ -455,7 +454,6 @@ spec:
 	}
 }
 
-// @test:execution=parallel
 func TestPipelineLevelFinally_OneFinalTask_CancelledRunFinally(t *testing.T) {
 	ctx := t.Context()
 	ctx, cancel := context.WithCancel(ctx)
@@ -573,7 +571,6 @@ spec:
 	}
 }
 
-// @test:execution=parallel
 func TestPipelineLevelFinally_OneFinalTask_StoppedRunFinally(t *testing.T) {
 	ctx := t.Context()
 	ctx, cancel := context.WithCancel(ctx)
@@ -691,7 +688,6 @@ spec:
 	}
 }
 
-// @test:execution=parallel
 func TestPipelineLevelFinally_OneDAGNotProducingResult_SecondDAGUsingResult_Failure(t *testing.T) {
 	ctx := t.Context()
 	ctx, cancel := context.WithCancel(ctx)
