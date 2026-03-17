@@ -12,7 +12,6 @@ aliases:
   - chitrangpatel
   - jeromeJu
   - waveywaves
-  - twoGiants
 
   pipeline-reviewers:
   - afrittoli
@@ -22,7 +21,6 @@ aliases:
   - jerop
   - abayer
   - twoGiants
-  - khrm
   # - wlynch (feel free to /cc me into PRs as needed)
 
   apis-approvers:
