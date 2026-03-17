@@ -11,6 +11,7 @@ spec:
     - name: browser
   steps:
     - name: echo
+      displayName: "echo platform and browser"
       image: mirror.gcr.io/alpine
       script: |
         echo "$(params.platform) and $(params.browser)"
@@ -32,11 +33,9 @@ spec:
               value:
                 - linux
                 - mac
-                - windows
             - name: browser
               value:
                 - chrome
-                - safari
                 - firefox
         taskRef:
           name: platform-browsers
@@ -47,7 +46,6 @@ spec:
               value:
                 - linux
                 - mac
-                - windows
         params:
           - name: browser
             value: chrome
