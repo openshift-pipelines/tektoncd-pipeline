@@ -1,4 +1,5 @@
 //go:build e2e
+// +build e2e
 
 /*
 Copyright 2019 The Tekton Authors
@@ -40,7 +41,6 @@ import (
 	"knative.dev/pkg/test/helpers"
 )
 
-// @test:execution=parallel
 func TestTaskRunFailure(t *testing.T) {
 	ctx := t.Context()
 	ctx, cancel := context.WithCancel(ctx)
@@ -132,7 +132,7 @@ spec:
 		t.Fatalf("expected at least %d steps, got %d", expectedStepNumber, len(taskrun.Status.Steps))
 	}
 	ignoreTerminatedFields := cmpopts.IgnoreFields(corev1.ContainerStateTerminated{}, "StartedAt", "FinishedAt", "ContainerID")
-	ignoreStepFields := cmpopts.IgnoreFields(v1.StepState{}, "ImageID", "Running", "Provenance")
+	ignoreStepFields := cmpopts.IgnoreFields(v1.StepState{}, "ImageID", "Running")
 	lastStepIndex := len(expectedStepState) - 1
 	for i := range lastStepIndex {
 		if d := cmp.Diff(taskrun.Status.Steps[i], expectedStepState[i], ignoreTerminatedFields, ignoreStepFields); d != "" {
@@ -164,7 +164,6 @@ spec:
 	}
 }
 
-// @test:execution=parallel
 func TestTaskRunStatus(t *testing.T) {
 	ctx := t.Context()
 	ctx, cancel := context.WithCancel(ctx)
@@ -228,7 +227,7 @@ spec:
 	}}
 
 	ignoreTerminatedFields := cmpopts.IgnoreFields(corev1.ContainerStateTerminated{}, "StartedAt", "FinishedAt", "ContainerID")
-	ignoreStepFields := cmpopts.IgnoreFields(v1.StepState{}, "ImageID", "Provenance")
+	ignoreStepFields := cmpopts.IgnoreFields(v1.StepState{}, "ImageID")
 	if d := cmp.Diff(taskrun.Status.Steps, expectedStepState, ignoreTerminatedFields, ignoreStepFields); d != "" {
 		t.Fatalf("-got, +want: %v", d)
 	}
@@ -242,7 +241,6 @@ spec:
 	}
 }
 
-// @test:execution=parallel
 func TestTaskRunStepsTerminationReasons(t *testing.T) {
 	ctx := t.Context()
 	c, namespace := setup(ctx, t)
@@ -483,7 +481,7 @@ spec:
 			}
 
 			ignoreTerminatedFields := cmpopts.IgnoreFields(corev1.ContainerStateTerminated{}, "StartedAt", "FinishedAt", "ContainerID", "Message")
-			ignoreStepFields := cmpopts.IgnoreFields(v1.StepState{}, "ImageID", "Provenance")
+			ignoreStepFields := cmpopts.IgnoreFields(v1.StepState{}, "ImageID")
 			if d := cmp.Diff(taskRunState.Status.Steps, test.expectedStepStatus, ignoreTerminatedFields, ignoreStepFields); d != "" {
 				t.Fatalf("-got, +want: %v", d)
 			}
@@ -517,7 +515,6 @@ func cancelTaskRun(t *testing.T, ctx context.Context, taskRunName string, c *cli
 	return nil
 }
 
-// @test:execution=parallel
 func TestTaskRunRetryFailure(t *testing.T) {
 	ctx := t.Context()
 	ctx, cancel := context.WithCancel(ctx)
@@ -599,7 +596,7 @@ spec:
 		Container:         "step-unnamed-0",
 	}}
 	ignoreTerminatedFields := cmpopts.IgnoreFields(corev1.ContainerStateTerminated{}, "StartedAt", "FinishedAt", "ContainerID")
-	ignoreStepFields := cmpopts.IgnoreFields(v1.StepState{}, "ImageID", "Provenance")
+	ignoreStepFields := cmpopts.IgnoreFields(v1.StepState{}, "ImageID")
 	if d := cmp.Diff(taskrun.Status.Steps, expectedStepState, ignoreTerminatedFields, ignoreStepFields); d != "" {
 		t.Fatalf("-got, +want: %v", d)
 	}
@@ -608,7 +605,6 @@ spec:
 	}
 }
 
-// @test:execution=parallel
 func TestTaskRunResolveDefaultParameterSubstitutionOnStepAction(t *testing.T) {
 	ctx := t.Context()
 	ctx, cancel := context.WithCancel(ctx)
