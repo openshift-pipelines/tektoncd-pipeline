@@ -1,7 +1,7 @@
 ARG GO_BUILDER=registry.access.redhat.com/ubi9/go-toolset:1.25.7-1773851748
 ARG RUNTIME=scratch
 # Add FIPS compliance layer
-ARG FIPS_BUILDER=registry.access.redhat.com/ubi9/ubi-minimal:latest@sha256:69f5c9886ecb19b23e88275a5cd904c47dd982dfa370fbbd0c356d7b1047ef68
+ARG FIPS_BUILDER=registry.access.redhat.com/ubi9/ubi-minimal:latest@sha256:83006d535923fcf1345067873524a3980316f51794f01d8655be55d6e9387183
 FROM $FIPS_BUILDER AS fips_builder
 
 FROM $GO_BUILDER AS builder
