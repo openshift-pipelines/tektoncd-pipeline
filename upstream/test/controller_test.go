@@ -36,7 +36,6 @@ import (
 
 var deploymentsResource = schema.GroupVersionResource{Group: "apps", Version: "v1", Resource: "deployments"}
 
-// @test:execution=parallel
 func TestResourceVersionReactor(t *testing.T) {
 	tests := []struct {
 		name       string
@@ -131,7 +130,6 @@ func TestResourceVersionReactor(t *testing.T) {
 	}
 }
 
-// @test:execution=parallel
 func TestEnsureConfigurationConfigMapsExist(t *testing.T) {
 	d := Data{ConfigMaps: []*corev1.ConfigMap{}}
 	expected := Data{ConfigMaps: []*corev1.ConfigMap{}}
