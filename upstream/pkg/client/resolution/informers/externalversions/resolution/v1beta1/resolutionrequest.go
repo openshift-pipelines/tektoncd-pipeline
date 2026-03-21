@@ -62,25 +62,13 @@ func NewFilteredResolutionRequestInformer(client versioned.Interface, namespace 
 				if tweakListOptions != nil {
 					tweakListOptions(&options)
 				}
-				return client.ResolutionV1beta1().ResolutionRequests(namespace).List(context.Background(), options)
+				return client.ResolutionV1beta1().ResolutionRequests(namespace).List(context.TODO(), options)
 			},
 			WatchFunc: func(options v1.ListOptions) (watch.Interface, error) {
 				if tweakListOptions != nil {
 					tweakListOptions(&options)
 				}
-				return client.ResolutionV1beta1().ResolutionRequests(namespace).Watch(context.Background(), options)
-			},
-			ListWithContextFunc: func(ctx context.Context, options v1.ListOptions) (runtime.Object, error) {
-				if tweakListOptions != nil {
-					tweakListOptions(&options)
-				}
-				return client.ResolutionV1beta1().ResolutionRequests(namespace).List(ctx, options)
-			},
-			WatchFuncWithContext: func(ctx context.Context, options v1.ListOptions) (watch.Interface, error) {
-				if tweakListOptions != nil {
-					tweakListOptions(&options)
-				}
-				return client.ResolutionV1beta1().ResolutionRequests(namespace).Watch(ctx, options)
+				return client.ResolutionV1beta1().ResolutionRequests(namespace).Watch(context.TODO(), options)
 			},
 		},
 		&apisresolutionv1beta1.ResolutionRequest{},
