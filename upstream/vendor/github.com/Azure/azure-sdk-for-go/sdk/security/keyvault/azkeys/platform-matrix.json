@@ -5,13 +5,13 @@
     "include": [
         {
             "Agent": {
-                "ubuntu_go": {
+                "ubuntu-20.04": {
                     "OSVmImage": "env:LINUXVMIMAGE",
                     "Pool": "env:LINUXPOOL"
                 }
             },
-            "GoVersion": ["env:GO_VERSION_PREVIOUS"],
-            "ArmTemplateParameters": "@{ enableHsm = $true }"
+            "ArmTemplateParameters": "@{ enableHsm = $true }",
+            "GoVersion": ["1.18"]
         }
     ]
 }

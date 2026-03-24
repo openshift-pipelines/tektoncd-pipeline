@@ -1,4 +1,5 @@
 //go:build e2e
+// +build e2e
 
 /*
 Copyright 2023 The Tekton Authors
@@ -197,7 +198,6 @@ status:
 
 // TestSimpleTaskRun creates a taskRun with a basic task and verifies the
 // runs created are successful and as expected.
-// @test:execution=parallel
 func TestSimpleTaskRun(t *testing.T) {
 	t.Parallel()
 	ctx, cancel := context.WithCancel(t.Context())
@@ -238,7 +238,6 @@ func TestSimpleTaskRun(t *testing.T) {
 
 // TestSimplePipelineRun creates a pipelineRun with a basic Pipeline
 // and verifies the runs created are successful and as expected.
-// @test:execution=parallel
 func TestSimplePipelineRun(t *testing.T) {
 	t.Parallel()
 	ctx, cancel := context.WithCancel(t.Context())

@@ -22,11 +22,10 @@ This Resolver responds to type `git`.
 | `tokenKey`    | An optional key in the token secret name in the `PipelineRun` namespace to fetch the token from. Defaults to `token`.                                                      | `token`                                                     |
 | `gitToken`       | An optional secret name in the `PipelineRun` namespace to fetch the token from when doing opration with the `git clone`. When empty it will use anonymous cloning. | `secret-gitauth-token` |
 | `gitTokenKey` | An optional key in the token secret name in the `PipelineRun` namespace to fetch the token from when using the `git clone`. Defaults to `token`.                                                      | `token`                                                     |
-| `revision`    | Git revision to checkout a file from. This can be commit SHA (SHA-1 or SHA-256), branch or tag.                                                                                               | `aeb957601cf41c012be462827053a21a420befca` `main` `v0.38.2` |
+| `revision`    | Git revision to checkout a file from. This can be commit SHA, branch or tag.                                                                                               | `aeb957601cf41c012be462827053a21a420befca` `main` `v0.38.2` |
 | `pathInRepo`  | Where to find the file in the repo.                                                                                                                                        | `task/golang-build/0.3/golang-build.yaml`                   |
 | `serverURL`   | An optional server URL (that includes the https:// prefix) to connect for API operations                                                                                   | `https:/github.mycompany.com`                               |
 | `scmType`     | An optional SCM type to use for API operations                                                                                                                             | `github`, `gitlab`, `gitea`                                 |
-| `cache`       | Controls caching behavior for the resolved resource                                                                                                                         | `always`, `never`, `auto`                                   |
 
 ## Requirements
 
@@ -55,44 +54,6 @@ for the name, namespace and defaults that the resolver ships with.
 | `api-token-secret-key`       | The key within the token secret containing the actual secret. Required if using the authenticated API with `org` and `repo`.                                  | `oauth`, `token`                                                 |
 | `api-token-secret-namespace` | The namespace containing the token secret, if not `default`.                                                                                                  | `other-namespace`                                                |
 | `default-org`                | The default organization to look for repositories under when using the authenticated API, if not specified in the resolver parameters. Optional.              | `tektoncd`, `kubernetes`                                         |
-
-### Caching Options
-
-The git resolver supports caching of resolved resources to improve performance. The caching behavior can be configured using the `cache` option:
-
-| Cache Value | Description |
-|-------------|-------------|
-| `always` | Always cache resolved resources. This is the most aggressive caching strategy and will cache all resolved resources regardless of their source. |
-| `never` | Never cache resolved resources. This disables caching completely. |
-| `auto` | Caching will only occur when revision is a commit hash. (default) |
-
-### Cache Configuration
-
-The resolver cache can be configured globally using the `resolver-cache-config` ConfigMap. This ConfigMap controls the cache size and TTL (time-to-live) for all resolvers.
-
-| Option Name | Description | Default Value | Example Values |
-|-------------|-------------|---------------|----------------|
-| `max-size` | Maximum number of entries in the cache | `1000` | `500`, `2000` |
-| `ttl` | Time-to-live for cache entries | `5m` | `10m`, `1h` |
-
-The ConfigMap name can be customized using the `RESOLVER_CACHE_CONFIG_MAP_NAME` environment variable. If not set, it defaults to `resolver-cache-config`.
-
-Additionally, you can set a default cache mode for the git resolver by adding the `default-cache-mode` option to the `git-resolver-config` ConfigMap. This overrides the system default (`auto`) for this resolver:
-
-| Option Name | Description | Valid Values | Default |
-|-------------|-------------|--------------|---------|
-| `default-cache-mode` | Default caching behavior when `cache` parameter is not specified | `always`, `never`, `auto` | `auto` |
-
-Example:
-```yaml
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: git-resolver-config
-  namespace: tekton-pipelines-resolvers
-data:
-  default-cache-mode: "always"  # Always cache unless task/pipeline specifies otherwise
-```
 
 ## Usage
 
@@ -386,7 +347,7 @@ spec:
   - If users choose to use anonymous cloning, the url is just user-provided value for the `url` param in the [SPDX download format](https://spdx.github.io/spdx-spec/package-information/#77-package-download-location-field).
   - If scm api is used, it would be the clone URL of the repo fetched from scm repository service in the [SPDX download format](https://spdx.github.io/spdx-spec/package-information/#77-package-download-location-field).
 - `digest`
-  - The Git resolver supports both SHA-1 and SHA-256 commit hashes for revision validation. See <https://git-scm.com/docs/hash-function-transition> for more details.
+  - The algorithm name is fixed "sha1", but subject to be changed to "sha256" once Git eventually uses SHA256 at some point later. See <https://git-scm.com/docs/hash-function-transition> for more details.
   - The value is the actual commit sha at the moment of resolving the resource even if a user provides a tag/branch name for the param `revision`.
 - `entrypoint`: the user-provided value for the `path` param.
 
