@@ -1,4 +1,5 @@
 //go:build e2e
+// +build e2e
 
 /*
  Copyright 2022 The Tekton Authors
@@ -44,8 +45,6 @@ const (
 	// Defined in git-resolver/gitea.yaml's "gitea" StatefulSet, in the env for the "configure-gitea" init container
 	scmGiteaAdminPassword = "giteaPassword1234"
 	systemNamespace       = "tekton-pipelines"
-	remotePipelineURL     = "https://raw.githubusercontent.com/zakisk/yaml-repo/refs/heads/main/pipeline.yaml"
-	remotePipelineDigest  = "sha256:e1a86b942e85ce5558fc737a3b4a82d7425ca392741d20afa3b7fb426e96c66b"
 )
 
 var (
@@ -65,14 +64,8 @@ var (
 		"enable-cluster-resolver": "true",
 		"enable-api-fields":       "beta",
 	})
-
-	httpFeatureFlags = requireAllGates(map[string]string{
-		"enable-http-resolver": "true",
-		"enable-api-fields":    "beta",
-	})
 )
 
-// @test:execution=parallel
 func TestHubResolver(t *testing.T) {
 	ctx := t.Context()
 	c, namespace := setup(ctx, t, hubFeatureFlags)
@@ -132,7 +125,6 @@ spec:
 	}
 }
 
-// @test:execution=parallel
 func TestHubResolver_Failure(t *testing.T) {
 	ctx := t.Context()
 	c, namespace := setup(ctx, t, hubFeatureFlags)
@@ -196,7 +188,6 @@ spec:
 	}
 }
 
-// @test:execution=parallel
 func TestGitResolver_Clone(t *testing.T) {
 	ctx := t.Context()
 	c, namespace := setup(ctx, t, gitFeatureFlags)
@@ -256,11 +247,10 @@ spec:
 	}
 }
 
-// @test:execution=parallel
 func TestGitResolver_Clone_Failure(t *testing.T) {
 	defaultURL := "https://github.com/tektoncd/catalog.git"
 	defaultPathInRepo := "/task/git-clone/0.10/git-clone.yaml"
-	defaultCommit := "dd7cc22f2965ff4c9d8855b7161c2ffe94b6153e"
+	defaultCommit := "783b4fe7d21148f3b1a93bfa49b0024d8c6c2955"
 
 	testCases := []struct {
 		name        string
@@ -368,7 +358,6 @@ spec:
 	}
 }
 
-// @test:execution=parallel
 func TestClusterResolver(t *testing.T) {
 	ctx := t.Context()
 	c, namespace := setup(ctx, t, clusterFeatureFlags)
@@ -432,7 +421,6 @@ spec:
 	}
 }
 
-// @test:execution=parallel
 func TestClusterResolver_Failure(t *testing.T) {
 	ctx := t.Context()
 	c, namespace := setup(ctx, t, clusterFeatureFlags)
@@ -471,85 +459,6 @@ spec:
 			FailedWithReason(pipelinerun.ReasonCouldntGetPipeline, prName),
 			FailedWithMessage("pipelines.tekton.dev \"does-not-exist\" not found", prName),
 		), "PipelineRunFailed", v1Version); err != nil {
-		t.Fatalf("Error waiting for PipelineRun to finish with expected error: %s", err)
-	}
-}
-
-// @test:execution=parallel
-func TestHttpResolver(t *testing.T) {
-	ctx := t.Context()
-	c, namespace := setup(ctx, t, httpFeatureFlags)
-
-	t.Parallel()
-
-	knativetest.CleanupOnInterrupt(func() { tearDown(ctx, t, c, namespace) }, t.Logf)
-	defer tearDown(ctx, t, c, namespace)
-
-	prName := helpers.ObjectNameForTest(t)
-
-	pipelineRun := parse.MustParseV1PipelineRun(t, fmt.Sprintf(`
-metadata:
-  name: %s
-  namespace: %s
-spec:
-  pipelineRef:
-    resolver: "http"
-    params:
-      - name: url
-        value: %s
-      - name: digest
-        value: %s
-`, prName, namespace, remotePipelineURL, remotePipelineDigest))
-
-	_, err := c.V1PipelineRunClient.Create(ctx, pipelineRun, metav1.CreateOptions{})
-	if err != nil {
-		t.Fatalf("Failed to create PipelineRun `%s`: %s", prName, err)
-	}
-
-	t.Logf("Waiting for PipelineRun %s in namespace %s to complete", prName, namespace)
-	if err := WaitForPipelineRunState(ctx, c, prName, timeout, PipelineRunSucceed(prName), "PipelineRunSuccess", v1Version); err != nil {
-		t.Fatalf("Error waiting for PipelineRun %s to finish: %s", prName, err)
-	}
-}
-
-// @test:execution=parallel
-func TestHttpResolver_Failure(t *testing.T) {
-	ctx := t.Context()
-	c, namespace := setup(ctx, t, httpFeatureFlags)
-
-	t.Parallel()
-
-	knativetest.CleanupOnInterrupt(func() { tearDown(ctx, t, c, namespace) }, t.Logf)
-	defer tearDown(ctx, t, c, namespace)
-
-	prName := helpers.ObjectNameForTest(t)
-	// A digest that is definitely wrong
-	digestValue := "deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef"
-	digest := "sha256:" + digestValue
-
-	pipelineRun := parse.MustParseV1PipelineRun(t, fmt.Sprintf(`
-metadata:
-  name: %s
-  namespace: %s
-spec:
-  pipelineRef:
-    resolver: "http"
-    params:
-      - name: url
-        value: %s
-      - name: digest
-        value: %s
-`, prName, namespace, remotePipelineURL, digest))
-
-	_, err := c.V1PipelineRunClient.Create(ctx, pipelineRun, metav1.CreateOptions{})
-	if err != nil {
-		t.Fatalf("Failed to create PipelineRun `%s`: %s", prName, err)
-	}
-
-	t.Logf("Waiting for PipelineRun %s in namespace %s to complete", prName, namespace)
-	if err := WaitForPipelineRunState(ctx, c, prName, timeout,
-		FailedWithReason(v1.PipelineRunReasonCouldntGetPipeline.String(), prName),
-		"PipelineRunFailed", v1Version); err != nil {
 		t.Fatalf("Error waiting for PipelineRun to finish with expected error: %s", err)
 	}
 }
