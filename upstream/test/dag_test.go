@@ -1,4 +1,5 @@
 //go:build e2e
+// +build e2e
 
 /*
 Copyright 2019 The Tekton Authors
@@ -34,6 +35,8 @@ import (
 	"knative.dev/pkg/test/helpers"
 )
 
+const sleepDuration = 15 * time.Second
+
 // TestDAGPipelineRun creates a graph of arbitrary Tasks, then looks at the corresponding
 // TaskRun start times to ensure they were run in the order intended, which is:
 //
@@ -45,8 +48,6 @@ import (
 //	                     pipeline-task-3
 //	                            |
 //	                     pipeline-task-4
-//
-// @test:execution=parallel
 func TestDAGPipelineRun(t *testing.T) {
 	ctx := t.Context()
 	ctx, cancel := context.WithCancel(ctx)
