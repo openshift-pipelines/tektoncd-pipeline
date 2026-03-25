@@ -48,7 +48,6 @@ var unsignedV1beta1Task = &v1beta1.Task{
 	},
 }
 
-// @test:execution=parallel
 func TestSignInterface(t *testing.T) {
 	sv, _, err := signature.NewDefaultECDSASignerVerifier()
 	if err != nil {
