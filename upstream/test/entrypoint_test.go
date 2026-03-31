@@ -1,4 +1,5 @@
 //go:build e2e
+// +build e2e
 
 /*
 Copyright 2019 The Tekton Authors
@@ -33,9 +34,8 @@ import (
 // verify attempt to the get the entrypoint of a container image
 // that doesn't have a cmd defined. In addition to making sure the steps
 // are executed in the order specified
-// @test:execution=parallel
 func TestEntrypointRunningStepsInOrder(t *testing.T) {
-	ctx := t.Context()
+	ctx := context.Background()
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	c, namespace := setup(ctx, t)
@@ -54,10 +54,10 @@ metadata:
 spec:
   taskSpec:
     steps:
-    - image: mirror.gcr.io/busybox
+    - image: busybox
       workingDir: /workspace
       script: 'sleep 3 && touch foo'
-    - image: mirror.gcr.io/ubuntu
+    - image: ubuntu
       workingDir: /workspace
       script: 'ls foo'
 `, epTaskRunName, namespace)), metav1.CreateOptions{}); err != nil {

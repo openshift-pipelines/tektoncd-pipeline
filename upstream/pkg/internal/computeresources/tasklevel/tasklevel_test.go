@@ -46,21 +46,12 @@ func TestApplyTaskLevelResourceRequirements(t *testing.T) {
 			Command: []string{"cmd"},
 		}},
 		ComputeResources: corev1.ResourceRequirements{
-			Requests: corev1.ResourceList{
-				corev1.ResourceCPU:    resource.MustParse("2"),
-				corev1.ResourceMemory: resource.MustParse("2Mi"),
-			},
+			Requests: corev1.ResourceList{corev1.ResourceCPU: resource.MustParse("2")},
 		},
 		expectedComputeResources: []corev1.ResourceRequirements{{
-			Requests: corev1.ResourceList{
-				corev1.ResourceCPU:    resource.MustParse("1"),
-				corev1.ResourceMemory: resource.MustParse("1Mi"),
-			},
+			Requests: corev1.ResourceList{corev1.ResourceCPU: resource.MustParse("1")},
 		}, {
-			Requests: corev1.ResourceList{
-				corev1.ResourceCPU:    resource.MustParse("1"),
-				corev1.ResourceMemory: resource.MustParse("1Mi"),
-			},
+			Requests: corev1.ResourceList{corev1.ResourceCPU: resource.MustParse("1")},
 		}},
 	}, {
 		desc: "only with limits",
@@ -74,29 +65,14 @@ func TestApplyTaskLevelResourceRequirements(t *testing.T) {
 			Command: []string{"cmd"},
 		}},
 		ComputeResources: corev1.ResourceRequirements{
-			Limits: corev1.ResourceList{
-				corev1.ResourceCPU:    resource.MustParse("500m"),
-				corev1.ResourceMemory: resource.MustParse("256Mi"),
-			},
+			Limits: corev1.ResourceList{corev1.ResourceCPU: resource.MustParse("500m")},
 		},
 		expectedComputeResources: []corev1.ResourceRequirements{{
-			Requests: corev1.ResourceList{
-				corev1.ResourceCPU:    resource.MustParse("250m"),
-				corev1.ResourceMemory: resource.MustParse("128Mi"),
-			},
-			Limits: corev1.ResourceList{
-				corev1.ResourceCPU:    resource.MustParse("500m"),
-				corev1.ResourceMemory: resource.MustParse("256Mi"),
-			},
+			Requests: corev1.ResourceList{corev1.ResourceCPU: resource.MustParse("250m")},
+			Limits:   corev1.ResourceList{corev1.ResourceCPU: resource.MustParse("500m")},
 		}, {
-			Requests: corev1.ResourceList{
-				corev1.ResourceCPU:    resource.MustParse("250m"),
-				corev1.ResourceMemory: resource.MustParse("128Mi"),
-			},
-			Limits: corev1.ResourceList{
-				corev1.ResourceCPU:    resource.MustParse("500m"),
-				corev1.ResourceMemory: resource.MustParse("256Mi"),
-			},
+			Requests: corev1.ResourceList{corev1.ResourceCPU: resource.MustParse("250m")},
+			Limits:   corev1.ResourceList{corev1.ResourceCPU: resource.MustParse("500m")},
 		}},
 	}, {
 		desc: "both with requests and limits",
@@ -110,33 +86,15 @@ func TestApplyTaskLevelResourceRequirements(t *testing.T) {
 			Command: []string{"cmd"},
 		}},
 		ComputeResources: corev1.ResourceRequirements{
-			Requests: corev1.ResourceList{
-				corev1.ResourceCPU:    resource.MustParse("1"),
-				corev1.ResourceMemory: resource.MustParse("2Mi"),
-			},
-			Limits: corev1.ResourceList{
-				corev1.ResourceCPU:    resource.MustParse("2"),
-				corev1.ResourceMemory: resource.MustParse("4Mi"),
-			},
+			Requests: corev1.ResourceList{corev1.ResourceCPU: resource.MustParse("1")},
+			Limits:   corev1.ResourceList{corev1.ResourceCPU: resource.MustParse("2")},
 		},
 		expectedComputeResources: []corev1.ResourceRequirements{{
-			Requests: corev1.ResourceList{
-				corev1.ResourceCPU:    resource.MustParse("500m"),
-				corev1.ResourceMemory: resource.MustParse("1Mi"),
-			},
-			Limits: corev1.ResourceList{
-				corev1.ResourceCPU:    resource.MustParse("2"),
-				corev1.ResourceMemory: resource.MustParse("4Mi"),
-			},
+			Requests: corev1.ResourceList{corev1.ResourceCPU: resource.MustParse("500m")},
+			Limits:   corev1.ResourceList{corev1.ResourceCPU: resource.MustParse("2")},
 		}, {
-			Requests: corev1.ResourceList{
-				corev1.ResourceCPU:    resource.MustParse("500m"),
-				corev1.ResourceMemory: resource.MustParse("1Mi"),
-			},
-			Limits: corev1.ResourceList{
-				corev1.ResourceCPU:    resource.MustParse("2"),
-				corev1.ResourceMemory: resource.MustParse("4Mi"),
-			},
+			Requests: corev1.ResourceList{corev1.ResourceCPU: resource.MustParse("500m")},
+			Limits:   corev1.ResourceList{corev1.ResourceCPU: resource.MustParse("2")},
 		}},
 	}, {
 		desc: "steps with compute resources are overridden by task-level compute resources",

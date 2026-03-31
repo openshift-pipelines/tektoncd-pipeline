@@ -17,11 +17,12 @@ limitations under the License.
 package resources_test
 
 import (
+	"context"
 	"errors"
-	"strings"
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
+	cfgtesting "github.com/tektoncd/pipeline/pkg/apis/config/testing"
 	v1 "github.com/tektoncd/pipeline/pkg/apis/pipeline/v1"
 	"github.com/tektoncd/pipeline/pkg/apis/pipeline/v1beta1"
 	"github.com/tektoncd/pipeline/pkg/reconciler/pipelinerun/resources"
@@ -40,6 +41,7 @@ func TestApplyParameters(t *testing.T) {
 		original v1.PipelineSpec
 		params   []v1.Param
 		expected v1.PipelineSpec
+		wc       func(context.Context) context.Context
 	}{
 		{
 			name: "single parameter",
@@ -220,6 +222,7 @@ func TestApplyParameters(t *testing.T) {
 					},
 				}},
 			},
+			wc: cfgtesting.EnableAlphaAPIFields,
 		},
 		{
 			name: "parameter propagation object finally task",
@@ -250,6 +253,7 @@ func TestApplyParameters(t *testing.T) {
 					},
 				}},
 			},
+			wc: cfgtesting.EnableAlphaAPIFields,
 		},
 		{
 			name: "parameter propagation with task default but no task winner pipeline",
@@ -633,6 +637,7 @@ func TestApplyParameters(t *testing.T) {
 					},
 				}},
 			},
+			wc: cfgtesting.EnableAlphaAPIFields,
 		},
 		{
 			name: "Finally task parameter propagation object with task default but no task winner pipeline",
@@ -688,6 +693,7 @@ func TestApplyParameters(t *testing.T) {
 					},
 				}},
 			},
+			wc: cfgtesting.EnableAlphaAPIFields,
 		},
 		{
 			name: "parameter propagation object with task default and task winner task",
@@ -752,6 +758,7 @@ func TestApplyParameters(t *testing.T) {
 					},
 				}},
 			},
+			wc: cfgtesting.EnableAlphaAPIFields,
 		},
 		{
 			name: "Finally task parameter propagation object with task default and task winner task",
@@ -816,6 +823,7 @@ func TestApplyParameters(t *testing.T) {
 					},
 				}},
 			},
+			wc: cfgtesting.EnableAlphaAPIFields,
 		},
 		{
 			name: "single parameter with when expression",
@@ -1437,6 +1445,7 @@ func TestApplyParameters(t *testing.T) {
 					},
 				}},
 			},
+			wc: cfgtesting.EnableAlphaAPIFields,
 		},
 		{
 			name: "single parameter in finally workspace subpath",
@@ -1762,449 +1771,22 @@ func TestApplyParameters(t *testing.T) {
 				}},
 			},
 		},
-		{
-			name: "parameter in onError",
-			original: v1.PipelineSpec{
-				Params: []v1.ParamSpec{
-					{Name: "onerror", Type: v1.ParamTypeString},
-				},
-				Tasks: []v1.PipelineTask{{
-					OnError: v1.PipelineTaskOnErrorType("$(params.onerror)"),
-				}},
-			},
-			params: v1.Params{{Name: "onerror", Value: *v1.NewStructuredValues("new-onerror-value")}},
-			expected: v1.PipelineSpec{
-				Params: []v1.ParamSpec{
-					{Name: "onerror", Type: v1.ParamTypeString},
-				},
-				Tasks: []v1.PipelineTask{{
-					OnError: v1.PipelineTaskOnErrorType("new-onerror-value"),
-				}},
-			},
-		},
-		{
-			name: "parameter default value inherited from another parameter - no override",
-			original: v1.PipelineSpec{
-				Params: []v1.ParamSpec{
-					{Name: "fallback-param", Type: v1.ParamTypeString, Default: v1.NewStructuredValues("pipeline fallback value")},
-					{Name: "param", Type: v1.ParamTypeString, Default: v1.NewStructuredValues("$(params.fallback-param)")},
-				},
-				Tasks: []v1.PipelineTask{{
-					Params: v1.Params{
-						{Name: "task-param", Value: *v1.NewStructuredValues("$(params.param)")},
-					},
-				}},
-			},
-			params: v1.Params{},
-			expected: v1.PipelineSpec{
-				Params: []v1.ParamSpec{
-					{Name: "fallback-param", Type: v1.ParamTypeString, Default: v1.NewStructuredValues("pipeline fallback value")},
-					{Name: "param", Type: v1.ParamTypeString, Default: v1.NewStructuredValues("$(params.fallback-param)")},
-				},
-				Tasks: []v1.PipelineTask{{
-					Params: v1.Params{
-						{Name: "task-param", Value: *v1.NewStructuredValues("pipeline fallback value")},
-					},
-				}},
-			},
-		},
-		{
-			name: "parameter default value inherited from another parameter - override fallback",
-			original: v1.PipelineSpec{
-				Params: []v1.ParamSpec{
-					{Name: "fallback-param", Type: v1.ParamTypeString, Default: v1.NewStructuredValues("pipeline fallback value")},
-					{Name: "param", Type: v1.ParamTypeString, Default: v1.NewStructuredValues("$(params.fallback-param)")},
-				},
-				Tasks: []v1.PipelineTask{{
-					Params: v1.Params{
-						{Name: "task-param", Value: *v1.NewStructuredValues("$(params.param)")},
-					},
-				}},
-			},
-			params: v1.Params{{Name: "fallback-param", Value: *v1.NewStructuredValues("override fallback param value")}},
-			expected: v1.PipelineSpec{
-				Params: []v1.ParamSpec{
-					{Name: "fallback-param", Type: v1.ParamTypeString, Default: v1.NewStructuredValues("pipeline fallback value")},
-					{Name: "param", Type: v1.ParamTypeString, Default: v1.NewStructuredValues("$(params.fallback-param)")},
-				},
-				Tasks: []v1.PipelineTask{{
-					Params: v1.Params{
-						{Name: "task-param", Value: *v1.NewStructuredValues("override fallback param value")},
-					},
-				}},
-			},
-		},
-		{
-			name: "parameter default value inherited from another parameter - override param",
-			original: v1.PipelineSpec{
-				Params: []v1.ParamSpec{
-					{Name: "fallback-param", Type: v1.ParamTypeString, Default: v1.NewStructuredValues("pipeline fallback value")},
-					{Name: "param", Type: v1.ParamTypeString, Default: v1.NewStructuredValues("$(params.fallback-param)")},
-				},
-				Tasks: []v1.PipelineTask{{
-					Params: v1.Params{
-						{Name: "task-param", Value: *v1.NewStructuredValues("$(params.param)")},
-					},
-				}},
-			},
-			params: v1.Params{{Name: "param", Value: *v1.NewStructuredValues("override param value")}},
-			expected: v1.PipelineSpec{
-				Params: []v1.ParamSpec{
-					{Name: "fallback-param", Type: v1.ParamTypeString, Default: v1.NewStructuredValues("pipeline fallback value")},
-					{Name: "param", Type: v1.ParamTypeString, Default: v1.NewStructuredValues("$(params.fallback-param)")},
-				},
-				Tasks: []v1.PipelineTask{{
-					Params: v1.Params{
-						{Name: "task-param", Value: *v1.NewStructuredValues("override param value")},
-					},
-				}},
-			},
-		},
-		{
-			name: "parameter default value references non-parameter variable(s) - no override",
-			original: v1.PipelineSpec{
-				Params: []v1.ParamSpec{
-					{Name: "param1", Type: v1.ParamTypeString, Default: v1.NewStructuredValues("$(context.pipelineRun.name)")},
-					{Name: "param2", Type: v1.ParamTypeString, Default: v1.NewStructuredValues("$(workspace.some-volume.bound)")},
-					{Name: "param3", Type: v1.ParamTypeString, Default: v1.NewStructuredValues("interpolated-name: $(context.pipeline.name)")},
-				},
-				Tasks: []v1.PipelineTask{{
-					Params: v1.Params{
-						{Name: "task-param1", Value: *v1.NewStructuredValues("$(params.param1)")},
-						{Name: "task-param2", Value: *v1.NewStructuredValues("$(params.param2)")},
-						{Name: "task-param3", Value: *v1.NewStructuredValues("$(params.param3)")},
-					},
-				}},
-			},
-			params: v1.Params{},
-			expected: v1.PipelineSpec{
-				Params: []v1.ParamSpec{
-					{Name: "param1", Type: v1.ParamTypeString, Default: v1.NewStructuredValues("$(context.pipelineRun.name)")},
-					{Name: "param2", Type: v1.ParamTypeString, Default: v1.NewStructuredValues("$(workspace.some-volume.bound)")},
-					{Name: "param3", Type: v1.ParamTypeString, Default: v1.NewStructuredValues("interpolated-name: $(context.pipeline.name)")},
-				},
-				Tasks: []v1.PipelineTask{{
-					Params: v1.Params{
-						{Name: "task-param1", Value: *v1.NewStructuredValues("$(context.pipelineRun.name)")},
-						{Name: "task-param2", Value: *v1.NewStructuredValues("$(workspace.some-volume.bound)")},
-						{Name: "task-param3", Value: *v1.NewStructuredValues("interpolated-name: $(context.pipeline.name)")},
-					},
-				}},
-			},
-		},
-		{
-			name: "parameter default value references non-parameter variable(s) - param override",
-			original: v1.PipelineSpec{
-				Params: []v1.ParamSpec{
-					{Name: "param1", Type: v1.ParamTypeString, Default: v1.NewStructuredValues("$(context.pipelineRun.name)")},
-					{Name: "param2", Type: v1.ParamTypeString, Default: v1.NewStructuredValues("$(workspace.some-volume.bound)")},
-				},
-				Tasks: []v1.PipelineTask{{
-					Params: v1.Params{
-						{Name: "task-param1", Value: *v1.NewStructuredValues("$(params.param1)")},
-						{Name: "task-param2", Value: *v1.NewStructuredValues("$(params.param2)")},
-					},
-				}},
-			},
-			params: v1.Params{
-				{Name: "param1", Value: *v1.NewStructuredValues("override param1 value")},
-				{Name: "param2", Value: *v1.NewStructuredValues("override param2 value")},
-			},
-			expected: v1.PipelineSpec{
-				Params: []v1.ParamSpec{
-					{Name: "param1", Type: v1.ParamTypeString, Default: v1.NewStructuredValues("$(context.pipelineRun.name)")},
-					{Name: "param2", Type: v1.ParamTypeString, Default: v1.NewStructuredValues("$(workspace.some-volume.bound)")},
-				},
-				Tasks: []v1.PipelineTask{{
-					Params: v1.Params{
-						{Name: "task-param1", Value: *v1.NewStructuredValues("override param1 value")},
-						{Name: "task-param2", Value: *v1.NewStructuredValues("override param2 value")},
-					},
-				}},
-			},
-		},
-		{
-			name: "three-level dependency chain - forward order",
-			original: v1.PipelineSpec{
-				Params: []v1.ParamSpec{
-					{Name: "base-registry", Type: v1.ParamTypeString, Default: v1.NewStructuredValues("docker.io")},
-					{Name: "registry", Type: v1.ParamTypeString, Default: v1.NewStructuredValues("$(params.base-registry)/myorg")},
-					{Name: "image-url", Type: v1.ParamTypeString, Default: v1.NewStructuredValues("$(params.registry)/app:v1")},
-				},
-				Tasks: []v1.PipelineTask{{
-					Params: v1.Params{
-						{Name: "task-param", Value: *v1.NewStructuredValues("$(params.image-url)")},
-					},
-				}},
-			},
-			params: v1.Params{},
-			expected: v1.PipelineSpec{
-				Params: []v1.ParamSpec{
-					{Name: "base-registry", Type: v1.ParamTypeString, Default: v1.NewStructuredValues("docker.io")},
-					{Name: "registry", Type: v1.ParamTypeString, Default: v1.NewStructuredValues("$(params.base-registry)/myorg")},
-					{Name: "image-url", Type: v1.ParamTypeString, Default: v1.NewStructuredValues("$(params.registry)/app:v1")},
-				},
-				Tasks: []v1.PipelineTask{{
-					Params: v1.Params{
-						{Name: "task-param", Value: *v1.NewStructuredValues("docker.io/myorg/app:v1")},
-					},
-				}},
-			},
-		},
-		{
-			name: "three-level dependency chain - reverse order",
-			original: v1.PipelineSpec{
-				Params: []v1.ParamSpec{
-					{Name: "image-url", Type: v1.ParamTypeString, Default: v1.NewStructuredValues("$(params.registry)/app:v1")},
-					{Name: "registry", Type: v1.ParamTypeString, Default: v1.NewStructuredValues("$(params.base-registry)/myorg")},
-					{Name: "base-registry", Type: v1.ParamTypeString, Default: v1.NewStructuredValues("docker.io")},
-				},
-				Tasks: []v1.PipelineTask{{
-					Params: v1.Params{
-						{Name: "task-param", Value: *v1.NewStructuredValues("$(params.image-url)")},
-					},
-				}},
-			},
-			params: v1.Params{},
-			expected: v1.PipelineSpec{
-				Params: []v1.ParamSpec{
-					{Name: "image-url", Type: v1.ParamTypeString, Default: v1.NewStructuredValues("$(params.registry)/app:v1")},
-					{Name: "registry", Type: v1.ParamTypeString, Default: v1.NewStructuredValues("$(params.base-registry)/myorg")},
-					{Name: "base-registry", Type: v1.ParamTypeString, Default: v1.NewStructuredValues("docker.io")},
-				},
-				Tasks: []v1.PipelineTask{{
-					Params: v1.Params{
-						{Name: "task-param", Value: *v1.NewStructuredValues("docker.io/myorg/app:v1")},
-					},
-				}},
-			},
-		},
-		{
-			name: "multiple param references in one default",
-			original: v1.PipelineSpec{
-				Params: []v1.ParamSpec{
-					{Name: "registry", Type: v1.ParamTypeString, Default: v1.NewStructuredValues("gcr.io")},
-					{Name: "project", Type: v1.ParamTypeString, Default: v1.NewStructuredValues("my-project")},
-					{Name: "app", Type: v1.ParamTypeString, Default: v1.NewStructuredValues("backend")},
-					{Name: "version", Type: v1.ParamTypeString, Default: v1.NewStructuredValues("1.0.0")},
-					{Name: "full-image", Type: v1.ParamTypeString, Default: v1.NewStructuredValues("$(params.registry)/$(params.project)/$(params.app):$(params.version)")},
-				},
-				Tasks: []v1.PipelineTask{{
-					Params: v1.Params{
-						{Name: "task-param", Value: *v1.NewStructuredValues("$(params.full-image)")},
-					},
-				}},
-			},
-			params: v1.Params{},
-			expected: v1.PipelineSpec{
-				Params: []v1.ParamSpec{
-					{Name: "registry", Type: v1.ParamTypeString, Default: v1.NewStructuredValues("gcr.io")},
-					{Name: "project", Type: v1.ParamTypeString, Default: v1.NewStructuredValues("my-project")},
-					{Name: "app", Type: v1.ParamTypeString, Default: v1.NewStructuredValues("backend")},
-					{Name: "version", Type: v1.ParamTypeString, Default: v1.NewStructuredValues("1.0.0")},
-					{Name: "full-image", Type: v1.ParamTypeString, Default: v1.NewStructuredValues("$(params.registry)/$(params.project)/$(params.app):$(params.version)")},
-				},
-				Tasks: []v1.PipelineTask{{
-					Params: v1.Params{
-						{Name: "task-param", Value: *v1.NewStructuredValues("gcr.io/my-project/backend:1.0.0")},
-					},
-				}},
-			},
-		},
-		{
-			name: "array default referencing string param",
-			original: v1.PipelineSpec{
-				Params: []v1.ParamSpec{
-					{Name: "registry", Type: v1.ParamTypeString, Default: v1.NewStructuredValues("docker.io")},
-					{Name: "images", Type: v1.ParamTypeArray, Default: v1.NewStructuredValues("$(params.registry)/app1", "$(params.registry)/app2", "alpine")},
-				},
-				Tasks: []v1.PipelineTask{{
-					Params: v1.Params{
-						{Name: "task-images", Value: *v1.NewStructuredValues("$(params.images[*])")},
-					},
-				}},
-			},
-			params: v1.Params{},
-			expected: v1.PipelineSpec{
-				Params: []v1.ParamSpec{
-					{Name: "registry", Type: v1.ParamTypeString, Default: v1.NewStructuredValues("docker.io")},
-					{Name: "images", Type: v1.ParamTypeArray, Default: v1.NewStructuredValues("$(params.registry)/app1", "$(params.registry)/app2", "alpine")},
-				},
-				Tasks: []v1.PipelineTask{{
-					Params: v1.Params{
-						{Name: "task-images", Value: *v1.NewStructuredValues("docker.io/app1", "docker.io/app2", "alpine")},
-					},
-				}},
-			},
-		},
-		{
-			name: "object default referencing string param",
-			original: v1.PipelineSpec{
-				Params: []v1.ParamSpec{
-					{Name: "registry", Type: v1.ParamTypeString, Default: v1.NewStructuredValues("gcr.io")},
-					{Name: "port", Type: v1.ParamTypeString, Default: v1.NewStructuredValues("5000")},
-					{Name: "config", Type: v1.ParamTypeObject, Default: v1.NewObject(map[string]string{
-						"host": "$(params.registry)",
-						"port": "$(params.port)",
-					})},
-				},
-				Tasks: []v1.PipelineTask{{
-					Params: v1.Params{
-						{Name: "task-host", Value: *v1.NewStructuredValues("$(params.config.host)")},
-						{Name: "task-port", Value: *v1.NewStructuredValues("$(params.config.port)")},
-					},
-				}},
-			},
-			params: v1.Params{},
-			expected: v1.PipelineSpec{
-				Params: []v1.ParamSpec{
-					{Name: "registry", Type: v1.ParamTypeString, Default: v1.NewStructuredValues("gcr.io")},
-					{Name: "port", Type: v1.ParamTypeString, Default: v1.NewStructuredValues("5000")},
-					{Name: "config", Type: v1.ParamTypeObject, Default: v1.NewObject(map[string]string{
-						"host": "$(params.registry)",
-						"port": "$(params.port)",
-					})},
-				},
-				Tasks: []v1.PipelineTask{{
-					Params: v1.Params{
-						{Name: "task-host", Value: *v1.NewStructuredValues("gcr.io")},
-						{Name: "task-port", Value: *v1.NewStructuredValues("5000")},
-					},
-				}},
-			},
-		},
 	} {
+		tt := tt // capture range variable
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
+			ctx := context.Background()
+			if tt.wc != nil {
+				ctx = tt.wc(ctx)
+			}
 			run := &v1.PipelineRun{
 				Spec: v1.PipelineRunSpec{
 					Params: tt.params,
 				},
 			}
-			got, err := resources.ApplyParameters(&tt.original, run)
-			if err != nil {
-				t.Fatalf("unexpected error: %v", err)
-			}
+			got := resources.ApplyParameters(ctx, &tt.original, run)
 			if d := cmp.Diff(&tt.expected, got); d != "" {
 				t.Errorf("ApplyParameters() got diff %s", diff.PrintWantGot(d))
-			}
-		})
-	}
-}
-
-func TestApplyParameters_Errors(t *testing.T) {
-	for _, tt := range []struct {
-		name          string
-		original      v1.PipelineSpec
-		params        []v1.Param
-		expectedError error
-	}{
-		{
-			name: "circular dependency between two params",
-			original: v1.PipelineSpec{
-				Params: []v1.ParamSpec{
-					{Name: "image-url", Type: v1.ParamTypeString, Default: v1.NewStructuredValues("$(params.full-path)/app")},
-					{Name: "full-path", Type: v1.ParamTypeString, Default: v1.NewStructuredValues("$(params.image-url)")},
-				},
-				Tasks: []v1.PipelineTask{{
-					Params: v1.Params{
-						{Name: "task-param", Value: *v1.NewStructuredValues("$(params.image-url)")},
-					},
-				}},
-			},
-			params:        v1.Params{},
-			expectedError: errors.New("parameter resolution failed: circular dependency detected in param"),
-		},
-		{
-			name: "self-referencing param",
-			original: v1.PipelineSpec{
-				Params: []v1.ParamSpec{
-					{Name: "registry", Type: v1.ParamTypeString, Default: v1.NewStructuredValues("$(params.registry)")},
-				},
-				Tasks: []v1.PipelineTask{{
-					Params: v1.Params{
-						{Name: "task-param", Value: *v1.NewStructuredValues("$(params.registry)")},
-					},
-				}},
-			},
-			params:        v1.Params{},
-			expectedError: errors.New("parameter resolution failed: circular dependency detected in param"),
-		},
-		{
-			name: "three-param circular chain",
-			original: v1.PipelineSpec{
-				Params: []v1.ParamSpec{
-					{Name: "a", Type: v1.ParamTypeString, Default: v1.NewStructuredValues("$(params.b)")},
-					{Name: "b", Type: v1.ParamTypeString, Default: v1.NewStructuredValues("$(params.c)")},
-					{Name: "c", Type: v1.ParamTypeString, Default: v1.NewStructuredValues("$(params.a)")},
-				},
-				Tasks: []v1.PipelineTask{{
-					Params: v1.Params{
-						{Name: "task-param", Value: *v1.NewStructuredValues("$(params.a)")},
-					},
-				}},
-			},
-			params:        v1.Params{},
-			expectedError: errors.New("parameter resolution failed: circular dependency detected in param"),
-		},
-		{
-			name: "param references non-existent param",
-			original: v1.PipelineSpec{
-				Params: []v1.ParamSpec{
-					{Name: "image-url", Type: v1.ParamTypeString, Default: v1.NewStructuredValues("$(params.registry)/app")},
-				},
-				Tasks: []v1.PipelineTask{{
-					Params: v1.Params{
-						{Name: "task-param", Value: *v1.NewStructuredValues("$(params.image-url)")},
-					},
-				}},
-			},
-			params:        v1.Params{},
-			expectedError: errors.New("parameter resolution failed: param"),
-		},
-		{
-			name: "recursion depth exceeded",
-			original: v1.PipelineSpec{
-				Params: []v1.ParamSpec{
-					{Name: "a", Type: v1.ParamTypeString, Default: v1.NewStructuredValues("$(params.b)")},
-					{Name: "b", Type: v1.ParamTypeString, Default: v1.NewStructuredValues("$(params.c)")},
-					{Name: "c", Type: v1.ParamTypeString, Default: v1.NewStructuredValues("$(params.d)")},
-					{Name: "d", Type: v1.ParamTypeString, Default: v1.NewStructuredValues("$(params.e)")},
-					{Name: "e", Type: v1.ParamTypeString, Default: v1.NewStructuredValues("$(params.f)")},
-					{Name: "f", Type: v1.ParamTypeString, Default: v1.NewStructuredValues("$(params.g)")},
-					{Name: "g", Type: v1.ParamTypeString, Default: v1.NewStructuredValues("$(params.h)")},
-					{Name: "h", Type: v1.ParamTypeString, Default: v1.NewStructuredValues("$(params.i)")},
-					{Name: "i", Type: v1.ParamTypeString, Default: v1.NewStructuredValues("$(params.j)")},
-					{Name: "j", Type: v1.ParamTypeString, Default: v1.NewStructuredValues("$(params.k)")},
-					{Name: "k", Type: v1.ParamTypeString, Default: v1.NewStructuredValues("$(params.l)")},
-					{Name: "l", Type: v1.ParamTypeString, Default: v1.NewStructuredValues("$(params.a)")},
-				},
-				Tasks: []v1.PipelineTask{{
-					Params: v1.Params{
-						{Name: "task-param", Value: *v1.NewStructuredValues("$(params.a)")},
-					},
-				}},
-			},
-			params:        v1.Params{},
-			expectedError: errors.New("parameter resolution failed: maximum recursion depth"),
-		},
-	} {
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-			pr := &v1.PipelineRun{
-				Spec: v1.PipelineRunSpec{
-					Params: tt.params,
-				},
-			}
-
-			_, err := resources.ApplyParameters(&tt.original, pr)
-
-			if err == nil {
-				t.Fatalf("expected error containing %q but got none", tt.expectedError.Error())
-			}
-
-			if !strings.Contains(err.Error(), tt.expectedError.Error()) {
-				t.Fatalf("error = %q, want to contain %q", err.Error(), tt.expectedError.Error())
 			}
 		})
 	}
@@ -2500,6 +2082,7 @@ func TestApplyParameters_ArrayIndexing(t *testing.T) {
 			},
 		},
 	} {
+		tt := tt // capture range variable
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			run := &v1.PipelineRun{
@@ -2507,10 +2090,7 @@ func TestApplyParameters_ArrayIndexing(t *testing.T) {
 					Params: tt.params,
 				},
 			}
-			got, err := resources.ApplyParameters(&tt.original, run)
-			if err != nil {
-				t.Fatalf("unexpected error: %v", err)
-			}
+			got := resources.ApplyParameters(context.Background(), &tt.original, run)
 			if d := cmp.Diff(&tt.expected, got); d != "" {
 				t.Errorf("ApplyParameters() got diff %s", diff.PrintWantGot(d))
 			}
@@ -2755,6 +2335,7 @@ func TestApplyReplacementsMatrix(t *testing.T) {
 			},
 		},
 	} {
+		tt := tt // capture range variable
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			run := &v1.PipelineRun{
@@ -2762,10 +2343,7 @@ func TestApplyReplacementsMatrix(t *testing.T) {
 					Params: tt.params,
 				},
 			}
-			got, err := resources.ApplyParameters(&tt.original, run)
-			if err != nil {
-				t.Fatalf("unexpected error: %v", err)
-			}
+			got := resources.ApplyParameters(context.Background(), &tt.original, run)
 			if d := cmp.Diff(&tt.expected, got); d != "" {
 				t.Errorf("ApplyParameters() got diff %s", diff.PrintWantGot(d))
 			}
@@ -3812,19 +3390,19 @@ func TestContext(t *testing.T) {
 			}
 			got := resources.ApplyContexts(&orig.Spec, orig.Name, tc.pr)
 			if d := cmp.Diff(tc.expected, got.Tasks[0].Params[0]); d != "" {
-				t.Error(diff.PrintWantGot(d))
+				t.Errorf(diff.PrintWantGot(d))
 			}
 			if d := cmp.Diff(tc.expected, got.Finally[0].Params[0]); d != "" {
-				t.Error(diff.PrintWantGot(d))
+				t.Errorf(diff.PrintWantGot(d))
 			}
 			if d := cmp.Diff(tc.expected, got.Tasks[0].Matrix.Params[0]); d != "" {
-				t.Error(diff.PrintWantGot(d))
+				t.Errorf(diff.PrintWantGot(d))
 			}
 			if d := cmp.Diff(tc.expectedDisplayName, got.Tasks[0].DisplayName); d != "" {
-				t.Error(diff.PrintWantGot(d))
+				t.Errorf(diff.PrintWantGot(d))
 			}
 			if d := cmp.Diff(tc.expectedDisplayName, got.Finally[0].DisplayName); d != "" {
-				t.Error(diff.PrintWantGot(d))
+				t.Errorf(diff.PrintWantGot(d))
 			}
 		})
 	}
@@ -4076,7 +3654,7 @@ func TestApplyPipelineTaskContexts(t *testing.T) {
 		t.Run(tc.description, func(t *testing.T) {
 			got := resources.ApplyPipelineTaskContexts(&tc.pt, tc.prstatus, tc.facts)
 			if d := cmp.Diff(&tc.want, got); d != "" {
-				t.Error(diff.PrintWantGot(d))
+				t.Errorf(diff.PrintWantGot(d))
 			}
 		})
 	}
@@ -4244,9 +3822,9 @@ func TestApplyFinallyResultsToPipelineResults(t *testing.T) {
 		},
 	} {
 		t.Run(tc.description, func(t *testing.T) {
-			received, _ := resources.ApplyTaskResultsToPipelineResults(tc.results, tc.taskResults, tc.runResults, nil /* skippedTasks */)
+			received, _ := resources.ApplyTaskResultsToPipelineResults(context.Background(), tc.results, tc.taskResults, tc.runResults, nil /* skippedTasks */)
 			if d := cmp.Diff(tc.expected, received); d != "" {
-				t.Error(diff.PrintWantGot(d))
+				t.Errorf(diff.PrintWantGot(d))
 			}
 		})
 	}
@@ -4577,12 +4155,12 @@ func TestApplyTaskResultsToPipelineResults_Success(t *testing.T) {
 		}},
 	}} {
 		t.Run(tc.description, func(t *testing.T) {
-			received, err := resources.ApplyTaskResultsToPipelineResults(tc.results, tc.taskResults, tc.runResults, tc.taskstatus)
+			received, err := resources.ApplyTaskResultsToPipelineResults(context.Background(), tc.results, tc.taskResults, tc.runResults, tc.taskstatus)
 			if err != nil {
-				t.Errorf("Got unexpected error:%v", err)
+				t.Errorf("Got unecpected error:%v", err)
 			}
 			if d := cmp.Diff(tc.expectedResults, received); d != "" {
-				t.Error(diff.PrintWantGot(d))
+				t.Errorf(diff.PrintWantGot(d))
 			}
 		})
 	}
@@ -4793,7 +4371,7 @@ func TestApplyTaskResultsToPipelineResults_Error(t *testing.T) {
 		expectedError:   errors.New("invalid pipelineresults [foo], the referenced results don't exist"),
 	}} {
 		t.Run(tc.description, func(t *testing.T) {
-			received, err := resources.ApplyTaskResultsToPipelineResults(tc.results, tc.taskResults, tc.runResults, nil /*skipped tasks*/)
+			received, err := resources.ApplyTaskResultsToPipelineResults(context.Background(), tc.results, tc.taskResults, tc.runResults, nil /*skipped tasks*/)
 			if err == nil {
 				t.Errorf("Expect error but got nil")
 				return
@@ -4804,7 +4382,7 @@ func TestApplyTaskResultsToPipelineResults_Error(t *testing.T) {
 			}
 
 			if d := cmp.Diff(tc.expectedResults, received); d != "" {
-				t.Error(diff.PrintWantGot(d))
+				t.Errorf(diff.PrintWantGot(d))
 			}
 		})
 	}
@@ -5170,163 +4748,6 @@ func TestPropagateResults(t *testing.T) {
 			resources.PropagateResults(tt.resolvedTask, tt.runStates)
 			if d := cmp.Diff(tt.expectedResolvedTask, tt.resolvedTask); d != "" {
 				t.Fatalf("PropagateResults() %s", diff.PrintWantGot(d))
-			}
-		})
-	}
-}
-
-func TestPropagateArtifacts(t *testing.T) {
-	for _, tt := range []struct {
-		name                 string
-		resolvedTask         *resources.ResolvedPipelineTask
-		runStates            resources.PipelineRunState
-		expectedResolvedTask *resources.ResolvedPipelineTask
-		wantErr              bool
-	}{
-		{
-			name: "not propagate artifact when resolved task is nil",
-			resolvedTask: &resources.ResolvedPipelineTask{
-				ResolvedTask: nil,
-			},
-			runStates: resources.PipelineRunState{},
-			expectedResolvedTask: &resources.ResolvedPipelineTask{
-				ResolvedTask: nil,
-			},
-		},
-		{
-			name: "not propagate artifact when taskSpec is nil",
-			resolvedTask: &resources.ResolvedPipelineTask{
-				ResolvedTask: &taskresources.ResolvedTask{
-					TaskSpec: nil,
-				},
-			},
-			runStates: resources.PipelineRunState{},
-			expectedResolvedTask: &resources.ResolvedPipelineTask{
-				ResolvedTask: &taskresources.ResolvedTask{
-					TaskSpec: nil,
-				},
-			},
-		},
-		{
-			name: "propagate artifacts inputs",
-			resolvedTask: &resources.ResolvedPipelineTask{
-				ResolvedTask: &taskresources.ResolvedTask{
-					TaskSpec: &v1.TaskSpec{
-						Steps: []v1.Step{
-							{
-								Name:    "get-artifacts-inputs-from-pt1",
-								Command: []string{"$(tasks.pt1.inputs.source)"},
-								Args:    []string{"$(tasks.pt1.inputs.source)"},
-							},
-						},
-					},
-				},
-			},
-			runStates: resources.PipelineRunState{
-				{
-					PipelineTask: &v1.PipelineTask{
-						Name: "pt1",
-					},
-					TaskRuns: []*v1.TaskRun{
-						{
-							Status: v1.TaskRunStatus{
-								Status: duckv1.Status{
-									Conditions: duckv1.Conditions{
-										{
-											Type:   apis.ConditionSucceeded,
-											Status: corev1.ConditionTrue,
-										},
-									},
-								},
-								TaskRunStatusFields: v1.TaskRunStatusFields{
-									Artifacts: &v1.Artifacts{
-										Inputs:  []v1.Artifact{{Name: "source", Values: []v1.ArtifactValue{{Digest: map[v1.Algorithm]string{"sha256": "b35cacccfdb1e24dc497d15d553891345fd155713ffe647c281c583269eaaae0"}, Uri: "pkg:example.github.com/inputs"}}}},
-										Outputs: nil,
-									},
-								},
-							},
-						},
-					},
-				},
-			},
-			expectedResolvedTask: &resources.ResolvedPipelineTask{
-				ResolvedTask: &taskresources.ResolvedTask{
-					TaskSpec: &v1.TaskSpec{
-						Steps: []v1.Step{
-							{
-								Name:    "get-artifacts-inputs-from-pt1",
-								Command: []string{`[{"digest":{"sha256":"b35cacccfdb1e24dc497d15d553891345fd155713ffe647c281c583269eaaae0"},"uri":"pkg:example.github.com/inputs"}]`},
-								Args:    []string{`[{"digest":{"sha256":"b35cacccfdb1e24dc497d15d553891345fd155713ffe647c281c583269eaaae0"},"uri":"pkg:example.github.com/inputs"}]`},
-							},
-						},
-					},
-				},
-			},
-		},
-		{
-			name: "propagate artifacts outputs",
-			resolvedTask: &resources.ResolvedPipelineTask{
-				ResolvedTask: &taskresources.ResolvedTask{
-					TaskSpec: &v1.TaskSpec{
-						Steps: []v1.Step{
-							{
-								Name:    "get-artifacts-outputs-from-pt1",
-								Command: []string{"$(tasks.pt1.outputs.image)"},
-								Args:    []string{"$(tasks.pt1.outputs.image)"},
-							},
-						},
-					},
-				},
-			},
-			runStates: resources.PipelineRunState{
-				{
-					PipelineTask: &v1.PipelineTask{
-						Name: "pt1",
-					},
-					TaskRuns: []*v1.TaskRun{
-						{
-							Status: v1.TaskRunStatus{
-								Status: duckv1.Status{
-									Conditions: duckv1.Conditions{
-										{
-											Type:   apis.ConditionSucceeded,
-											Status: corev1.ConditionTrue,
-										},
-									},
-								},
-								TaskRunStatusFields: v1.TaskRunStatusFields{
-									Artifacts: &v1.Artifacts{
-										Inputs:  []v1.Artifact{{Name: "source", Values: []v1.ArtifactValue{{Digest: map[v1.Algorithm]string{"sha256": "b35cacccfdb1e24dc497d15d553891345fd155713ffe647c281c583269eaaae0"}, Uri: "pkg:example.github.com/inputs"}}}},
-										Outputs: []v1.Artifact{{Name: "image", Values: []v1.ArtifactValue{{Digest: map[v1.Algorithm]string{"sha1": "95588b8f34c31eb7d62c92aaa4e6506639b06ef2"}, Uri: "pkg:github/package-url/purl-spec@244fd47e07d1004f0aed9c"}}}},
-									},
-								},
-							},
-						},
-					},
-				},
-			},
-			expectedResolvedTask: &resources.ResolvedPipelineTask{
-				ResolvedTask: &taskresources.ResolvedTask{
-					TaskSpec: &v1.TaskSpec{
-						Steps: []v1.Step{
-							{
-								Name:    "get-artifacts-outputs-from-pt1",
-								Command: []string{`[{"digest":{"sha1":"95588b8f34c31eb7d62c92aaa4e6506639b06ef2"},"uri":"pkg:github/package-url/purl-spec@244fd47e07d1004f0aed9c"}]`},
-								Args:    []string{`[{"digest":{"sha1":"95588b8f34c31eb7d62c92aaa4e6506639b06ef2"},"uri":"pkg:github/package-url/purl-spec@244fd47e07d1004f0aed9c"}]`},
-							},
-						},
-					},
-				},
-			},
-		},
-	} {
-		t.Run(tt.name, func(t *testing.T) {
-			err := resources.PropagateArtifacts(tt.resolvedTask, tt.runStates)
-			if tt.wantErr != (err != nil) {
-				t.Fatalf("Failed to check err want %t, got %v", tt.wantErr, err)
-			}
-			if d := cmp.Diff(tt.expectedResolvedTask, tt.resolvedTask); d != "" {
-				t.Fatalf("TestPropagateArtifacts() %s", diff.PrintWantGot(d))
 			}
 		})
 	}
@@ -5699,7 +5120,7 @@ func TestApplyParametersToWorkspaceBindings(t *testing.T) {
 
 	for _, tt := range testCases {
 		t.Run(tt.name, func(t *testing.T) {
-			resources.ApplyParametersToWorkspaceBindings(tt.pr)
+			resources.ApplyParametersToWorkspaceBindings(context.TODO(), tt.pr)
 			if d := cmp.Diff(tt.expectedPr, tt.pr); d != "" {
 				t.Fatalf("TestApplyParametersToWorkspaceBindings() %s, got: %v", tt.name, diff.PrintWantGot(d))
 			}

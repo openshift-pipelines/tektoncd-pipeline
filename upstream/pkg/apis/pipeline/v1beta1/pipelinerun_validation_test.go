@@ -18,12 +18,10 @@ package v1beta1_test
 
 import (
 	"context"
-	"strings"
 	"testing"
 	"time"
 
 	"github.com/google/go-cmp/cmp"
-	"github.com/google/go-cmp/cmp/cmpopts"
 	"github.com/tektoncd/pipeline/pkg/apis/config"
 	cfgtesting "github.com/tektoncd/pipeline/pkg/apis/config/testing"
 	"github.com/tektoncd/pipeline/pkg/apis/pipeline/pod"
@@ -32,9 +30,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	corev1resources "k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	ptr "k8s.io/utils/pointer"
 	"knative.dev/pkg/apis"
-	duckv1 "knative.dev/pkg/apis/duck/v1"
 )
 
 func TestPipelineRun_Invalid(t *testing.T) {
@@ -509,56 +505,16 @@ func TestPipelineRun_Invalid(t *testing.T) {
 			},
 		},
 		want: &apis.FieldError{Message: "must not set the field(s)", Paths: []string{"spec.resources"}},
-	}, {
-		name: "uses bundle (deprecated) on creation is disallowed",
-		pr: v1beta1.PipelineRun{
-			ObjectMeta: metav1.ObjectMeta{
-				Name: "pipelinerunname",
-			},
-			Spec: v1beta1.PipelineRunSpec{
-				PipelineRef: &v1beta1.PipelineRef{
-					Name:   "foo",
-					Bundle: "example.com/foo/bar",
-				},
-			},
-		},
-		want: &apis.FieldError{Message: "must not set the field(s)", Paths: []string{"spec.pipelineRef.bundle"}},
-		wc:   apis.WithinCreate,
-	}, {
-		name: "when pipeline timeout is no timeout (0s), task timeouts can exceed it without error",
-		pr: v1beta1.PipelineRun{
-			ObjectMeta: metav1.ObjectMeta{
-				Name: "pipelinelinename",
-			},
-			Spec: v1beta1.PipelineRunSpec{
-				PipelineRef: &v1beta1.PipelineRef{
-					Name: "prname",
-				},
-				Timeouts: &v1beta1.TimeoutFields{
-					Pipeline: &metav1.Duration{Duration: 0 * time.Minute}, // No timeout
-				},
-				TaskRunSpecs: []v1beta1.PipelineTaskRunSpec{{
-					PipelineTaskName:       "task1",
-					TaskPodTemplate:        &pod.PodTemplate{},
-					TaskServiceAccountName: "default",
-				}},
-			},
-		},
-		want: nil, // NoTimeoutDuration (0s) allows any task timeout
 	}}
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			ctx := t.Context()
+			ctx := context.Background()
 			if tc.wc != nil {
 				ctx = tc.wc(ctx)
 			}
 			err := tc.pr.Validate(ctx)
-			if tc.want == nil {
-				if err != nil {
-					t.Errorf("Expected no error but got: %v", err)
-				}
-			} else if d := cmp.Diff(tc.want.Error(), err.Error()); d != "" {
+			if d := cmp.Diff(tc.want.Error(), err.Error()); d != "" {
 				t.Error(diff.PrintWantGot(d))
 			}
 		})
@@ -978,7 +934,7 @@ func TestPipelineRun_Validate(t *testing.T) {
 			},
 		},
 	}, {
-		name: "beta feature: sidecar and step overrides",
+		name: "alpha feature: sidecar and step overrides",
 		pr: v1beta1.PipelineRun{
 			ObjectMeta: metav1.ObjectMeta{
 				Name: "pr",
@@ -988,32 +944,28 @@ func TestPipelineRun_Validate(t *testing.T) {
 				TaskRunSpecs: []v1beta1.PipelineTaskRunSpec{
 					{
 						PipelineTaskName: "bar",
-						StepOverrides: []v1beta1.TaskRunStepOverride{
-							{
-								Name: "task-1",
-								Resources: corev1.ResourceRequirements{
-									Requests: corev1.ResourceList{corev1.ResourceMemory: corev1resources.MustParse("1Gi")},
-								},
-							},
+						StepOverrides: []v1beta1.TaskRunStepOverride{{
+							Name: "task-1",
+							Resources: corev1.ResourceRequirements{
+								Requests: corev1.ResourceList{corev1.ResourceMemory: corev1resources.MustParse("1Gi")},
+							}},
 						},
-						SidecarOverrides: []v1beta1.TaskRunSidecarOverride{
-							{
-								Name: "task-1",
-								Resources: corev1.ResourceRequirements{
-									Requests: corev1.ResourceList{corev1.ResourceMemory: corev1resources.MustParse("1Gi")},
-								},
-							},
+						SidecarOverrides: []v1beta1.TaskRunSidecarOverride{{
+							Name: "task-1",
+							Resources: corev1.ResourceRequirements{
+								Requests: corev1.ResourceList{corev1.ResourceMemory: corev1resources.MustParse("1Gi")},
+							}},
 						},
 					},
 				},
 			},
 		},
-		wc: cfgtesting.EnableBetaAPIFields,
+		wc: cfgtesting.EnableAlphaAPIFields,
 	}}
 
 	for _, ts := range tests {
 		t.Run(ts.name, func(t *testing.T) {
-			ctx := t.Context()
+			ctx := context.Background()
 			if ts.wc != nil {
 				ctx = ts.wc(ctx)
 			}
@@ -1042,8 +994,7 @@ func TestPipelineRunSpec_Invalidate(t *testing.T) {
 					TaskRef: &v1beta1.TaskRef{
 						Name: "mytask",
 					},
-				}},
-			},
+				}}},
 		},
 		wantErr: apis.ErrMultipleOneOf("pipelineRef", "pipelineSpec"),
 	}, {
@@ -1138,45 +1089,41 @@ func TestPipelineRunSpec_Invalidate(t *testing.T) {
 		wantErr:     apis.ErrMultipleOneOf("taskRunSpecs[0].stepOverrides[1].name"),
 		withContext: cfgtesting.EnableAlphaAPIFields,
 	}, {
-		name: "stepOverride disallowed without alpha or beta feature gate",
+		name: "stepOverride disallowed without alpha feature gate",
 		spec: v1beta1.PipelineRunSpec{
 			PipelineRef: &v1beta1.PipelineRef{Name: "foo"},
 			TaskRunSpecs: []v1beta1.PipelineTaskRunSpec{
 				{
 					PipelineTaskName: "bar",
-					StepOverrides: []v1beta1.TaskRunStepOverride{
-						{
-							Name: "task-1",
-							Resources: corev1.ResourceRequirements{
-								Requests: corev1.ResourceList{corev1.ResourceMemory: corev1resources.MustParse("1Gi")},
-							},
-						},
+					StepOverrides: []v1beta1.TaskRunStepOverride{{
+						Name: "task-1",
+						Resources: corev1.ResourceRequirements{
+							Requests: corev1.ResourceList{corev1.ResourceMemory: corev1resources.MustParse("1Gi")},
+						}},
 					},
 				},
 			},
 		},
 		withContext: cfgtesting.EnableStableAPIFields,
-		wantErr:     apis.ErrGeneric("stepOverrides requires \"enable-api-fields\" feature gate to be \"alpha\" or \"beta\" but it is \"stable\"").ViaIndex(0).ViaField("taskRunSpecs"),
+		wantErr:     apis.ErrGeneric("stepOverrides requires \"enable-api-fields\" feature gate to be \"alpha\" but it is \"stable\"").ViaIndex(0).ViaField("taskRunSpecs"),
 	}, {
-		name: "sidecarOverride disallowed without alpha or beta feature gate",
+		name: "sidecarOverride disallowed without alpha feature gate",
 		spec: v1beta1.PipelineRunSpec{
 			PipelineRef: &v1beta1.PipelineRef{Name: "foo"},
 			TaskRunSpecs: []v1beta1.PipelineTaskRunSpec{
 				{
 					PipelineTaskName: "bar",
-					SidecarOverrides: []v1beta1.TaskRunSidecarOverride{
-						{
-							Name: "task-1",
-							Resources: corev1.ResourceRequirements{
-								Requests: corev1.ResourceList{corev1.ResourceMemory: corev1resources.MustParse("1Gi")},
-							},
-						},
+					SidecarOverrides: []v1beta1.TaskRunSidecarOverride{{
+						Name: "task-1",
+						Resources: corev1.ResourceRequirements{
+							Requests: corev1.ResourceList{corev1.ResourceMemory: corev1resources.MustParse("1Gi")},
+						}},
 					},
 				},
 			},
 		},
 		withContext: cfgtesting.EnableStableAPIFields,
-		wantErr:     apis.ErrGeneric("sidecarOverrides requires \"enable-api-fields\" feature gate to be \"alpha\" or \"beta\" but it is \"stable\"").ViaIndex(0).ViaField("taskRunSpecs"),
+		wantErr:     apis.ErrGeneric("sidecarOverrides requires \"enable-api-fields\" feature gate to be \"alpha\" but it is \"stable\"").ViaIndex(0).ViaField("taskRunSpecs"),
 	}, {
 		name: "missing stepOverride name",
 		spec: v1beta1.PipelineRunSpec{
@@ -1184,12 +1131,10 @@ func TestPipelineRunSpec_Invalidate(t *testing.T) {
 			TaskRunSpecs: []v1beta1.PipelineTaskRunSpec{
 				{
 					PipelineTaskName: "bar",
-					StepOverrides: []v1beta1.TaskRunStepOverride{
-						{
-							Resources: corev1.ResourceRequirements{
-								Requests: corev1.ResourceList{corev1.ResourceMemory: corev1resources.MustParse("1Gi")},
-							},
-						},
+					StepOverrides: []v1beta1.TaskRunStepOverride{{
+						Resources: corev1.ResourceRequirements{
+							Requests: corev1.ResourceList{corev1.ResourceMemory: corev1resources.MustParse("1Gi")},
+						}},
 					},
 				},
 			},
@@ -1218,12 +1163,10 @@ func TestPipelineRunSpec_Invalidate(t *testing.T) {
 			TaskRunSpecs: []v1beta1.PipelineTaskRunSpec{
 				{
 					PipelineTaskName: "bar",
-					SidecarOverrides: []v1beta1.TaskRunSidecarOverride{
-						{
-							Resources: corev1.ResourceRequirements{
-								Requests: corev1.ResourceList{corev1.ResourceMemory: corev1resources.MustParse("1Gi")},
-							},
-						},
+					SidecarOverrides: []v1beta1.TaskRunSidecarOverride{{
+						Resources: corev1.ResourceRequirements{
+							Requests: corev1.ResourceList{corev1.ResourceMemory: corev1resources.MustParse("1Gi")},
+						}},
 					},
 				},
 			},
@@ -1237,13 +1180,11 @@ func TestPipelineRunSpec_Invalidate(t *testing.T) {
 			TaskRunSpecs: []v1beta1.PipelineTaskRunSpec{
 				{
 					PipelineTaskName: "pipelineTask",
-					StepOverrides: []v1beta1.TaskRunStepOverride{
-						{
-							Name: "stepOverride",
-							Resources: corev1.ResourceRequirements{
-								Requests: corev1.ResourceList{corev1.ResourceMemory: corev1resources.MustParse("1Gi")},
-							},
-						},
+					StepOverrides: []v1beta1.TaskRunStepOverride{{
+						Name: "stepOverride",
+						Resources: corev1.ResourceRequirements{
+							Requests: corev1.ResourceList{corev1.ResourceMemory: corev1resources.MustParse("1Gi")},
+						}},
 					},
 					ComputeResources: &corev1.ResourceRequirements{
 						Requests: corev1.ResourceList{corev1.ResourceMemory: corev1resources.MustParse("2Gi")},
@@ -1275,7 +1216,7 @@ func TestPipelineRunSpec_Invalidate(t *testing.T) {
 
 	for _, ps := range tests {
 		t.Run(ps.name, func(t *testing.T) {
-			ctx := t.Context()
+			ctx := context.Background()
 			if ps.withContext != nil {
 				ctx = ps.withContext(ctx)
 			}
@@ -1358,7 +1299,7 @@ func TestPipelineRunSpec_Validate(t *testing.T) {
 
 	for _, ps := range tests {
 		t.Run(ps.name, func(t *testing.T) {
-			ctx := t.Context()
+			ctx := context.Background()
 			if ps.withContext != nil {
 				ctx = ps.withContext(ctx)
 			}
@@ -1557,38 +1498,13 @@ func TestPipelineRun_InvalidTimeouts(t *testing.T) {
 			},
 		},
 		want: apis.ErrDisallowedFields("spec.timeout", "spec.timeouts"),
-	}, {
-		name: "when pipeline timeout is no timeout (0s), task timeouts can exceed it without error",
-		pr: v1beta1.PipelineRun{
-			ObjectMeta: metav1.ObjectMeta{
-				Name: "pipelinelinename",
-			},
-			Spec: v1beta1.PipelineRunSpec{
-				PipelineRef: &v1beta1.PipelineRef{
-					Name: "prname",
-				},
-				Timeouts: &v1beta1.TimeoutFields{
-					Pipeline: &metav1.Duration{Duration: 0 * time.Minute}, // No timeout
-				},
-				TaskRunSpecs: []v1beta1.PipelineTaskRunSpec{{
-					PipelineTaskName:       "task1",
-					TaskPodTemplate:        &pod.PodTemplate{},
-					TaskServiceAccountName: "default",
-				}},
-			},
-		},
-		want: nil, // NoTimeoutDuration (0s) allows any task timeout
 	}}
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			ctx := t.Context()
+			ctx := context.Background()
 			err := tc.pr.Validate(ctx)
-			if tc.want == nil {
-				if err != nil {
-					t.Errorf("Expected no error but got: %v", err)
-				}
-			} else if d := cmp.Diff(tc.want.Error(), err.Error()); d != "" {
+			if d := cmp.Diff(tc.want.Error(), err.Error()); d != "" {
 				t.Error(diff.PrintWantGot(d))
 			}
 		})
@@ -1670,7 +1586,7 @@ func TestPipelineRunWithTimeout_Validate(t *testing.T) {
 
 	for _, ts := range tests {
 		t.Run(ts.name, func(t *testing.T) {
-			ctx := t.Context()
+			ctx := context.Background()
 			if ts.wc != nil {
 				ctx = ts.wc(ctx)
 			}
@@ -1734,452 +1650,14 @@ func TestPipelineRunSpecBetaFeatures(t *testing.T) {
 			pr := v1beta1.PipelineRun{ObjectMeta: metav1.ObjectMeta{Name: "foo"}, Spec: v1beta1.PipelineRunSpec{
 				PipelineSpec: &tt.spec,
 			}}
-			ctx := cfgtesting.EnableStableAPIFields(t.Context())
+			ctx := cfgtesting.EnableStableAPIFields(context.Background())
 			if err := pr.Validate(ctx); err == nil {
 				t.Errorf("no error when using beta field when `enable-api-fields` is stable")
 			}
 
-			ctx = cfgtesting.EnableBetaAPIFields(t.Context())
+			ctx = cfgtesting.EnableBetaAPIFields(context.Background())
 			if err := pr.Validate(ctx); err != nil {
 				t.Errorf("unexpected error when using beta field: %s", err)
-			}
-		})
-	}
-}
-func TestPipelineRunSpec_ValidateUpdate(t *testing.T) {
-	tests := []struct {
-		name                string
-		isCreate            bool
-		isUpdate            bool
-		baselinePipelineRun *v1beta1.PipelineRun
-		pipelineRun         *v1beta1.PipelineRun
-		expectedError       apis.FieldError
-	}{
-		{
-			name: "is create ctx",
-			pipelineRun: &v1beta1.PipelineRun{
-				Spec: v1beta1.PipelineRunSpec{},
-			},
-			isCreate:      true,
-			isUpdate:      false,
-			expectedError: apis.FieldError{},
-		}, {
-			name: "is update ctx, no changes",
-			baselinePipelineRun: &v1beta1.PipelineRun{
-				Spec: v1beta1.PipelineRunSpec{
-					Status: "",
-				},
-			},
-			pipelineRun: &v1beta1.PipelineRun{
-				Spec: v1beta1.PipelineRunSpec{
-					Status: "",
-				},
-			},
-			isCreate:      false,
-			isUpdate:      true,
-			expectedError: apis.FieldError{},
-		}, {
-			name:                "is update ctx, baseline is nil, skip validation",
-			baselinePipelineRun: nil,
-			pipelineRun: &v1beta1.PipelineRun{
-				Spec: v1beta1.PipelineRunSpec{
-					Timeouts: &v1beta1.TimeoutFields{
-						Pipeline: &metav1.Duration{Duration: 1},
-					},
-				},
-			},
-			isCreate:      false,
-			isUpdate:      true,
-			expectedError: apis.FieldError{},
-		}, {
-			name: "is update ctx, baseline is unknown, status changes from Empty to Cancelled",
-			baselinePipelineRun: &v1beta1.PipelineRun{
-				Spec: v1beta1.PipelineRunSpec{
-					Status: "",
-				},
-				Status: v1beta1.PipelineRunStatus{
-					Status: duckv1.Status{
-						Conditions: duckv1.Conditions{
-							{Type: apis.ConditionSucceeded, Status: corev1.ConditionUnknown},
-						},
-					},
-				},
-			},
-			pipelineRun: &v1beta1.PipelineRun{
-				Spec: v1beta1.PipelineRunSpec{
-					Status: "Cancelled",
-				},
-			},
-			isCreate:      false,
-			isUpdate:      true,
-			expectedError: apis.FieldError{},
-		}, {
-			name: "is update ctx, baseline is unknown, timeouts changes",
-			baselinePipelineRun: &v1beta1.PipelineRun{
-				Spec: v1beta1.PipelineRunSpec{
-					Status: "",
-					Timeouts: &v1beta1.TimeoutFields{
-						Pipeline: &metav1.Duration{Duration: 0},
-					},
-				},
-				Status: v1beta1.PipelineRunStatus{
-					Status: duckv1.Status{
-						Conditions: duckv1.Conditions{
-							{Type: apis.ConditionSucceeded, Status: corev1.ConditionUnknown},
-						},
-					},
-				},
-			},
-			pipelineRun: &v1beta1.PipelineRun{
-				Spec: v1beta1.PipelineRunSpec{
-					Timeouts: &v1beta1.TimeoutFields{
-						Pipeline: &metav1.Duration{Duration: 1},
-					},
-				},
-			},
-			isCreate: false,
-			isUpdate: true,
-			expectedError: apis.FieldError{
-				Message: `invalid value: Once the PipelineRun has started, only status updates are allowed`,
-				Paths:   []string{""},
-			},
-		}, {
-			name: "is update ctx, baseline is unknown, status changes from PipelineRunPending to Empty, and timeouts changes",
-			baselinePipelineRun: &v1beta1.PipelineRun{
-				Spec: v1beta1.PipelineRunSpec{
-					Status: "PipelineRunPending",
-					Timeouts: &v1beta1.TimeoutFields{
-						Pipeline: &metav1.Duration{Duration: 0},
-					},
-				},
-				Status: v1beta1.PipelineRunStatus{
-					Status: duckv1.Status{
-						Conditions: duckv1.Conditions{
-							{Type: apis.ConditionSucceeded, Status: corev1.ConditionUnknown},
-						},
-					},
-				},
-			},
-			pipelineRun: &v1beta1.PipelineRun{
-				Spec: v1beta1.PipelineRunSpec{
-					Status: "",
-					Timeouts: &v1beta1.TimeoutFields{
-						Pipeline: &metav1.Duration{Duration: 1},
-					},
-				},
-			},
-			isCreate: false,
-			isUpdate: true,
-			expectedError: apis.FieldError{
-				Message: `invalid value: Once the PipelineRun has started, only status updates are allowed`,
-				Paths:   []string{""},
-			},
-		}, {
-			name: "is update ctx, baseline is done, status changes",
-			baselinePipelineRun: &v1beta1.PipelineRun{
-				Spec: v1beta1.PipelineRunSpec{
-					Status: "PipelineRunPending",
-				},
-				Status: v1beta1.PipelineRunStatus{
-					Status: duckv1.Status{
-						Conditions: duckv1.Conditions{
-							{Type: apis.ConditionSucceeded, Status: corev1.ConditionTrue},
-						},
-					},
-				},
-			},
-			pipelineRun: &v1beta1.PipelineRun{
-				Spec: v1beta1.PipelineRunSpec{
-					Status: "TaskRunCancelled",
-				},
-			},
-			isCreate: false,
-			isUpdate: true,
-			expectedError: apis.FieldError{
-				Message: `invalid value: Once the PipelineRun is complete, no updates are allowed`,
-				Paths:   []string{""},
-			},
-		}, {
-			name: "is update ctx, baseline is not done, managedBy changes",
-			baselinePipelineRun: &v1beta1.PipelineRun{
-				Spec: v1beta1.PipelineRunSpec{
-					ManagedBy: ptr.String("tekton.dev/pipeline"),
-				},
-				Status: v1beta1.PipelineRunStatus{
-					Status: duckv1.Status{
-						Conditions: duckv1.Conditions{
-							{Type: apis.ConditionSucceeded, Status: corev1.ConditionUnknown},
-						},
-					},
-				},
-			},
-			pipelineRun: &v1beta1.PipelineRun{
-				Spec: v1beta1.PipelineRunSpec{
-					ManagedBy: ptr.String("some-other-controller"),
-				},
-			},
-			isCreate: false,
-			isUpdate: true,
-			expectedError: apis.FieldError{
-				Message: `invalid value: managedBy is immutable`,
-				Paths:   []string{"spec.managedBy"},
-			},
-		}, {
-			name: "is update ctx, baseline is unknown, managedBy changes",
-			baselinePipelineRun: &v1beta1.PipelineRun{
-				Spec: v1beta1.PipelineRunSpec{
-					ManagedBy: ptr.String("tekton.dev/pipeline"),
-				},
-				Status: v1beta1.PipelineRunStatus{
-					Status: duckv1.Status{
-						Conditions: duckv1.Conditions{
-							{Type: apis.ConditionSucceeded, Status: corev1.ConditionUnknown},
-						},
-					},
-				},
-			},
-			pipelineRun: &v1beta1.PipelineRun{
-				Spec: v1beta1.PipelineRunSpec{
-					ManagedBy: ptr.String("some-other-controller"),
-				},
-			},
-			isCreate: false,
-			isUpdate: true,
-			expectedError: apis.FieldError{
-				Message: `invalid value: managedBy is immutable`,
-				Paths:   []string{"spec.managedBy"},
-			},
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			ctx := config.ToContext(t.Context(), &config.Config{
-				FeatureFlags: &config.FeatureFlags{},
-				Defaults:     &config.Defaults{},
-			})
-			if tt.isCreate {
-				ctx = apis.WithinCreate(ctx)
-			}
-			if tt.isUpdate {
-				ctx = apis.WithinUpdate(ctx, tt.baselinePipelineRun)
-			}
-			pr := tt.pipelineRun
-			err := pr.Spec.ValidateUpdate(ctx)
-			if d := cmp.Diff(tt.expectedError.Error(), err.Error(), cmpopts.IgnoreUnexported(apis.FieldError{})); d != "" {
-				t.Errorf("PipelineRunSpec.ValidateUpdate() errors diff %s", diff.PrintWantGot(d))
-			}
-		})
-	}
-}
-
-func TestPipelineRunSpec_ValidateUpdate_FinalizerChanges(t *testing.T) {
-	tests := []struct {
-		name                string
-		baselinePipelineRun *v1beta1.PipelineRun
-		pipelineRun         *v1beta1.PipelineRun
-		expectedError       string
-	}{
-		{
-			name: "allow finalizer update when specs are identical",
-			baselinePipelineRun: &v1beta1.PipelineRun{
-				ObjectMeta: metav1.ObjectMeta{
-					Name: "test-pr",
-				},
-				Spec: v1beta1.PipelineRunSpec{
-					PipelineRef: &v1beta1.PipelineRef{
-						Name: "test-pipeline",
-					},
-					Timeouts: &v1beta1.TimeoutFields{
-						Pipeline: &metav1.Duration{Duration: 60 * time.Minute},
-					},
-				},
-				Status: v1beta1.PipelineRunStatus{
-					Status: duckv1.Status{
-						Conditions: duckv1.Conditions{
-							{Type: apis.ConditionSucceeded, Status: corev1.ConditionTrue},
-						},
-					},
-				},
-			},
-			pipelineRun: &v1beta1.PipelineRun{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:       "test-pr",
-					Finalizers: []string{"chains.tekton.dev/finalizer"},
-				},
-				Spec: v1beta1.PipelineRunSpec{
-					PipelineRef: &v1beta1.PipelineRef{
-						Name: "test-pipeline",
-					},
-					Timeouts: &v1beta1.TimeoutFields{
-						Pipeline: &metav1.Duration{Duration: 60 * time.Minute},
-					},
-				},
-			},
-			expectedError: "",
-		},
-		{
-			name: "block actual spec changes on completed PipelineRun",
-			baselinePipelineRun: &v1beta1.PipelineRun{
-				ObjectMeta: metav1.ObjectMeta{
-					Name: "test-pr",
-				},
-				Spec: v1beta1.PipelineRunSpec{
-					PipelineRef: &v1beta1.PipelineRef{
-						Name: "test-pipeline",
-					},
-				},
-				Status: v1beta1.PipelineRunStatus{
-					Status: duckv1.Status{
-						Conditions: duckv1.Conditions{
-							{Type: apis.ConditionSucceeded, Status: corev1.ConditionTrue},
-						},
-					},
-				},
-			},
-			pipelineRun: &v1beta1.PipelineRun{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:       "test-pr",
-					Finalizers: []string{"chains.tekton.dev/finalizer"},
-				},
-				Spec: v1beta1.PipelineRunSpec{
-					PipelineRef: &v1beta1.PipelineRef{
-						Name: "different-pipeline",
-					},
-				},
-			},
-			expectedError: "invalid value: Once the PipelineRun is complete, no updates are allowed",
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			ctx := config.ToContext(t.Context(), &config.Config{
-				Defaults: &config.Defaults{
-					DefaultResolverType:   "bundles",
-					DefaultTimeoutMinutes: 60,
-				},
-			})
-			ctx = apis.WithinUpdate(ctx, tt.baselinePipelineRun)
-
-			err := tt.pipelineRun.Spec.ValidateUpdate(ctx)
-
-			if tt.expectedError == "" {
-				if err != nil {
-					t.Errorf("Expected no error, but got: %v", err)
-				}
-			} else {
-				if err == nil {
-					t.Errorf("Expected error containing %q, but got none", tt.expectedError)
-				} else if !strings.Contains(err.Error(), tt.expectedError) {
-					t.Errorf("Expected error containing %q, but got: %v", tt.expectedError, err)
-				}
-			}
-		})
-	}
-}
-
-func TestPipelineRunTaskRunSpecTimeout_Validate(t *testing.T) {
-	tests := []struct {
-		name        string
-		spec        v1beta1.PipelineRunSpec
-		wantErr     bool
-		expectedErr string
-	}{{
-		name: "taskRunSpec timeout within pipeline timeout",
-		spec: v1beta1.PipelineRunSpec{
-			PipelineRef: &v1beta1.PipelineRef{Name: "test"},
-			Timeouts: &v1beta1.TimeoutFields{
-				Pipeline: &metav1.Duration{Duration: 1 * time.Hour},
-			},
-			TaskRunSpecs: []v1beta1.PipelineTaskRunSpec{{
-				PipelineTaskName: "task1",
-				Timeout:          &metav1.Duration{Duration: 30 * time.Minute},
-			}},
-		},
-		wantErr: false,
-	}, {
-		name: "taskRunSpec timeout exceeds pipeline timeout",
-		spec: v1beta1.PipelineRunSpec{
-			PipelineRef: &v1beta1.PipelineRef{Name: "test"},
-			Timeouts: &v1beta1.TimeoutFields{
-				Pipeline: &metav1.Duration{Duration: 30 * time.Minute},
-			},
-			TaskRunSpecs: []v1beta1.PipelineTaskRunSpec{{
-				PipelineTaskName: "task1",
-				Timeout:          &metav1.Duration{Duration: 1 * time.Hour},
-			}},
-		},
-		wantErr:     true,
-		expectedErr: "taskRunSpecs[0].timeout",
-	}, {
-		name: "no pipeline timeout uses default",
-		spec: v1beta1.PipelineRunSpec{
-			PipelineRef: &v1beta1.PipelineRef{Name: "test"},
-			TaskRunSpecs: []v1beta1.PipelineTaskRunSpec{{
-				PipelineTaskName: "task1",
-				Timeout:          &metav1.Duration{Duration: 30 * time.Minute},
-			}},
-		},
-		wantErr: false,
-	}, {
-		name: "taskRunSpec timeout exceeds tasks timeout",
-		spec: v1beta1.PipelineRunSpec{
-			PipelineRef: &v1beta1.PipelineRef{Name: "test"},
-			Timeouts: &v1beta1.TimeoutFields{
-				Tasks: &metav1.Duration{Duration: 30 * time.Minute}, // Key: tasks timeout
-			},
-			TaskRunSpecs: []v1beta1.PipelineTaskRunSpec{{
-				PipelineTaskName: "task1",
-				Timeout:          &metav1.Duration{Duration: 45 * time.Minute}, // Exceeds tasks timeout
-			}},
-		},
-		wantErr:     true,
-		expectedErr: "taskRunSpecs[0].timeout",
-	}, {
-		name: "taskRunSpec timeout within tasks timeout",
-		spec: v1beta1.PipelineRunSpec{
-			PipelineRef: &v1beta1.PipelineRef{Name: "test"},
-			Timeouts: &v1beta1.TimeoutFields{
-				Pipeline: &metav1.Duration{Duration: 2 * time.Hour}, // Pipeline timeout must be >= tasks timeout
-				Tasks:    &metav1.Duration{Duration: 1 * time.Hour},
-			},
-			TaskRunSpecs: []v1beta1.PipelineTaskRunSpec{{
-				PipelineTaskName: "task1",
-				Timeout:          &metav1.Duration{Duration: 30 * time.Minute}, // Within tasks timeout
-			}},
-		},
-		wantErr: false,
-	}, {
-		name: "taskRunSpec timeout exceeds default pipeline timeout",
-		spec: v1beta1.PipelineRunSpec{
-			PipelineRef: &v1beta1.PipelineRef{Name: "test"},
-			// No timeouts field set - should use default 60 minutes
-			TaskRunSpecs: []v1beta1.PipelineTaskRunSpec{{
-				PipelineTaskName: "task1",
-				Timeout:          &metav1.Duration{Duration: 90 * time.Minute}, // Exceeds 60m default
-			}},
-		},
-		wantErr:     true,
-		expectedErr: "taskRunSpecs[0].timeout",
-	}}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			ctx := config.ToContext(t.Context(), &config.Config{
-				Defaults: &config.Defaults{
-					DefaultTimeoutMinutes: 60,
-				},
-			})
-			err := tt.spec.Validate(ctx)
-			if tt.wantErr {
-				if err == nil {
-					t.Errorf("Expected error but got none")
-				} else if !strings.Contains(err.Error(), tt.expectedErr) {
-					t.Errorf("Expected error containing %q but got %q", tt.expectedErr, err.Error())
-				}
-			} else if err != nil {
-				t.Errorf("Expected no error but got: %v", err)
 			}
 		})
 	}

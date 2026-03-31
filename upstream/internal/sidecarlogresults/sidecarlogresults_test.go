@@ -18,22 +18,21 @@ package sidecarlogresults
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
-	"runtime/pprof"
 	"sort"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/google/go-cmp/cmp"
-	v1 "github.com/tektoncd/pipeline/pkg/apis/pipeline/v1"
 	"github.com/tektoncd/pipeline/pkg/result"
 	"github.com/tektoncd/pipeline/test/diff"
 	corev1 "k8s.io/api/core/v1"
+	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	fakekubeclientset "k8s.io/client-go/kubernetes/fake"
 )
@@ -81,7 +80,7 @@ func TestLookForResults_FanOutAndWait(t *testing.T) {
 			sort.Slice(wantResults, func(i int, j int) bool { return wantResults[i] < wantResults[j] })
 			sort.Slice(got.Bytes(), func(i int, j int) bool { return got.Bytes()[i] < got.Bytes()[j] })
 			if d := cmp.Diff(wantResults, got.Bytes()); d != "" {
-				t.Error(diff.PrintWantGot(d))
+				t.Errorf(diff.PrintWantGot(d))
 			}
 		})
 	}
@@ -144,7 +143,7 @@ func TestLookForResults(t *testing.T) {
 				t.Fatalf("Did not expect any error but got: %v", err)
 			}
 			if d := cmp.Diff(want, got.Bytes()); d != "" {
-				t.Error(diff.PrintWantGot(d))
+				t.Errorf(diff.PrintWantGot(d))
 			}
 		})
 	}
@@ -214,7 +213,7 @@ func TestLookForStepResults(t *testing.T) {
 				t.Fatalf("Did not expect any error but got: %v", err)
 			}
 			if d := cmp.Diff(want, got.Bytes()); d != "" {
-				t.Error(diff.PrintWantGot(d))
+				t.Errorf(diff.PrintWantGot(d))
 			}
 		})
 	}
@@ -286,97 +285,26 @@ func TestParseResults(t *testing.T) {
 			Name:  "result1",
 			Value: "foo",
 			Type:  "task",
-		},
-		{
+		}, {
 			Name:  "result2",
 			Value: `{"IMAGE_URL":"ar.com", "IMAGE_DIGEST":"sha234"}`,
 			Type:  "task",
-		},
-		{
+		}, {
 			Name:  "result3",
 			Value: `["hello","world"]`,
 			Type:  "task",
-		},
-		{
+		}, {
 			Name:  "step-foo.result1",
 			Value: "foo",
 			Type:  "step",
-		},
-		{
+		}, {
 			Name:  "step-foo.result2",
 			Value: `{"IMAGE_URL":"ar.com", "IMAGE_DIGEST":"sha234"}`,
 			Type:  "step",
-		},
-		{
+		}, {
 			Name:  "step-foo.result3",
 			Value: `["hello","world"]`,
 			Type:  "step",
-		},
-		{
-			Name: "step-artifacts-result",
-			Value: `{
-            "inputs":[
-              {
-                "name":"input-artifacts",
-                "values":[
-                  {
-                    "uri":"pkg:example.github.com/inputs",
-                    "digest":{
-                      "sha256":"b35cacccfdb1e24dc497d15d553891345fd155713ffe647c281c583269eaaae0"
-                    }
-                  }
-                ]
-              }
-            ],
-            "outputs":[
-              {
-                "name":"image",
-                "values":[
-                  {
-                    "uri":"pkg:github/package-url/purl-spec@244fd47e07d1004f0aed9c",
-                    "digest":{
-                      "sha256":"df85b9e3983fe2ce20ef76ad675ecf435cc99fc9350adc54fa230bae8c32ce48",
-                      "sha1":"95588b8f34c31eb7d62c92aaa4e6506639b06ef2"
-                    }
-                  }
-                ]
-              }
-            ]
-          }`,
-			Type: "stepArtifact",
-		},
-		{
-			Name: "task-run-artifacts-result",
-			Value: `{
-            "inputs":[
-              {
-                "name":"input-artifacts",
-                "values":[
-                  {
-                    "uri":"pkg:example.github.com/inputs",
-                    "digest":{
-                      "sha256":"b35cacccfdb1e24dc497d15d553891345fd155713ffe647c281c583269eaaae0"
-                    }
-                  }
-                ]
-              }
-            ],
-            "outputs":[
-              {
-                "name":"image",
-                "values":[
-                  {
-                    "uri":"pkg:github/package-url/purl-spec@244fd47e07d1004f0aed9c",
-                    "digest":{
-                      "sha256":"df85b9e3983fe2ce20ef76ad675ecf435cc99fc9350adc54fa230bae8c32ce48",
-                      "sha1":"95588b8f34c31eb7d62c92aaa4e6506639b06ef2"
-                    }
-                  }
-                ]
-              }
-            ]
-          }`,
-			Type: "taskArtifact",
 		},
 	}
 	podLogs := []string{}
@@ -408,70 +336,6 @@ func TestParseResults(t *testing.T) {
 		Key:        "step-foo.result3",
 		Value:      `["hello","world"]`,
 		ResultType: result.StepResultType,
-	}, {
-		Key: "step-artifacts-result",
-		Value: `{
-            "inputs":[
-              {
-                "name":"input-artifacts",
-                "values":[
-                  {
-                    "uri":"pkg:example.github.com/inputs",
-                    "digest":{
-                      "sha256":"b35cacccfdb1e24dc497d15d553891345fd155713ffe647c281c583269eaaae0"
-                    }
-                  }
-                ]
-              }
-            ],
-            "outputs":[
-              {
-                "name":"image",
-                "values":[
-                  {
-                    "uri":"pkg:github/package-url/purl-spec@244fd47e07d1004f0aed9c",
-                    "digest":{
-                      "sha256":"df85b9e3983fe2ce20ef76ad675ecf435cc99fc9350adc54fa230bae8c32ce48",
-                      "sha1":"95588b8f34c31eb7d62c92aaa4e6506639b06ef2"
-                    }
-                  }
-                ]
-              }
-            ]
-          }`,
-		ResultType: result.StepArtifactsResultType,
-	}, {
-		Key: "task-run-artifacts-result",
-		Value: `{
-            "inputs":[
-              {
-                "name":"input-artifacts",
-                "values":[
-                  {
-                    "uri":"pkg:example.github.com/inputs",
-                    "digest":{
-                      "sha256":"b35cacccfdb1e24dc497d15d553891345fd155713ffe647c281c583269eaaae0"
-                    }
-                  }
-                ]
-              }
-            ],
-            "outputs":[
-              {
-                "name":"image",
-                "values":[
-                  {
-                    "uri":"pkg:github/package-url/purl-spec@244fd47e07d1004f0aed9c",
-                    "digest":{
-                      "sha256":"df85b9e3983fe2ce20ef76ad675ecf435cc99fc9350adc54fa230bae8c32ce48",
-                      "sha1":"95588b8f34c31eb7d62c92aaa4e6506639b06ef2"
-                    }
-                  }
-                ]
-              }
-            ]
-          }`,
-		ResultType: result.TaskRunArtifactsResultType,
 	}}
 	stepResults := []result.RunResult{}
 	for _, plog := range podLogs {
@@ -490,7 +354,7 @@ func TestParseResults_InvalidType(t *testing.T) {
 	results := []SidecarLogResult{{
 		Name:  "result1",
 		Value: "foo",
-		Type:  "invalid",
+		Type:  "not task or step",
 	}}
 	podLogs := []string{}
 	for _, r := range results {
@@ -499,7 +363,7 @@ func TestParseResults_InvalidType(t *testing.T) {
 	}
 	for _, plog := range podLogs {
 		_, err := parseResults([]byte(plog), 4096)
-		wantErr := errors.New("invalid sidecar result type invalid. Must be task or step or stepArtifact")
+		wantErr := errors.New("invalid sidecar result type not task or step. Must be task or step")
 		if d := cmp.Diff(wantErr.Error(), err.Error()); d != "" {
 			t.Fatal(diff.PrintWantGot(d))
 		}
@@ -533,7 +397,7 @@ func TestParseResults_Failure(t *testing.T) {
 func TestGetResultsFromSidecarLogs(t *testing.T) {
 	for _, c := range []struct {
 		desc      string
-		podPhase  corev1.PodPhase
+		podPhase  v1.PodPhase
 		wantError bool
 	}{{
 		desc:      "pod pending to start",
@@ -545,9 +409,9 @@ func TestGetResultsFromSidecarLogs(t *testing.T) {
 		wantError: true,
 	}} {
 		t.Run(c.desc, func(t *testing.T) {
-			ctx := t.Context()
+			ctx := context.Background()
 			clientset := fakekubeclientset.NewSimpleClientset()
-			pod := &corev1.Pod{
+			pod := &v1.Pod{
 				TypeMeta: metav1.TypeMeta{
 					Kind:       "Pod",
 					APIVersion: "v1",
@@ -556,19 +420,19 @@ func TestGetResultsFromSidecarLogs(t *testing.T) {
 					Name:      "pod",
 					Namespace: "foo",
 				},
-				Spec: corev1.PodSpec{
-					Containers: []corev1.Container{
+				Spec: v1.PodSpec{
+					Containers: []v1.Container{
 						{
 							Name:  "container",
 							Image: "image",
 						},
 					},
 				},
-				Status: corev1.PodStatus{
+				Status: v1.PodStatus{
 					Phase: c.podPhase,
 				},
 			}
-			pod, err := clientset.CoreV1().Pods(pod.Namespace).Create(t.Context(), pod, metav1.CreateOptions{})
+			pod, err := clientset.CoreV1().Pods(pod.Namespace).Create(context.TODO(), pod, metav1.CreateOptions{})
 			if err != nil {
 				t.Errorf("Error occurred while creating pod %s: %s", pod.Name, err.Error())
 			}
@@ -610,226 +474,6 @@ func TestExtractStepAndResultFromSidecarResultName_Error(t *testing.T) {
 	}
 }
 
-// TestWaitForStepsToFinish_Profile ensures that waitForStepsToFinish correctly waits for all step output files to appear before returning
-// The test creates a file called cpu.prof and starts Go's CPU profiler
-// A temporary directory is created to simulate the Tekton step run directory.
-// The test creates a large number of subdirectories e.g. step0, step1, ..., each representing a step in a TaskRun
-// A goroutine is started that, one by one, writes an out file in each step directory, with a small delay between each
-// The test calls the function and waits for it to complete and the profile is saved for later analysis
-// This is helpful to compare the impact of code changes, provides a reproducible way to profile and optimize the function waitForStepsToFinish
-func TestWaitForStepsToFinish_Profile(t *testing.T) {
-	f, err := os.Create("cpu.prof")
-	if err != nil {
-		t.Fatalf("could not create CPU profile: %v", err)
-	}
-	defer func(f *os.File) {
-		err := f.Close()
-		if err != nil {
-			return
-		}
-	}(f)
-	err = pprof.StartCPUProfile(f)
-	if err != nil {
-		return
-	}
-	defer pprof.StopCPUProfile()
-
-	// Setup: create a temp runDir with many fake step files
-	runDir := t.TempDir()
-	stepCount := 100
-	for i := range stepCount {
-		dir := filepath.Join(runDir, fmt.Sprintf("step%d", i))
-		err := os.MkdirAll(dir, 0755)
-		if err != nil {
-			return
-		}
-	}
-
-	// Simulate steps finishing one by one with a delay
-	go func() {
-		for i := range stepCount {
-			file := filepath.Join(runDir, fmt.Sprintf("step%d", i), "out")
-			err := os.WriteFile(file, []byte("done"), 0644)
-			if err != nil {
-				return
-			}
-			time.Sleep(10 * time.Millisecond)
-		}
-	}()
-
-	intervalStr := os.Getenv("SIDECAR_LOG_POLLING_INTERVAL")
-	if intervalStr == "" {
-		intervalStr = "100ms"
-	}
-	interval, err := time.ParseDuration(intervalStr)
-	if err != nil {
-		interval = 100 * time.Millisecond
-	}
-	if err := waitForStepsToFinish(runDir, interval); err != nil {
-		t.Fatalf("waitForStepsToFinish failed: %v", err)
-	}
-}
-
-func TestLookForArtifacts(t *testing.T) {
-	base := basicArtifacts()
-	modified := base.DeepCopy()
-	modified.Outputs[0].Name = "tests"
-	type Arg struct {
-		stepName      string
-		artifacts     *v1.Artifacts
-		customContent []byte
-	}
-	tests := []struct {
-		desc     string
-		wantErr  bool
-		args     []Arg
-		expected []SidecarLogResult
-	}{
-		{
-			desc: "one step produces artifacts, read success",
-			args: []Arg{{stepName: "first", artifacts: &base}},
-			expected: []SidecarLogResult{{
-				Name:  "first",
-				Type:  stepArtifactType,
-				Value: mustJSON(&base),
-			}},
-		},
-		{
-			desc: "two step produce artifacts, read success",
-			args: []Arg{{stepName: "first", artifacts: &base}, {stepName: "second", artifacts: modified}},
-			expected: []SidecarLogResult{{
-				Name:  "first",
-				Type:  stepArtifactType,
-				Value: mustJSON(&base),
-			}, {
-				Name:  "second",
-				Type:  stepArtifactType,
-				Value: mustJSON(modified),
-			}},
-		},
-		{
-			desc: "one step produces artifacts,  one step does not, read success",
-			args: []Arg{{stepName: "first", artifacts: &base}, {stepName: "second"}},
-			expected: []SidecarLogResult{{
-				Name:  "first",
-				Type:  stepArtifactType,
-				Value: mustJSON(&base),
-			}},
-		},
-		{
-			desc: "two step produces,  one read success, one not, error out and result is not empty.",
-			args: []Arg{{stepName: "first", artifacts: &base}, {stepName: "second", artifacts: modified, customContent: []byte("this is to break json")}},
-			expected: []SidecarLogResult{{
-				Name:  "first",
-				Type:  stepArtifactType,
-				Value: mustJSON(&base),
-			}},
-			wantErr: true,
-		},
-		{
-			desc:     "two step produces,  first read fails,  error out and result is empty.",
-			args:     []Arg{{stepName: "first", artifacts: modified, customContent: []byte("this is to break json")}, {stepName: "second", artifacts: &base}},
-			expected: []SidecarLogResult{},
-			wantErr:  true,
-		},
-	}
-
-	for _, tc := range tests {
-		t.Run(tc.desc, func(t *testing.T) {
-			dir := t.TempDir()
-			curStepDir := stepDir
-			stepDir = dir
-			t.Cleanup(func() {
-				stepDir = curStepDir
-			})
-
-			var names []string
-			for _, arg := range tc.args {
-				names = append(names, arg.stepName)
-				if err := os.MkdirAll(filepath.Join(dir, arg.stepName, "artifacts"), os.ModePerm); err != nil {
-					t.Errorf("failed to create artifacts folder, err: %v", err)
-				}
-				if _, err := os.Create(filepath.Join(dir, arg.stepName, "out")); err != nil {
-					t.Errorf("failed to file, err: %v", err)
-				}
-				if arg.artifacts != nil {
-					if err := writeArtifacts(filepath.Join(dir, arg.stepName, "artifacts", "provenance.json"), arg.artifacts); err != nil {
-						t.Errorf("failed to write artifacts to provenance.json, err: %v", err)
-					}
-				}
-				if arg.customContent != nil {
-					if err := os.WriteFile(filepath.Join(dir, arg.stepName, "artifacts", "provenance.json"), arg.customContent, os.ModePerm); err != nil {
-						t.Errorf("failed to write customContent to provenance.json, err: %v", err)
-					}
-				}
-			}
-			var buf bytes.Buffer
-			err := LookForArtifacts(&buf, names, dir)
-			if (err != nil) != tc.wantErr {
-				t.Errorf("error checking failed, wantErr: %v, got: %v", tc.wantErr, err)
-			}
-			want := ""
-			for _, logResult := range tc.expected {
-				want += mustJSON(logResult) + "\n"
-			}
-			got := buf.String()
-
-			if d := cmp.Diff(want, got); d != "" {
-				t.Error(diff.PrintWantGot(d))
-			}
-		})
-	}
-}
-
-func writeArtifacts(path string, artifacts *v1.Artifacts) error {
-	f, err := os.Create(path)
-	if err != nil {
-		return err
-	}
-	defer f.Close()
-	res := json.NewEncoder(f).Encode(artifacts)
-	return res
-}
-
-func basicArtifacts() v1.Artifacts {
-	data := `{
-            "inputs":[
-              {
-                "name":"inputs",
-                "values":[
-                  {
-                    "uri":"pkg:example.github.com/inputs",
-                    "digest":{
-                      "sha256":"b35cacccfdb1e24dc497d15d553891345fd155713ffe647c281c583269eaaae0"
-                    }
-                  }
-                ]
-              }
-            ],
-            "outputs":[
-              {
-                "name":"image",
-                "values":[
-                  {
-                    "uri":"pkg:github/package-url/purl-spec@244fd47e07d1004f0aed9c",
-                    "digest":{
-                      "sha256":"df85b9e3983fe2ce20ef76ad675ecf435cc99fc9350adc54fa230bae8c32ce48",
-                      "sha1":"95588b8f34c31eb7d62c92aaa4e6506639b06ef2"
-                    }
-                  }
-                ]
-              }
-            ]
-          }
-`
-	var ars v1.Artifacts
-	err := json.Unmarshal([]byte(data), &ars)
-	if err != nil {
-		panic(err)
-	}
-	return ars
-}
-
 func createStepResult(t *testing.T, dir, stepName, resultName, resultValue string) {
 	t.Helper()
 	resultDir := filepath.Join(dir, stepName, "results")
@@ -861,42 +505,5 @@ func createRun(t *testing.T, dir string, causeErr bool) {
 	err := os.WriteFile(stepFile, []byte(""), 0o644)
 	if err != nil {
 		t.Fatal(err)
-	}
-}
-
-func mustJSON(data any) string {
-	marshal, err := json.Marshal(data)
-	if err != nil {
-		panic(err)
-	}
-	return string(marshal)
-}
-
-func TestGetSidecarLogPollingInterval(t *testing.T) {
-	tests := []struct {
-		name      string
-		setEnv    string
-		expect    time.Duration
-		wantError bool
-	}{
-		{"empty env", "", 100 * time.Millisecond, false},
-		{"valid duration", "250ms", 250 * time.Millisecond, false},
-		{"invalid duration", "notaduration", 100 * time.Millisecond, true},
-		{"custom value", "1s", 1 * time.Second, false},
-	}
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
-			t.Setenv("SIDECAR_LOG_POLLING_INTERVAL", tc.setEnv)
-			got, err := getSidecarLogPollingInterval()
-			if tc.wantError && err == nil {
-				t.Errorf("expected error, got nil")
-			}
-			if !tc.wantError && err != nil {
-				t.Errorf("unexpected error: %v", err)
-			}
-			if got != tc.expect {
-				t.Errorf("got %v, want %v", got, tc.expect)
-			}
-		})
 	}
 }

@@ -55,7 +55,7 @@ func (m *SigningMethodHMAC) Alg() string {
 // about this, and why we intentionally are not supporting string as a key can
 // be found on our usage guide
 // https://golang-jwt.github.io/jwt/usage/signing_methods/#signing-methods-and-key-types.
-func (m *SigningMethodHMAC) Verify(signingString string, sig []byte, key any) error {
+func (m *SigningMethodHMAC) Verify(signingString string, sig []byte, key interface{}) error {
 	// Verify the key is the right type
 	keyBytes, ok := key.([]byte)
 	if !ok {
@@ -88,10 +88,10 @@ func (m *SigningMethodHMAC) Verify(signingString string, sig []byte, key any) er
 // cryptographically random source, e.g. crypto/rand. Additional information
 // about this, and why we intentionally are not supporting string as a key can
 // be found on our usage guide https://golang-jwt.github.io/jwt/usage/signing_methods/.
-func (m *SigningMethodHMAC) Sign(signingString string, key any) ([]byte, error) {
+func (m *SigningMethodHMAC) Sign(signingString string, key interface{}) ([]byte, error) {
 	if keyBytes, ok := key.([]byte); ok {
 		if !m.Hash.Available() {
-			return nil, ErrHashUnavailable
+			return nil, newError("HMAC sign expects []byte", ErrInvalidKeyType)
 		}
 
 		hasher := hmac.New(m.Hash.New, keyBytes)
@@ -100,5 +100,5 @@ func (m *SigningMethodHMAC) Sign(signingString string, key any) ([]byte, error) 
 		return hasher.Sum(nil), nil
 	}
 
-	return nil, newError("HMAC sign expects []byte", ErrInvalidKeyType)
+	return nil, ErrInvalidKeyType
 }

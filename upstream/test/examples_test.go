@@ -1,4 +1,5 @@
 //go:build examples
+// +build examples
 
 /*
 Copyright 2020 The Tekton Authors
@@ -27,6 +28,7 @@ import (
 	"strings"
 	"testing"
 
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	knativetest "knative.dev/pkg/test"
 )
 
@@ -95,13 +97,24 @@ func substituteEnv(input []byte, namespace string) ([]byte, error) {
 	return output, nil
 }
 
+// deleteClusterTask removes a single clustertask by name using provided
+// clientset. Test state is used for logging. deleteClusterTask does not wait
+// for the clustertask to be deleted, so it is still possible to have name
+// conflicts during test
+func deleteClusterTask(ctx context.Context, t *testing.T, c *clients, name string) {
+	t.Logf("Deleting clustertask %s", name)
+	if err := c.V1beta1ClusterTaskClient.Delete(ctx, name, metav1.DeleteOptions{}); err != nil {
+		t.Fatalf("Failed to delete clustertask: %v", err)
+	}
+}
+
 type createFunc func(input []byte, namespace string) ([]byte, error)
 type waitFunc func(ctx context.Context, t *testing.T, c *clients, name string)
 
 func exampleTest(path string, waitValidateFunc waitFunc, createFunc createFunc, kind string) func(t *testing.T) {
 	return func(t *testing.T) {
 		t.Parallel()
-		ctx := t.Context()
+		ctx := context.Background()
 		ctx, cancel := context.WithCancel(ctx)
 		defer cancel()
 
@@ -136,6 +149,16 @@ func exampleTest(path string, waitValidateFunc waitFunc, createFunc createFunc, 
 			t.Skipf("pipelinerun or taskrun not created for %s", path)
 		} else if err != nil {
 			t.Fatalf("Failed to get created Tekton CRD of kind %s: %v", kind, err)
+		}
+
+		// NOTE: If an example creates more than one clustertask, they will not all
+		// be cleaned up
+		clustertask, err := getCreatedTektonCRD(out, "clustertask")
+		if clustertask != "" {
+			knativetest.CleanupOnInterrupt(func() { deleteClusterTask(ctx, t, c, clustertask) }, t.Logf)
+			defer deleteClusterTask(ctx, t, c, clustertask)
+		} else if err != nil {
+			t.Fatalf("Failed to get created clustertask: %v", err)
 		}
 
 		waitValidateFunc(ctx, t, c, name)
@@ -193,7 +216,6 @@ func extractTestName(baseDir string, path string) string {
 	return string(submatch[1])
 }
 
-// @test:execution=parallel
 func TestExamples(t *testing.T) {
 	pf, err := getPathFilter(t)
 	if err != nil {
@@ -204,6 +226,7 @@ func TestExamples(t *testing.T) {
 }
 
 func testYamls(t *testing.T, baseDir string, createFunc createFunc, filter pathFilter) {
+	t.Parallel()
 	for _, path := range getExamplePaths(t, baseDir, filter) {
 		path := path // capture range variable
 		testName := extractTestName(baseDir, path)
@@ -257,14 +280,13 @@ func imageNamesMapping() map[string]string {
 		}
 	case "ppc64le":
 		return map[string]string{
-			"registry":                  getTestImage(registryImage),
-			"node":                      "node:alpine3.11",
-			"gcr.io/cloud-builders/git": "alpine/git:latest",
-			"docker@sha256:74e78208fc18da48ddf8b569abe21563730845c312130bd0f0b059746a7e10f5": "ibmcom/docker-ppc64le:19.03-dind",
+			"registry":                              getTestImage(registryImage),
+			"node":                                  "node:alpine3.11",
+			"gcr.io/cloud-builders/git":             "alpine/git:latest",
+			"docker:dind":                           "ibmcom/docker-ppc64le:19.03-dind",
 			"docker":                                "docker:18.06.3",
 			"mikefarah/yq:3":                        "danielxlee/yq:2.4.0",
 			"stedolan/jq":                           "ibmcom/jq-ppc64le:latest",
-			"amd64/ubuntu":                          "ppc64le/ubuntu",
 			"gcr.io/kaniko-project/executor:v1.3.0": getTestImage(kanikoImage),
 		}
 	}

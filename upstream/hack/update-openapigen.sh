@@ -18,34 +18,36 @@ set -o errexit
 set -o nounset
 
 source $(git rev-parse --show-toplevel)/vendor/github.com/tektoncd/plumbing/scripts/library.sh
+source $(git rev-parse --show-toplevel)/hack/setup-temporary-gopath.sh
 
 readonly TMP_DIFFROOT="$(mktemp -d ${REPO_ROOT_DIR}/tmpdiffroot.XXXXXX)"
 
 cleanup() {
   rm -rf "${TMP_DIFFROOT}"
+  shim_gopath_clean
 }
 
 cleanup
 
+shim_gopath
 mkdir -p "${TMP_DIFFROOT}"
 
 trap cleanup EXIT
 
 for APIVERSION in "v1alpha1" "v1beta1" "v1"
 do
-  input_dirs="./pkg/apis/pipeline/${APIVERSION} ./pkg/apis/pipeline/pod knative.dev/pkg/apis knative.dev/pkg/apis/duck/v1beta1"
+  input_dirs=./pkg/apis/pipeline/${APIVERSION},./pkg/apis/pipeline/pod,knative.dev/pkg/apis,knative.dev/pkg/apis/duck/v1beta1
   if [ ${APIVERSION} = "v1beta1" ]
   then
-    input_dirs="${input_dirs} ./pkg/apis/resolution/v1beta1"
+    input_dirs=${input_dirs},./pkg/apis/resolution/v1beta1
   fi
 
   echo "Generating OpenAPI specification for ${APIVERSION} ..."
-  GOFLAGS="-mod=mod" go run k8s.io/kube-openapi/cmd/openapi-gen \
-    --output-pkg github.com/tektoncd/pipeline/pkg/apis/pipeline/${APIVERSION} \
-    --output-dir ./pkg/apis/pipeline/${APIVERSION} \
-    --output-file openapi_generated.go \
-    --go-header-file hack/boilerplate/boilerplate.go.txt \
-    -r "${TMP_DIFFROOT}/api-report" ${input_dirs}
+  go run k8s.io/kube-openapi/cmd/openapi-gen \
+      --input-dirs ${input_dirs} \
+      --output-package ./pkg/apis/pipeline/${APIVERSION} -o ./ \
+      --go-header-file hack/boilerplate/boilerplate.go.txt \
+      -r "${TMP_DIFFROOT}/api-report"
 
   violations=$(diff --changed-group-format='%>' --unchanged-group-format='' <(sort "hack/ignored-openapi-violations.list") <(sort "${TMP_DIFFROOT}/api-report") || echo "")
   if [ -n "${violations}" ]; then

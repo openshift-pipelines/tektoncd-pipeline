@@ -6,7 +6,6 @@ package api
 import (
 	"bytes"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"reflect"
@@ -160,10 +159,6 @@ TOKEN_DONE:
 			goto DONE
 		}
 
-		if s.Data["identity_policies"] == nil {
-			goto DONE
-		}
-
 		sList, ok := s.Data["identity_policies"].([]string)
 		if ok {
 			identityPolicies = sList
@@ -298,11 +293,6 @@ type MFAMethodID struct {
 	ID           string `json:"id,omitempty"`
 	UsesPasscode bool   `json:"uses_passcode,omitempty"`
 	Name         string `json:"name,omitempty"`
-	// SelfEnrollmentEnabled indicates whether the user does not yet have an MFA
-	// secret for this method and self-enrollment is enabled for it. Clients (like the UI) can use
-	// this to determine whether to offer the user a way to generate an MFA secret
-	// for this method.
-	SelfEnrollmentEnabled bool `json:"self_enrollment_enabled,omitempty"`
 }
 
 type MFAConstraintAny struct {
@@ -386,7 +376,7 @@ func ParseSecret(r io.Reader) (*Secret, error) {
 			if err := json.Unmarshal(errBytes, &errStrArray); err != nil {
 				return nil, err
 			}
-			return nil, errors.New(strings.Join(errStrArray, " "))
+			return nil, fmt.Errorf(strings.Join(errStrArray, " "))
 		}
 
 		// if any raw data is present in resp.Body, add it to secret

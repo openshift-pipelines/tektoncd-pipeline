@@ -26,9 +26,6 @@ import (
 	"github.com/gobuffalo/flect"
 	"go.uber.org/zap"
 	"gomodules.xyz/jsonpatch/v2"
-
-	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
-
 	admissionv1 "k8s.io/api/admission/v1"
 	admissionregistrationv1 "k8s.io/api/admissionregistration/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -72,9 +69,8 @@ type reconciler struct {
 	mwhlister    admissionlisters.MutatingWebhookConfigurationLister
 	secretlister corelisters.SecretLister
 
-	disallowUnknownFields     bool
-	secretName                string
-	disableNamespaceOwnership bool
+	disallowUnknownFields bool
+	secretName            string
 }
 
 // CallbackFunc is the function to be invoked.
@@ -108,12 +104,10 @@ func NewCallback(function func(context.Context, *unstructured.Unstructured) erro
 	return Callback{function: function, supportedVerbs: m}
 }
 
-var (
-	_ controller.Reconciler                = (*reconciler)(nil)
-	_ pkgreconciler.LeaderAware            = (*reconciler)(nil)
-	_ webhook.AdmissionController          = (*reconciler)(nil)
-	_ webhook.StatelessAdmissionController = (*reconciler)(nil)
-)
+var _ controller.Reconciler = (*reconciler)(nil)
+var _ pkgreconciler.LeaderAware = (*reconciler)(nil)
+var _ webhook.AdmissionController = (*reconciler)(nil)
+var _ webhook.StatelessAdmissionController = (*reconciler)(nil)
 
 // Reconcile implements controller.Reconciler
 func (ac *reconciler) Reconcile(ctx context.Context, key string) error {
@@ -145,10 +139,6 @@ func (ac *reconciler) Path() string {
 
 // Admit implements AdmissionController
 func (ac *reconciler) Admit(ctx context.Context, request *admissionv1.AdmissionRequest) *admissionv1.AdmissionResponse {
-	// otelhttp middleware creates the labeler
-	labeler, _ := otelhttp.LabelerFromContext(ctx)
-	labeler.Add(webhook.WebhookTypeAttr.With(webhook.WebhookTypeDefaulting))
-
 	if ac.withContext != nil {
 		ctx = ac.withContext(ctx)
 	}
@@ -226,15 +216,12 @@ func (ac *reconciler) reconcileMutatingWebhook(ctx context.Context, caCert []byt
 
 	current := configuredWebhook.DeepCopy()
 
-	if !ac.disableNamespaceOwnership {
-		ns, err := ac.client.CoreV1().Namespaces().Get(ctx, system.Namespace(), metav1.GetOptions{})
-		if err != nil {
-			return fmt.Errorf("failed to fetch namespace: %w", err)
-		}
-		nsRef := *metav1.NewControllerRef(ns, corev1.SchemeGroupVersion.WithKind("Namespace"))
-		nsRef.Controller = ptr.Bool(false)
-		current.OwnerReferences = []metav1.OwnerReference{nsRef}
+	ns, err := ac.client.CoreV1().Namespaces().Get(ctx, system.Namespace(), metav1.GetOptions{})
+	if err != nil {
+		return fmt.Errorf("failed to fetch namespace: %w", err)
 	}
+	nsRef := *metav1.NewControllerRef(ns, corev1.SchemeGroupVersion.WithKind("Namespace"))
+	current.OwnerReferences = []metav1.OwnerReference{nsRef}
 
 	for i, wh := range current.Webhooks {
 		if wh.Name != current.Name {
