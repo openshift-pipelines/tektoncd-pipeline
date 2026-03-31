@@ -38,13 +38,6 @@ func TestPipelineRef_Invalid(t *testing.T) {
 		ref:     &v1.PipelineRef{},
 		wantErr: apis.ErrMissingField("name"),
 	}, {
-		name: "invalid pipelineref name",
-		ref:  &v1.PipelineRef{Name: "_foo"},
-		wantErr: &apis.FieldError{
-			Message: `invalid value: name part must consist of alphanumeric characters, '-', '_' or '.', and must start and end with an alphanumeric character (e.g. 'MyName',  or 'my.name',  or '123-abc', regex used for validation is '([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9]')`,
-			Paths:   []string{"name"},
-		},
-	}, {
 		name: "pipelineref resolver disallowed without beta feature gate",
 		ref: &v1.PipelineRef{
 			ResolverRef: v1.ResolverRef{
@@ -72,50 +65,36 @@ func TestPipelineRef_Invalid(t *testing.T) {
 		wantErr:     apis.ErrMissingField("resolver"),
 		withContext: cfgtesting.EnableBetaAPIFields,
 	}, {
-		name: "pipelineRef with resolver and k8s style name",
+		name: "pipelineref resolver disallowed in conjunction with pipelineref name",
 		ref: &v1.PipelineRef{
 			Name: "foo",
 			ResolverRef: v1.ResolverRef{
-				Resolver: "git",
+				Resolver: "bar",
 			},
 		},
-		wantErr:     apis.ErrInvalidValue(`invalid URI for request`, "name"),
-		withContext: enableConciseResolverSyntax,
+		wantErr:     apis.ErrMultipleOneOf("name", "resolver"),
+		withContext: cfgtesting.EnableBetaAPIFields,
 	}, {
-		name: "pipelineRef with url-like name without resolver",
+		name: "pipelineref params disallowed in conjunction with pipelineref name",
 		ref: &v1.PipelineRef{
-			Name: "https://foo.com/bar",
-		},
-		wantErr:     apis.ErrMissingField("resolver"),
-		withContext: enableConciseResolverSyntax,
-	}, {
-		name: "pipelineRef params disallowed in conjunction with pipelineref name",
-		ref: &v1.PipelineRef{
-			Name: "https://foo/bar",
+			Name: "bar",
 			ResolverRef: v1.ResolverRef{
-				Resolver: "git",
-				Params:   v1.Params{{Name: "foo", Value: v1.ParamValue{StringVal: "bar"}}},
+				Params: v1.Params{{
+					Name: "foo",
+					Value: v1.ParamValue{
+						Type:      v1.ParamTypeString,
+						StringVal: "bar",
+					},
+				}},
 			},
 		},
-		wantErr:     apis.ErrMultipleOneOf("name", "params"),
-		withContext: enableConciseResolverSyntax,
-	}, {
-		name: "pipelineRef with url-like name without enable-concise-resolver-syntax",
-		ref:  &v1.PipelineRef{Name: "https://foo.com/bar"},
-		wantErr: apis.ErrMissingField("resolver").Also(&apis.FieldError{
-			Message: `feature flag enable-concise-resolver-syntax should be set to true to use concise resolver syntax`,
-		}),
-	}, {
-		name: "pipelineRef without enable-concise-resolver-syntax",
-		ref:  &v1.PipelineRef{Name: "https://foo.com/bar", ResolverRef: v1.ResolverRef{Resolver: "git"}},
-		wantErr: &apis.FieldError{
-			Message: `feature flag enable-concise-resolver-syntax should be set to true to use concise resolver syntax`,
-		},
+		wantErr:     apis.ErrMultipleOneOf("name", "params").Also(apis.ErrMissingField("resolver")),
+		withContext: cfgtesting.EnableBetaAPIFields,
 	}}
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			ctx := t.Context()
+			ctx := context.Background()
 			if tc.withContext != nil {
 				ctx = tc.withContext(ctx)
 			}
@@ -163,7 +142,7 @@ func TestPipelineRef_Valid(t *testing.T) {
 
 	for _, ts := range tests {
 		t.Run(ts.name, func(t *testing.T) {
-			ctx := t.Context()
+			ctx := context.Background()
 			if ts.wc != nil {
 				ctx = ts.wc(ctx)
 			}

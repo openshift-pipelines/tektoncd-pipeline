@@ -28,7 +28,6 @@ import (
 
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
-	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
@@ -47,17 +46,22 @@ import (
 )
 
 const (
+	falseString = "false"
+	trueString  = "true"
+
 	// DefaultResyncPeriod is the default duration that is used when no
 	// resync period is associated with a controllers initialization context.
 	DefaultResyncPeriod = 10 * time.Hour
 )
 
-// DefaultThreadsPerController is the number of threads to use
-// when processing the controller's workqueue.  Controller binaries
-// may adjust this process-wide default.  For finer control, invoke
-// Run on the controller directly.
-// TODO rename the const to Concurrency and deprecated this
-var DefaultThreadsPerController = 2
+var (
+	// DefaultThreadsPerController is the number of threads to use
+	// when processing the controller's workqueue.  Controller binaries
+	// may adjust this process-wide default.  For finer control, invoke
+	// Run on the controller directly.
+	// TODO rename the const to Concurrency and deprecated this
+	DefaultThreadsPerController = 2
+)
 
 // Reconciler is the interface that controller implementations are expected
 // to implement, so that the shared controller.Impl can drive work through it.
@@ -200,7 +204,7 @@ type Impl struct {
 	// never processing the same item simultaneously in two different workers.
 	// The slow queue is used for global resync and other background processes
 	// which are not required to complete at the highest priority.
-	workQueue *twoLaneRateLimitingQueue
+	workQueue *twoLaneQueue
 
 	// Concurrency - The number of workers to use when processing the controller's workqueue.
 	Concurrency int
@@ -212,6 +216,9 @@ type Impl struct {
 	// the expense of slightly greater verbosity.
 	logger *zap.SugaredLogger
 
+	// StatsReporter is used to send common controller metrics.
+	statsReporter StatsReporter
+
 	// Tracker allows reconcilers to associate a reference with particular key,
 	// such that when the reference changes the key is queued for reconciliation.
 	Tracker tracker.Interface
@@ -219,10 +226,11 @@ type Impl struct {
 
 // ControllerOptions encapsulates options for creating a new controller,
 // including throttling and stats behavior.
-type ControllerOptions struct {
+type ControllerOptions struct { //nolint // for backcompat.
 	WorkQueueName string
 	Logger        *zap.SugaredLogger
-	RateLimiter   workqueue.TypedRateLimiter[any]
+	Reporter      StatsReporter
+	RateLimiter   workqueue.RateLimiter
 	Concurrency   int
 }
 
@@ -230,17 +238,21 @@ type ControllerOptions struct {
 // provided Reconciler as it is enqueued.
 func NewContext(ctx context.Context, r Reconciler, options ControllerOptions) *Impl {
 	if options.RateLimiter == nil {
-		options.RateLimiter = workqueue.DefaultTypedControllerRateLimiter[any]()
+		options.RateLimiter = workqueue.DefaultControllerRateLimiter()
+	}
+	if options.Reporter == nil {
+		options.Reporter = MustNewStatsReporter(options.WorkQueueName, options.Logger)
 	}
 	if options.Concurrency == 0 {
 		options.Concurrency = DefaultThreadsPerController
 	}
 	i := &Impl{
-		Name:        options.WorkQueueName,
-		Reconciler:  r,
-		workQueue:   newTwoLaneWorkQueue(options.WorkQueueName, options.RateLimiter),
-		logger:      options.Logger,
-		Concurrency: options.Concurrency,
+		Name:          options.WorkQueueName,
+		Reconciler:    r,
+		workQueue:     newTwoLaneWorkQueue(options.WorkQueueName, options.RateLimiter),
+		logger:        options.Logger,
+		statsReporter: options.Reporter,
+		Concurrency:   options.Concurrency,
 	}
 
 	if t := GetTracker(ctx); t != nil {
@@ -253,7 +265,7 @@ func NewContext(ctx context.Context, r Reconciler, options ControllerOptions) *I
 }
 
 // WorkQueue permits direct access to the work queue.
-func (c *Impl) WorkQueue() workqueue.TypedRateLimitingInterface[any] {
+func (c *Impl) WorkQueue() workqueue.RateLimitingInterface {
 	return c.workQueue
 }
 
@@ -271,11 +283,11 @@ func (c *Impl) EnqueueAfter(obj interface{}, after time.Duration) {
 // EnqueueSlowKey takes a resource, converts it into a namespace/name string,
 // and enqueues that key in the slow lane.
 func (c *Impl) EnqueueSlowKey(key types.NamespacedName) {
-	c.workQueue.AddSlow(key)
+	c.workQueue.SlowLane().Add(key)
 
 	if logger := c.logger.Desugar(); logger.Core().Enabled(zapcore.DebugLevel) {
 		logger.Debug(fmt.Sprintf("Adding to the slow queue %s (depth(total/slow): %d/%d)",
-			safeKey(key), c.workQueue.Len(), c.workQueue.SlowLen()),
+			safeKey(key), c.workQueue.Len(), c.workQueue.SlowLane().Len()),
 			zap.String(logkey.Key, key.String()))
 	}
 }
@@ -471,8 +483,8 @@ func (c *Impl) RunContext(ctx context.Context, threadiness int) error {
 	}
 
 	// Launch workers to process resources that get enqueued to our workqueue.
-	c.logger.Infow("Starting controller and workers", zap.Int("threadiness", threadiness))
-	for range threadiness {
+	c.logger.Info("Starting controller and workers")
+	for i := 0; i < threadiness; i++ {
 		sg.Add(1)
 		go func() {
 			defer sg.Done()
@@ -501,9 +513,17 @@ func (c *Impl) processNextWorkItem() bool {
 	c.logger.Debugf("Processing from queue %s (depth: %d)", safeKey(key), c.workQueue.Len())
 
 	startTime := time.Now()
+	// Send the metrics for the current queue depth
+	c.statsReporter.ReportQueueDepth(int64(c.workQueue.Len()))
 
 	var err error
 	defer func() {
+		status := trueString
+		if err != nil {
+			status = falseString
+		}
+		c.statsReporter.ReportReconcile(time.Since(startTime), status, key)
+
 		// We call Done here so the workqueue knows we have finished
 		// processing this item. We also must remember to call Forget if
 		// reconcile succeeds. If a transient error occurs, we do not call
@@ -533,31 +553,23 @@ func (c *Impl) processNextWorkItem() bool {
 }
 
 func (c *Impl) handleErr(logger *zap.SugaredLogger, err error, key types.NamespacedName, startTime time.Time) {
-	// Check if we should skip this key or if the queue is shutting down.
-	// We check shutdown here since controller Run might have exited by now
-	// (since while this item was being processed, queue.Len==0).
-	if IsSkipKey(err) || c.workQueue.ShuttingDown() {
+	if IsSkipKey(err) {
 		c.workQueue.Forget(key)
 		return
 	}
-
 	if ok, delay := IsRequeueKey(err); ok {
 		c.workQueue.AddAfter(key, delay)
 		logger.Debugf("Requeuing key %s (by request) after %v (depth: %d)", safeKey(key), delay, c.workQueue.Len())
 		return
 	}
 
-	// Conflict errors are expected, requeue to retry
-	if apierrors.IsConflict(err) {
-		logger.Debugw("Reconcile conflict", zap.Duration("duration", time.Since(startTime)))
-		c.workQueue.AddRateLimited(key)
-		return
-	}
-
 	logger.Errorw("Reconcile error", zap.Duration("duration", time.Since(startTime)), zap.Error(err))
 
 	// Re-queue the key if it's a transient error.
-	if !IsPermanentError(err) {
+	// We want to check that the queue is shutting down here
+	// since controller Run might have exited by now (since while this item was
+	// being processed, queue.Len==0).
+	if !IsPermanentError(err) && !c.workQueue.ShuttingDown() {
 		c.workQueue.AddRateLimited(key)
 		logger.Debugf("Requeuing key %s due to non-permanent error (depth: %d)", safeKey(key), c.workQueue.Len())
 		return
@@ -613,6 +625,7 @@ func IsSkipKey(err error) bool {
 // Is implements the Is() interface of error. It returns whether the target
 // error can be treated as equivalent to a permanentError.
 func (skipKeyError) Is(target error) bool {
+	//nolint: errorlint // This check is actually fine.
 	_, ok := target.(skipKeyError)
 	return ok
 }
@@ -639,6 +652,7 @@ func IsPermanentError(err error) bool {
 // Is implements the Is() interface of error. It returns whether the target
 // error can be treated as equivalent to a permanentError.
 func (permanentError) Is(target error) bool {
+	//nolint: errorlint // This check is actually fine.
 	_, ok := target.(permanentError)
 	return ok
 }
@@ -698,6 +712,7 @@ func IsRequeueKey(err error) (bool, time.Duration) {
 // Is implements the Is() interface of error. It returns whether the target
 // error can be treated as equivalent to a requeueKeyError.
 func (requeueKeyError) Is(target error) bool {
+	//nolint: errorlint // This check is actually fine.
 	_, ok := target.(requeueKeyError)
 	return ok
 }
@@ -713,6 +728,7 @@ type Informer interface {
 // of them to synchronize.
 func StartInformers(stopCh <-chan struct{}, informers ...Informer) error {
 	for _, informer := range informers {
+		informer := informer
 		go informer.Run(stopCh)
 	}
 
@@ -730,6 +746,7 @@ func RunInformers(stopCh <-chan struct{}, informers ...Informer) (func(), error)
 	var wg sync.WaitGroup
 	wg.Add(len(informers))
 	for _, informer := range informers {
+		informer := informer
 		go func() {
 			defer wg.Done()
 			informer.Run(stopCh)
@@ -747,8 +764,8 @@ func RunInformers(stopCh <-chan struct{}, informers ...Informer) (func(), error)
 // WaitForCacheSyncQuick is the same as cache.WaitForCacheSync but with a much reduced
 // check-rate for the sync period.
 func WaitForCacheSyncQuick(stopCh <-chan struct{}, cacheSyncs ...cache.InformerSynced) bool {
-	err := wait.PollUntilContextCancel(wait.ContextForChannel(stopCh), time.Millisecond, true,
-		func(context.Context) (bool, error) {
+	err := wait.PollImmediateUntil(time.Millisecond,
+		func() (bool, error) {
 			for _, syncFunc := range cacheSyncs {
 				if !syncFunc() {
 					return false, nil
@@ -756,7 +773,7 @@ func WaitForCacheSyncQuick(stopCh <-chan struct{}, cacheSyncs ...cache.InformerS
 			}
 			return true, nil
 		},
-	)
+		stopCh)
 	return err == nil
 }
 

@@ -19,19 +19,19 @@ limitations under the License.
 package v1beta1
 
 import (
-	http "net/http"
+	"net/http"
 
-	pipelinev1beta1 "github.com/tektoncd/pipeline/pkg/apis/pipeline/v1beta1"
-	scheme "github.com/tektoncd/pipeline/pkg/client/clientset/versioned/scheme"
+	v1beta1 "github.com/tektoncd/pipeline/pkg/apis/pipeline/v1beta1"
+	"github.com/tektoncd/pipeline/pkg/client/clientset/versioned/scheme"
 	rest "k8s.io/client-go/rest"
 )
 
 type TektonV1beta1Interface interface {
 	RESTClient() rest.Interface
+	ClusterTasksGetter
 	CustomRunsGetter
 	PipelinesGetter
 	PipelineRunsGetter
-	StepActionsGetter
 	TasksGetter
 	TaskRunsGetter
 }
@@ -39,6 +39,10 @@ type TektonV1beta1Interface interface {
 // TektonV1beta1Client is used to interact with features provided by the tekton.dev group.
 type TektonV1beta1Client struct {
 	restClient rest.Interface
+}
+
+func (c *TektonV1beta1Client) ClusterTasks() ClusterTaskInterface {
+	return newClusterTasks(c)
 }
 
 func (c *TektonV1beta1Client) CustomRuns(namespace string) CustomRunInterface {
@@ -51,10 +55,6 @@ func (c *TektonV1beta1Client) Pipelines(namespace string) PipelineInterface {
 
 func (c *TektonV1beta1Client) PipelineRuns(namespace string) PipelineRunInterface {
 	return newPipelineRuns(c, namespace)
-}
-
-func (c *TektonV1beta1Client) StepActions(namespace string) StepActionInterface {
-	return newStepActions(c, namespace)
 }
 
 func (c *TektonV1beta1Client) Tasks(namespace string) TaskInterface {
@@ -70,7 +70,9 @@ func (c *TektonV1beta1Client) TaskRuns(namespace string) TaskRunInterface {
 // where httpClient was generated with rest.HTTPClientFor(c).
 func NewForConfig(c *rest.Config) (*TektonV1beta1Client, error) {
 	config := *c
-	setConfigDefaults(&config)
+	if err := setConfigDefaults(&config); err != nil {
+		return nil, err
+	}
 	httpClient, err := rest.HTTPClientFor(&config)
 	if err != nil {
 		return nil, err
@@ -82,7 +84,9 @@ func NewForConfig(c *rest.Config) (*TektonV1beta1Client, error) {
 // Note the http client provided takes precedence over the configured transport values.
 func NewForConfigAndClient(c *rest.Config, h *http.Client) (*TektonV1beta1Client, error) {
 	config := *c
-	setConfigDefaults(&config)
+	if err := setConfigDefaults(&config); err != nil {
+		return nil, err
+	}
 	client, err := rest.RESTClientForConfigAndClient(&config, h)
 	if err != nil {
 		return nil, err
@@ -105,15 +109,17 @@ func New(c rest.Interface) *TektonV1beta1Client {
 	return &TektonV1beta1Client{c}
 }
 
-func setConfigDefaults(config *rest.Config) {
-	gv := pipelinev1beta1.SchemeGroupVersion
+func setConfigDefaults(config *rest.Config) error {
+	gv := v1beta1.SchemeGroupVersion
 	config.GroupVersion = &gv
 	config.APIPath = "/apis"
-	config.NegotiatedSerializer = rest.CodecFactoryForGeneratedClient(scheme.Scheme, scheme.Codecs).WithoutConversion()
+	config.NegotiatedSerializer = scheme.Codecs.WithoutConversion()
 
 	if config.UserAgent == "" {
 		config.UserAgent = rest.DefaultKubernetesUserAgent()
 	}
+
+	return nil
 }
 
 // RESTClient returns a RESTClient that is used to communicate

@@ -28,7 +28,7 @@ type (
 		Name      string
 		FullName  string
 		Perm      *Perm
-		Branch    string // default branch of the repository
+		Branch    string
 		Private   bool
 		Archived  bool
 		Clone     string

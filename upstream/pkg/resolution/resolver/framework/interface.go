@@ -26,8 +26,6 @@ import (
 // Resolver is the interface to implement for type-specific resource
 // resolution. It fetches resources from a given type of remote location
 // and returns their content along with any associated annotations.
-//
-// Deprecated: Use [github.com/tektoncd/pipeline/pkg/remoteresolution/resolver/framework.Resolver] instead.
 type Resolver interface {
 	// Initialize is called at the moment the resolver controller is
 	// instantiated and is a good place to setup things like
@@ -90,7 +88,7 @@ type TimedResolution interface {
 	// object, which includes any request-scoped data like
 	// resolver config and the request's originating namespace,
 	// along with a default.
-	GetResolutionTimeout(ctx context.Context, timeout time.Duration, params map[string]string) (time.Duration, error)
+	GetResolutionTimeout(ctx context.Context, timeout time.Duration) time.Duration
 }
 
 // ResolvedResource returns the data and annotations of a successful

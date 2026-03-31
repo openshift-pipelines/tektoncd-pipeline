@@ -98,19 +98,19 @@ func createServerCertTemplate(name, namespace string, notAfter time.Time) (*x509
 
 // Actually sign the cert and return things in a form that we can use later on
 func createCert(template, parent *x509.Certificate, pub, parentPriv interface{}) (
-	cert *x509.Certificate, certPEM []byte, err error,
-) {
+	cert *x509.Certificate, certPEM []byte, err error) {
+
 	certDER, err := x509.CreateCertificate(rand.Reader, template, parent, pub, parentPriv)
 	if err != nil {
-		return cert, certPEM, err
+		return
 	}
 	cert, err = x509.ParseCertificate(certDER)
 	if err != nil {
-		return cert, certPEM, err
+		return
 	}
 	b := pem.Block{Type: "CERTIFICATE", Bytes: certDER}
 	certPEM = pem.EncodeToMemory(&b)
-	return cert, certPEM, err
+	return
 }
 
 func createCA(ctx context.Context, name, namespace string, notAfter time.Time) (*ecdsa.PrivateKey, *x509.Certificate, []byte, error) {

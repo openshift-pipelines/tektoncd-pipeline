@@ -1,4 +1,5 @@
 //go:build examples
+// +build examples
 
 /*
 Copyright 2021 The Tekton Authors
@@ -23,7 +24,6 @@ import (
 	"testing"
 )
 
-// @test:execution=parallel
 func TestStablePathFilter(t *testing.T) {
 	for _, tc := range []struct {
 		path    string
@@ -71,7 +71,6 @@ func TestStablePathFilter(t *testing.T) {
 	}
 }
 
-// @test:execution=parallel
 func TestAlphaPathFilter(t *testing.T) {
 	for _, tc := range []struct {
 		path string
@@ -105,7 +104,6 @@ func TestAlphaPathFilter(t *testing.T) {
 	}
 }
 
-// @test:execution=parallel
 func TestBetaPathFilter(t *testing.T) {
 	for _, tc := range []struct {
 		path    string

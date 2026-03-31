@@ -21,13 +21,10 @@ import (
 	"errors"
 	"fmt"
 
-	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	"go.uber.org/zap"
-
 	admissionv1 "k8s.io/api/admission/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
-
 	"knative.dev/pkg/apis"
 	kubeclient "knative.dev/pkg/client/injection/kube/client"
 	"knative.dev/pkg/logging"
@@ -63,10 +60,6 @@ var _ webhook.AdmissionController = (*reconciler)(nil)
 
 // Admit implements AdmissionController
 func (ac *reconciler) Admit(ctx context.Context, request *admissionv1.AdmissionRequest) (resp *admissionv1.AdmissionResponse) {
-	// otelhttp middleware creates the labeler
-	labeler, _ := otelhttp.LabelerFromContext(ctx)
-	labeler.Add(webhook.WebhookTypeAttr.With(webhook.WebhookTypeValidation))
-
 	if ac.withContext != nil {
 		ctx = ac.withContext(ctx)
 	}
@@ -113,8 +106,8 @@ func (ac *reconciler) Admit(ctx context.Context, request *admissionv1.AdmissionR
 func (ac *reconciler) decodeRequestAndPrepareContext(
 	ctx context.Context,
 	req *admissionv1.AdmissionRequest,
-	gvk schema.GroupVersionKind,
-) (context.Context, resourcesemantics.GenericCRD, error) {
+	gvk schema.GroupVersionKind) (context.Context, resourcesemantics.GenericCRD, error) {
+
 	logger := logging.FromContext(ctx)
 	handler, ok := ac.handlers[gvk]
 	if !ok {
@@ -167,8 +160,7 @@ func (ac *reconciler) decodeRequestAndPrepareContext(
 	return ctx, newObj, nil
 }
 
-//nolint:staticcheck
-func validate(ctx context.Context, resource resourcesemantics.GenericCRD, req *admissionv1.AdmissionRequest) (err error, warn []error) {
+func validate(ctx context.Context, resource resourcesemantics.GenericCRD, req *admissionv1.AdmissionRequest) (err error, warn []error) { //nolint
 	logger := logging.FromContext(ctx)
 
 	// Only run validation for supported create and update validation.

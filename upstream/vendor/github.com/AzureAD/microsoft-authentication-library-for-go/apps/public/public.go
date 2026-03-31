@@ -51,13 +51,6 @@ type AuthenticationScheme = authority.AuthenticationScheme
 
 type Account = shared.Account
 
-type TokenSource = base.TokenSource
-
-const (
-	TokenSourceIdentityProvider = base.TokenSourceIdentityProvider
-	TokenSourceCache            = base.TokenSourceCache
-)
-
 var errNoAccount = errors.New("no account was specified with public.WithSilentAccount(), or the specified account is invalid")
 
 // clientOptions configures the Client's behavior.
@@ -224,13 +217,11 @@ func WithClaims(claims string) interface {
 func WithAuthenticationScheme(authnScheme AuthenticationScheme) interface {
 	AcquireSilentOption
 	AcquireInteractiveOption
-	AcquireByUsernamePasswordOption
 	options.CallOption
 } {
 	return struct {
 		AcquireSilentOption
 		AcquireInteractiveOption
-		AcquireByUsernamePasswordOption
 		options.CallOption
 	}{
 		CallOption: options.NewCallOption(
@@ -239,8 +230,6 @@ func WithAuthenticationScheme(authnScheme AuthenticationScheme) interface {
 				case *acquireTokenSilentOptions:
 					t.authnScheme = authnScheme
 				case *interactiveAuthOptions:
-					t.authnScheme = authnScheme
-				case *acquireTokenByUsernamePasswordOptions:
 					t.authnScheme = authnScheme
 				default:
 					return fmt.Errorf("unexpected options type %T", a)
@@ -360,7 +349,6 @@ func (pca Client) AcquireTokenSilent(ctx context.Context, scopes []string, opts 
 // acquireTokenByUsernamePasswordOptions contains optional configuration for AcquireTokenByUsernamePassword
 type acquireTokenByUsernamePasswordOptions struct {
 	claims, tenantID string
-	authnScheme      AuthenticationScheme
 }
 
 // AcquireByUsernamePasswordOption is implemented by options for AcquireTokenByUsernamePassword
@@ -368,9 +356,9 @@ type AcquireByUsernamePasswordOption interface {
 	acquireByUsernamePasswordOption()
 }
 
-// Deprecated: This API will be removed in a future release. Use a more secure flow instead. Follow this migration guide: https://aka.ms/msal-ropc-migration
-//
 // AcquireTokenByUsernamePassword acquires a security token from the authority, via Username/Password Authentication.
+// NOTE: this flow is NOT recommended.
+//
 // Options: [WithClaims], [WithTenantID]
 func (pca Client) AcquireTokenByUsernamePassword(ctx context.Context, scopes []string, username, password string, opts ...AcquireByUsernamePasswordOption) (AuthResult, error) {
 	o := acquireTokenByUsernamePasswordOptions{}
@@ -386,15 +374,12 @@ func (pca Client) AcquireTokenByUsernamePassword(ctx context.Context, scopes []s
 	authParams.Claims = o.claims
 	authParams.Username = username
 	authParams.Password = password
-	if o.authnScheme != nil {
-		authParams.AuthnScheme = o.authnScheme
-	}
 
 	token, err := pca.base.Token.UsernamePassword(ctx, authParams)
 	if err != nil {
 		return AuthResult{}, err
 	}
-	return pca.base.AuthResultFromToken(ctx, authParams, token)
+	return pca.base.AuthResultFromToken(ctx, authParams, token, true)
 }
 
 type DeviceCodeResult = accesstokens.DeviceCodeResult
@@ -419,7 +404,7 @@ func (d DeviceCode) AuthenticationResult(ctx context.Context) (AuthResult, error
 	if err != nil {
 		return AuthResult{}, err
 	}
-	return d.client.base.AuthResultFromToken(ctx, d.authParams, token)
+	return d.client.base.AuthResultFromToken(ctx, d.authParams, token, true)
 }
 
 // acquireTokenByDeviceCodeOptions contains optional configuration for AcquireTokenByDeviceCode
@@ -694,7 +679,7 @@ func (pca Client) AcquireTokenInteractive(ctx context.Context, scopes []string, 
 		return AuthResult{}, err
 	}
 
-	return pca.base.AuthResultFromToken(ctx, authParams, token)
+	return pca.base.AuthResultFromToken(ctx, authParams, token, true)
 }
 
 type interactiveAuthResult struct {

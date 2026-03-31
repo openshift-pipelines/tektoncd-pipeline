@@ -1,4 +1,5 @@
 //go:build e2e
+// +build e2e
 
 /*
 Copyright 2023 The Tekton Authors
@@ -51,11 +52,11 @@ spec:
     default: "response"
   steps:
   - name: echo-param
-    image: mirror.gcr.io/alpine
+    image: alpine
     script: |
       echo "$(params.rsp)"
   - name: check-workspace
-    image: mirror.gcr.io/alpine
+    image: alpine
     script: |
       if [ "$(workspaces.taskWorkspace.bound)" == "true" ]; then
         echo "Workspace provided"
@@ -127,12 +128,12 @@ status:
     status: "True"
   taskSpec:
     steps:
-    - image: mirror.gcr.io/alpine
+    - image: alpine
       name: echo-param
       script: |
        echo "response"
     - name: check-workspace
-      image: mirror.gcr.io/alpine
+      image: alpine
       script: |
         if [ "true" == "true" ]; then
           echo "Workspace provided"
@@ -154,7 +155,6 @@ status:
     terminationReason: Completed
     terminated:
       reason: Completed
-  artifacts: {}
 `
 
 	expectedSimplePipelineRunYaml = `
@@ -197,17 +197,16 @@ status:
 
 // TestSimpleTaskRun creates a taskRun with a basic task and verifies the
 // runs created are successful and as expected.
-// @test:execution=parallel
 func TestSimpleTaskRun(t *testing.T) {
 	t.Parallel()
-	ctx, cancel := context.WithCancel(t.Context())
+	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	c, namespace := setup(ctx, t)
 
 	taskRunName := helpers.ObjectNameForTest(t)
 
-	knativetest.CleanupOnInterrupt(func() { tearDown(t.Context(), t, c, namespace) }, t.Logf)
-	defer tearDown(t.Context(), t, c, namespace)
+	knativetest.CleanupOnInterrupt(func() { tearDown(context.Background(), t, c, namespace) }, t.Logf)
+	defer tearDown(context.Background(), t, c, namespace)
 
 	t.Logf("Creating Task in namespace %s", namespace)
 	task := parse.MustParseV1Task(t, fmt.Sprintf(simpleTaskYaml, task1Name, namespace))
@@ -238,15 +237,14 @@ func TestSimpleTaskRun(t *testing.T) {
 
 // TestSimplePipelineRun creates a pipelineRun with a basic Pipeline
 // and verifies the runs created are successful and as expected.
-// @test:execution=parallel
 func TestSimplePipelineRun(t *testing.T) {
 	t.Parallel()
-	ctx, cancel := context.WithCancel(t.Context())
+	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	c, namespace := setup(ctx, t)
 
-	knativetest.CleanupOnInterrupt(func() { tearDown(t.Context(), t, c, namespace) }, t.Logf)
-	defer tearDown(t.Context(), t, c, namespace)
+	knativetest.CleanupOnInterrupt(func() { tearDown(context.Background(), t, c, namespace) }, t.Logf)
+	defer tearDown(context.Background(), t, c, namespace)
 
 	t.Logf("Creating Task in namespace %s", namespace)
 	task := parse.MustParseV1Task(t, fmt.Sprintf(simpleTaskYaml, task1Name, namespace))

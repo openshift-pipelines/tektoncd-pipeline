@@ -1,4 +1,5 @@
 //go:build e2e
+// +build e2e
 
 /*
 Copyright 2019 The Tekton Authors
@@ -30,9 +31,8 @@ import (
 	"knative.dev/pkg/test/helpers"
 )
 
-// @test:execution=parallel
 func TestPipelineRunWithServiceAccounts(t *testing.T) {
-	ctx := t.Context()
+	ctx := context.Background()
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
@@ -123,17 +123,17 @@ spec:
   - name: task1
     taskSpec:
       steps:
-      - image: mirror.gcr.io/ubuntu
+      - image: ubuntu
         script: echo task1
   - name: task2
     taskSpec:
       steps:
-      - image: mirror.gcr.io/ubuntu
+      - image: ubuntu
         script: echo task2
   - name: task3
     taskSpec:
       steps:
-      - image: mirror.gcr.io/ubuntu
+      - image: ubuntu
         script: echo task3
 `, helpers.ObjectNameForTest(t), namespace))
 	if _, err := c.V1PipelineClient.Create(ctx, pipeline, metav1.CreateOptions{}); err != nil {
@@ -193,9 +193,8 @@ spec:
 	}
 }
 
-// @test:execution=parallel
 func TestPipelineRunWithServiceAccountNameAndTaskRunSpec(t *testing.T) {
-	ctx := t.Context()
+	ctx := context.Background()
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
@@ -243,7 +242,7 @@ spec:
     taskSpec:
       metadata: {}
       steps:
-      - image: mirror.gcr.io/ubuntu
+      - image: ubuntu
         script: echo task1
 `, helpers.ObjectNameForTest(t), namespace))
 	if _, err := c.V1PipelineClient.Create(ctx, pipeline, metav1.CreateOptions{}); err != nil {

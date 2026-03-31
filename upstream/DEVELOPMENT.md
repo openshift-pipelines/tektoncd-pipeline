@@ -16,14 +16,9 @@ First, you may want to [Ramp up](#ramp-up) on Kubernetes and Custom Resource Def
     1. [Set up a docker repository 'ko' can push images to](https://github.com/knative/serving/blob/4a8c859741a4454bdd62c2b60069b7d05f5468e7/docs/setting-up-a-docker-registry.md)
 1. [Developing and testing](#developing-and-testing) Tekton pipelines
     1. Learn how to [iterate](#iterating-on-code-changes) on code changes
-    1. [Testing](#testing)
     1. [Managing Tekton Objects using `ko`](#managing-tekton-objects-using-ko) in Kubernetes
     1. [Accessing logs](#accessing-logs)
     1. [Adding new CRD types](#adding-new-crd-types)
-1. [Debugging](#debugging)
-    1. [Change Controller](#change-controller)
-    1. [Forward Debugging Port](#forward-debugging-port)
-    1. [Add VSCode Configuration](#add-vscode-configuration)
 
 ---
 
@@ -40,7 +35,7 @@ After reading the developer docs, you may find it useful to return to these `Tek
 -   Install via
     [official installation docs](https://github.com/tektoncd/pipeline/blob/main/docs/install.md)
     or continue through [getting started for development](#getting-started)
--   [Tekton Pipeline "Hello World" tutorial](https://tekton.dev/docs/getting-started/pipelines) -
+-   [Tekton Pipeline "Hello World" tutorial](https://github.com/tektoncd/pipeline/blob/main/docs/tutorial.md) -
     Define `Tasks` and `Pipelines` (i.e., Tekton CRDs), and see what happens when they are run
 
 ---
@@ -101,12 +96,6 @@ You must install these tools:
 1. [`go-licenses`](https://github.com/google/go-licenses) is used in e2e tests.
 
 1. (Optional)
-   [`yamllint`](https://github.com/adrienverge/yamllint?tab=readme-ov-file#installation)
-   is run against every PR as part of `pre-commit`. You may want to install this tool
-   so that `pre-commit` can use it, otherwise it will show a `failed` message for
-   when linting yaml files.
-
-1. (Optional)
    [`golangci-lint`](https://golangci-lint.run/welcome/install/#local-installation)
    is run against every PR. You may want to install and [run this tool
    locally](https://golangci-lint.run/welcome/quick-start) to iterate quickly on
@@ -119,10 +108,6 @@ You must install these tools:
    [`woke`](https://docs.getwoke.tech/installation/) is executed for every pull 
    request. To ensure your work does not contain offensive language, you may 
    want to install and run this tool locally.
-
-1. (Optional)
-   [`delve`](https://github.com/go-delve/delve/tree/master/Documentation/installation) is needed if you want to setup
-   a debugging of the Tekton controller in VSCode or your IDE of choice.
 
 ### Configure environment
 
@@ -154,7 +139,7 @@ For example:
 
         ```shell
         # format: ${localhost:port}/{}
-        export KO_DOCKER_REPO='localhost:5000/mypipelineimages'
+        export KO_DOCKER_REPO=`localhost:5000/mypipelineimages`
         ```
 
 1. Optionally, add `$HOME/go/bin` to your system `PATH` so that any tooling installed via `go get` will work properly. For example:
@@ -298,7 +283,7 @@ as follows.
 
 The recommended minimum development configuration is:
 
-- Kubernetes version 1.28 or later
+- Kubernetes version 1.27 or later
 - 4 (virtual) CPU nodes
   - 8 GB of (actual or virtualized) platform memory
 - Node autoscaling, up to 3 nodes
@@ -312,24 +297,17 @@ The recommended minimum development configuration is:
 3. Create cluster:
 
    ```sh
-   kind create cluster
+   $ kind create cluster
    ```
 
 4. Configure [ko](https://kind.sigs.k8s.io/):
 
    ```sh
-   export KO_DOCKER_REPO="kind.local"
-   export KIND_CLUSTER_NAME="kind"  # only needed if you used a custom name in the previous step
+   $ export KO_DOCKER_REPO="kind.local"
+   $ export KIND_CLUSTER_NAME="kind"  # only needed if you used a custom name in the previous step
    ```
 
 optional: As a convenience, the [Tekton plumbing project](https://github.com/tektoncd/plumbing) provides a script named ['tekton_in_kind.sh'](https://github.com/tektoncd/plumbing/tree/main/hack#tekton_in_kindsh) that leverages `kind` to create a cluster and install Tekton Pipeline, [Tekton Triggers](https://github.com/tektoncd/triggers) and [Tekton Dashboard](https://github.com/tektoncd/dashboard) components into it.
-
-If you used the ['tekton_in_kind.sh'](https://github.com/tektoncd/plumbing/tree/main/hack#tekton_in_kindsh) plumbing script to deploy your `kind` cluster, you need to tell `ko` to use the local registry as mentioned [here](#configure-environment).
-
-
-```sh
-export KO_DOCKER_REPO="localhost:5000"
-```
 
 #### Using MiniKube
 
@@ -363,7 +341,7 @@ export KO_DOCKER_REPO="localhost:5000"
      --region=us-central1 \
      --machine-type=e2-standard-4 \
      --num-nodes=1 \
-     --cluster-version=1.28
+     --cluster-version=1.27
     ```
 
     > **Note**: The recommended [GCE machine type](https://cloud.google.com/compute/docs/machine-types) is `'e2-standard-4'`.
@@ -393,6 +371,7 @@ While iterating on code changes to the project, you may need to:
     - Update your type definitions with: `./hack/update-codegen.sh`
     -  Update your OpenAPI specs with: `./hack/update-openapigen.sh`
 1. Update or [add new CRD types](#adding-new-crd-types) as needed
+1. Update, [add and run tests](./test/README.md#tests)
 
 To make changes to these CRDs, you will probably interact with:
 
@@ -400,10 +379,6 @@ To make changes to these CRDs, you will probably interact with:
 - The reconcilers in [./pkg/reconciler](./pkg/reconciler)
 - The clients are in [./pkg/client](./pkg/client) (these are generated by
     `./hack/update-codegen.sh`)
-
-#### Testing
-
-For comprehensive testing documentation, including how to run different test suites and understand test categorization, see the [Testing Guide](./test/README.md).
 
 ---
 
@@ -476,6 +451,7 @@ This script will cause `ko` to:
 
 It will also update the default system namespace used for K8s `deployments` to the new value for all subsequent `kubectl` commands.
 
+
 ---
 
 ### Accessing logs
@@ -516,94 +492,3 @@ If you need to add a new CRD type, you will need to add:
     [list of known types](./pkg/apis/pipeline/v1alpha1/register.go)
 
 _See [the API compatibility policy](api_compatibility_policy.md)._
-
-## Debugging
-
-`ko` has build in support for the `delve` debugger. To use it you need to build your controller image with the `--debug` and `--disable-optimizations` flag.
-
-### Change Controller
-
-If you want to debug your controller you first need to update its deployment configuration and comment the probes. If you don't do that the short probe timeouts will crash the pod:
-
-```yaml
-# config/controller.yaml
-
-# livenessProbe:
-#   httpGet:
-#     path: /health
-#     port: probes
-#     scheme: HTTP
-#   initialDelaySeconds: 5
-#   periodSeconds: 10
-#   timeoutSeconds: 5
-# readinessProbe:
-#   httpGet:
-#     path: /readiness
-#     port: probes
-#     scheme: HTTP
-#   initialDelaySeconds: 5
-#   periodSeconds: 10
-#   timeoutSeconds: 5
-```
-
-Then you need to rebuild the the controller in debug mode:
-
-```sh
-ko apply -f config/controller.yaml --debug --disable-optimizations
-```
-
-### Forward Debugging Port
-
-Now the controller will be re-started with `delve` in headless mode and you can attach a client to it on port `40000` but first you need to forward the port from the controller pod:
-
-```sh
-kubectl port-forward -n tekton-pipelines deployments/tekton-pipelines-controller 40000:40000
-```
-
-### Add VSCode Configuration
-
-In VSCode add the following `launch.json` configuration for go remote debugging:
-
-```json
-{
-  "version": "0.2.0",
-  "configurations": [
-    {
-      "name": "Attach to Delve (Tekton Controller)",
-      "type": "go",
-      "request": "attach",
-      "mode": "remote",
-      "port": 40000,
-      "host": "127.0.0.1",
-      "apiVersion": 2,
-      "substitutePath": [
-        {
-          "from": "${workspaceFolder}",
-          "to": "github.com/tektoncd/pipeline"
-        }
-      ]
-    }
-  ]
-}
-```
-
-Now you ar able to attach to `delve` in VSCode. Set breakpoints e.g. in `pipelinerun.go` in the `reconcile` method and execute a `PipelineRun` and VSCode should stop at the breakpoint. You can use this sample `PipelineRun` for testing:
-
-```sh
-kubectl create -f - <<EOF
-apiVersion: tekton.dev/v1
-kind: PipelineRun
-metadata:
-  generateName: hello-world-run-
-spec:
-  pipelineSpec:
-    tasks:
-      - name: hello-task
-        taskSpec:
-          steps:
-            - name: hello-step
-              image: alpine
-              script: |
-                echo "Hello world!"
-EOF
-```
