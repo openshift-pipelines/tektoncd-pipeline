@@ -6,7 +6,6 @@
   "branchPrefix": "konflux/osp-mintmaker/",
   "enabledManagers": [
     "tekton",
-    "dockerfile",
     "rpm-lockfile"
   ],
   "addLabels": [
