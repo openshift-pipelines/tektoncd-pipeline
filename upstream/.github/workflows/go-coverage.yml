@@ -2,6 +2,7 @@ name: Go coverage
 
 permissions:
   contents: read
+  pull-requests: write
 
 on:
   pull_request:
@@ -30,7 +31,7 @@ jobs:
 
     steps:
       - name: Harden runner
-        uses: step-security/harden-runner@5ef0c079ce82195b2a36a210272d6b661572d83e # v2.14.2
+        uses: step-security/harden-runner@fa2e9d605c4eeb9fcad4c99c224cee0c6c7f3594 # v2.16.0
         with:
           egress-policy: audit
 
@@ -38,9 +39,10 @@ jobs:
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           path: ${{ github.workspace }}/src/github.com/tektoncd/pipeline
+          persist-credentials: false
 
       - name: Set up Go
-        uses: actions/setup-go@7a3fe6cf4cb3a834922a1244abfce67bcef6a0c5  # v6.2.0
+        uses: actions/setup-go@4b73464bb391d4059bd26b0524d20df3927bd417  # v6.3.0
         with:
           go-version-file: "${{ github.workspace }}/src/github.com/tektoncd/pipeline/go.mod"
 
@@ -51,14 +53,14 @@ jobs:
           echo "Generated coverage profile"
 
       - name: Archive coverage results
-        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
         with:
           name: code-coverage
           path: ${{ github.workspace }}/src/github.com/tektoncd/pipeline/coverage.txt
 
       - name: Comment on PR
         if: github.event_name == 'pull_request'
-        uses: fgrosse/go-coverage-report@8c1d1a09864211d258937b1b1a5b849f7e4f2682 # v1.2.0
+        uses: fgrosse/go-coverage-report@cbeb2ab2e32591d690337146ba02a911cc566f3f # v1.3.0
         continue-on-error: true # This may fail if artifact on main branch does not exist (first run or expired)
         env:
           GITHUB_TOKEN: ${{ secrets.CHATOPS_TOKEN }}
