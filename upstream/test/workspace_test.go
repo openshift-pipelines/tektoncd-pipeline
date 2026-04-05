@@ -1,5 +1,4 @@
 //go:build e2e
-// +build e2e
 
 /*
 Copyright 2019 The Tekton Authors
@@ -33,8 +32,9 @@ import (
 	"knative.dev/pkg/test/helpers"
 )
 
+// @test:execution=parallel
 func TestWorkspaceReadOnlyDisallowsWrite(t *testing.T) {
-	ctx := context.Background()
+	ctx := t.Context()
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	c, namespace := setup(ctx, t)
@@ -51,7 +51,7 @@ metadata:
   namespace: %s
 spec:
   steps:
-  - image: alpine
+  - image: mirror.gcr.io/alpine
     script: 'echo foo > /workspace/test/file'
   workspaces:
   - name: test
@@ -110,8 +110,9 @@ spec:
 	}
 }
 
+// @test:execution=parallel
 func TestWorkspacePipelineRunDuplicateWorkspaceEntriesInvalid(t *testing.T) {
-	ctx := context.Background()
+	ctx := t.Context()
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	c, namespace := setup(ctx, t)
@@ -129,7 +130,7 @@ metadata:
   namespace: %s
 spec:
   steps:
-  - image: alpine
+  - image: mirror.gcr.io/alpine
     script: 'cat /workspace/test/file'
   workspaces:
   - name: test
@@ -180,8 +181,9 @@ spec:
 	}
 }
 
+// @test:execution=parallel
 func TestWorkspacePipelineRunMissingWorkspaceInvalid(t *testing.T) {
-	ctx := context.Background()
+	ctx := t.Context()
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	c, namespace := setup(ctx, t)
@@ -199,7 +201,7 @@ metadata:
   namespace: %s
 spec:
   steps:
-  - image: alpine
+  - image: mirror.gcr.io/alpine
     script: 'cat /workspace/test/file'
   workspaces:
   - name: test
@@ -250,8 +252,9 @@ spec:
 // TestWorkspaceVolumeNameMatchesVolumeVariableReplacement checks that a workspace's
 // randomized volume name matches the workspaces.<name>.volume variable injected into
 // a user's task specs.
+// @test:execution=parallel
 func TestWorkspaceVolumeNameMatchesVolumeVariableReplacement(t *testing.T) {
-	ctx := context.Background()
+	ctx := t.Context()
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	c, namespace := setup(ctx, t)
@@ -268,7 +271,7 @@ metadata:
   namespace: %s
 spec:
   steps:
-  - image: alpine
+  - image: mirror.gcr.io/alpine
     name: foo
     command: ['echo']
     args: ['$(workspaces.test.volume)']

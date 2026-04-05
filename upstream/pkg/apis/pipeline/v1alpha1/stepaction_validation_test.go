@@ -47,7 +47,7 @@ func TestStepActionValidate(t *testing.T) {
 	}}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			ctx := context.Background()
+			ctx := t.Context()
 			if tt.wc != nil {
 				ctx = tt.wc(ctx)
 			}
@@ -79,6 +79,38 @@ func TestStepActionSpecValidate(t *testing.T) {
 			Image:   "myimage",
 			Command: []string{"ls"},
 			Args:    []string{"-lh"},
+		},
+	}, {
+		name: "valid param default value references defined param",
+		fields: fields{
+			Image: "myimage",
+			Params: []v1.ParamSpec{{
+				Name:    "param1",
+				Type:    v1.ParamTypeString,
+				Default: v1.NewStructuredValues("hello"),
+			}, {
+				Name:    "param2",
+				Type:    v1.ParamTypeString,
+				Default: v1.NewStructuredValues("$(params.param1) world"),
+			}},
+		},
+	}, {
+		name: "multiple param references in default value",
+		fields: fields{
+			Image: "myimage",
+			Params: []v1.ParamSpec{{
+				Name:    "param1",
+				Type:    v1.ParamTypeString,
+				Default: v1.NewStructuredValues("hello"),
+			}, {
+				Name:    "param2",
+				Type:    v1.ParamTypeString,
+				Default: v1.NewStructuredValues("hi"),
+			}, {
+				Name:    "param3",
+				Type:    v1.ParamTypeString,
+				Default: v1.NewStructuredValues("$(params.param1) $(params.param2)"),
+			}},
 		},
 	}, {
 		name: "step action with script",
@@ -280,7 +312,7 @@ func TestStepActionSpecValidate(t *testing.T) {
 				Results:      tt.fields.Results,
 				VolumeMounts: tt.fields.VolumeMounts,
 			}
-			ctx := context.Background()
+			ctx := t.Context()
 			sa.SetDefaults(ctx)
 			if err := sa.Validate(ctx); err != nil {
 				t.Errorf("StepActionSpec.Validate() = %v", err)
@@ -540,6 +572,69 @@ func TestStepActionValidateError(t *testing.T) {
 			Message: `non-existent variable in "$(params.gitrepo.foo)"`,
 			Paths:   []string{"spec.volumeMounts[0]"},
 		},
+	}, {
+		name: "circular dependency in param default values",
+		fields: fields{
+			Image: "myimage",
+			Params: []v1.ParamSpec{{
+				Name:    "param1",
+				Type:    v1.ParamTypeString,
+				Default: v1.NewStructuredValues("$(params.param2)"),
+			}, {
+				Name:    "param2",
+				Type:    v1.ParamTypeString,
+				Default: v1.NewStructuredValues("$(params.param1)"),
+			}},
+		},
+		expectedError: *((&apis.FieldError{
+			Message: `param "param1" default value has a circular dependency`,
+			Paths:   []string{"spec.params"},
+		}).Also(&apis.FieldError{
+			Message: `param "param2" default value has a circular dependency`,
+			Paths:   []string{"spec.params"},
+		})),
+	}, {
+		name: "complex circular dependency in param default values",
+		fields: fields{
+			Image: "myimage",
+			Params: []v1.ParamSpec{{
+				Name:    "param1",
+				Type:    v1.ParamTypeString,
+				Default: v1.NewStructuredValues("$(params.param2)"),
+			}, {
+				Name:    "param2",
+				Type:    v1.ParamTypeString,
+				Default: v1.NewStructuredValues("$(params.param3)"),
+			}, {
+				Name:    "param3",
+				Type:    v1.ParamTypeString,
+				Default: v1.NewStructuredValues("$(params.param1)"),
+			}},
+		},
+		expectedError: *((&apis.FieldError{
+			Message: `param "param1" default value has a circular dependency`,
+			Paths:   []string{"spec.params"},
+		}).Also(&apis.FieldError{
+			Message: `param "param2" default value has a circular dependency`,
+			Paths:   []string{"spec.params"},
+		}).Also(&apis.FieldError{
+			Message: `param "param3" default value has a circular dependency`,
+			Paths:   []string{"spec.params"},
+		})),
+	}, {
+		name: "self-referential param default value",
+		fields: fields{
+			Image: "myimage",
+			Params: []v1.ParamSpec{{
+				Name:    "param1",
+				Type:    v1.ParamTypeString,
+				Default: v1.NewStructuredValues("$(params.param1)"),
+			}},
+		},
+		expectedError: apis.FieldError{
+			Message: `param "param1" default value has a circular dependency`,
+			Paths:   []string{"spec.params"},
+		},
 	}}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -556,12 +651,13 @@ func TestStepActionValidateError(t *testing.T) {
 					VolumeMounts: tt.fields.VolumeMounts,
 				},
 			}
-			ctx := context.Background()
+			ctx := t.Context()
 			sa.SetDefaults(ctx)
 			err := sa.Validate(ctx)
 			if err == nil {
 				t.Fatalf("Expected an error, got nothing for %v", sa)
 			}
+			t.Logf("Actual error: %v", err)
 			if d := cmp.Diff(tt.expectedError.Error(), err.Error(), cmpopts.IgnoreUnexported(apis.FieldError{})); d != "" {
 				t.Errorf("StepActionSpec.Validate() errors diff %s", diff.PrintWantGot(d))
 			}
@@ -591,6 +687,20 @@ func TestStepActionSpecValidateError(t *testing.T) {
 		expectedError: apis.FieldError{
 			Message: `missing field(s)`,
 			Paths:   []string{"Image"},
+		},
+	}, {
+		name: "param default value references undefined param",
+		fields: fields{
+			Image: "myimage",
+			Params: []v1.ParamSpec{{
+				Name:    "param2",
+				Type:    v1.ParamTypeString,
+				Default: v1.NewStructuredValues("$(params.param1)"),
+			}},
+		},
+		expectedError: apis.FieldError{
+			Message: `param "param2" default value references param "param1" which is not defined`,
+			Paths:   []string{"params"},
 		},
 	}, {
 		name: "command and script both used.",
@@ -961,12 +1071,13 @@ func TestStepActionSpecValidateError(t *testing.T) {
 				Params:  tt.fields.Params,
 				Results: tt.fields.Results,
 			}
-			ctx := context.Background()
+			ctx := t.Context()
 			sa.SetDefaults(ctx)
 			err := sa.Validate(ctx)
 			if err == nil {
 				t.Fatalf("Expected an error, got nothing for %v", sa)
 			}
+			t.Logf("Actual error: %v", err)
 			if d := cmp.Diff(tt.expectedError.Error(), err.Error(), cmpopts.IgnoreUnexported(apis.FieldError{})); d != "" {
 				t.Errorf("StepActionSpec.Validate() errors diff %s", diff.PrintWantGot(d))
 			}

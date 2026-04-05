@@ -747,14 +747,14 @@ func TestCheckMissingResultReferences(t *testing.T) {
 		targets: PipelineRunState{
 			pipelineRunState[3],
 		},
-		wantErr: "Invalid task result reference: Could not find result with name missingResult for task aTask",
+		wantErr: "Invalid task result reference: Could not find result with name missingResult for pipeline task aTask",
 	}, {
 		name:             "Test unsuccessful result references resolution - params",
 		pipelineRunState: pipelineRunState,
 		targets: PipelineRunState{
 			pipelineRunState[4],
 		},
-		wantErr: "Invalid task result reference: Could not find result with name missingResult for task aTask",
+		wantErr: "Invalid task result reference: Could not find result with name missingResult for pipeline task aTask",
 	}, {
 		name:             "Valid: Test successful result references resolution - params - Run",
 		pipelineRunState: pipelineRunState,
@@ -791,14 +791,14 @@ func TestCheckMissingResultReferences(t *testing.T) {
 		targets: PipelineRunState{
 			pipelineRunState[13],
 		},
-		wantErr: "Invalid task result reference: Could not find result with name iDoNotExist for task dTask",
+		wantErr: "Invalid task result reference: Could not find result with name iDoNotExist for pipeline task dTask",
 	}, {
 		name:             "Invalid: Test result references resolution - matrix custom task - missing references to string replacements",
 		pipelineRunState: pipelineRunState,
 		targets: PipelineRunState{
 			pipelineRunState[14],
 		},
-		wantErr: "Invalid task result reference: Could not find result with name iDoNotExist for task aCustomPipelineTask",
+		wantErr: "Invalid task result reference: Could not find result with name iDoNotExist for pipeline task aCustomPipelineTask",
 	}, {
 		name:             "Invalid: Test result references where ref does not exist in pipelineRunState map",
 		pipelineRunState: pipelineRunState,
@@ -932,6 +932,56 @@ func TestValidateArrayResultsIndex(t *testing.T) {
 			}
 			if err == nil && tt.wantErr != "" {
 				t.Fatalf("Expecting error %v, but did not get an error", tt.wantErr)
+			}
+		})
+	}
+}
+
+func TestParamValueFromCustomRunResult(t *testing.T) {
+	type args struct {
+		result string
+	}
+	tests := []struct {
+		name string
+		args args
+		want *v1.ParamValue
+	}{
+		{
+			name: "multiple array elements result",
+			args: args{
+				result: `["amd64", "arm64"]`,
+			},
+			want: &v1.ParamValue{
+				Type:     "array",
+				ArrayVal: []string{"amd64", "arm64"},
+			},
+		},
+		{
+			name: "single array elements result",
+			args: args{
+				result: `[ "amd64" ]`,
+			},
+			want: &v1.ParamValue{
+				Type:     "array",
+				ArrayVal: []string{"amd64"},
+			},
+		},
+		{
+			name: "simple string result",
+			args: args{
+				result: "amd64",
+			},
+			want: &v1.ParamValue{
+				Type:      "string",
+				StringVal: "amd64",
+			},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := paramValueFromCustomRunResult(tt.args.result)
+			if d := cmp.Diff(tt.want, got); d != "" {
+				t.Fatalf("paramValueFromCustomRunResult %s", diff.PrintWantGot(d))
 			}
 		})
 	}
