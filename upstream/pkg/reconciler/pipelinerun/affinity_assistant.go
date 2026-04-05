@@ -29,6 +29,7 @@ import (
 	v1 "github.com/tektoncd/pipeline/pkg/apis/pipeline/v1"
 	"github.com/tektoncd/pipeline/pkg/internal/affinityassistant"
 	aa "github.com/tektoncd/pipeline/pkg/internal/affinityassistant"
+	pipelinePod "github.com/tektoncd/pipeline/pkg/pod"
 	"github.com/tektoncd/pipeline/pkg/reconciler/volumeclaim"
 	"github.com/tektoncd/pipeline/pkg/workspace"
 	appsv1 "k8s.io/api/apps/v1"
@@ -46,12 +47,13 @@ const (
 	// ReasonCouldntCreateOrUpdateAffinityAssistantStatefulSet indicates that a PipelineRun uses workspaces with PersistentVolumeClaim
 	// as a volume source and expect an Assistant StatefulSet in AffinityAssistantPerWorkspace behavior, but couldn't create a StatefulSet.
 	ReasonCouldntCreateOrUpdateAffinityAssistantStatefulSet = "ReasonCouldntCreateOrUpdateAffinityAssistantStatefulSet"
-
-	featureFlagDisableAffinityAssistantKey = "disable-affinity-assistant"
 )
 
 var (
-	ErrPvcCreationFailed               = errors.New("PVC creation error")
+	// Deprecated: use volumeclain.ErrPvcCreationFailed instead
+	ErrPvcCreationFailed = volumeclaim.ErrPvcCreationFailed
+	// Deprecated: use volumeclaim.ErrAffinityAssistantCreationFailed instead
+	ErrPvcCreationFailedRetryable      = volumeclaim.ErrPvcCreationFailedRetryable
 	ErrAffinityAssistantCreationFailed = errors.New("Affinity Assistant creation error")
 )
 
@@ -96,7 +98,7 @@ func (c *Reconciler) createOrUpdateAffinityAssistantsAndPVCs(ctx context.Context
 			// To support PVC auto deletion at pipelinerun deletion time, the OwnerReference of the PVCs should be set to the owning pipelinerun instead of the StatefulSets,
 			// so we create PVCs from PipelineRuns' VolumeClaimTemplate and pass the PVCs to the Affinity Assistant StatefulSet for volume scheduling.
 			if err := c.pvcHandler.CreatePVCFromVolumeClaimTemplate(ctx, workspace, *kmeta.NewControllerRef(pr), pr.Namespace); err != nil {
-				return fmt.Errorf("%w: %v", ErrPvcCreationFailed, err) //nolint:errorlint
+				return err
 			}
 			aaName := GetAffinityAssistantName(workspace.Name, pr.Name)
 			if err := c.createOrUpdateAffinityAssistant(ctx, aaName, pr, nil, []string{claimTemplate.Name}, unschedulableNodes); err != nil {
@@ -115,7 +117,7 @@ func (c *Reconciler) createOrUpdateAffinityAssistantsAndPVCs(ctx context.Context
 	case aa.AffinityAssistantDisabled:
 		for _, workspace := range claimTemplateToWorkspace {
 			if err := c.pvcHandler.CreatePVCFromVolumeClaimTemplate(ctx, workspace, *kmeta.NewControllerRef(pr), pr.Namespace); err != nil {
-				return fmt.Errorf("%w: %v", ErrPvcCreationFailed, err) //nolint:errorlint
+				return err
 			}
 		}
 	}
@@ -139,7 +141,18 @@ func (c *Reconciler) createOrUpdateAffinityAssistant(ctx context.Context, affini
 		if err != nil {
 			return []error{err}
 		}
-		affinityAssistantStatefulSet := affinityAssistantStatefulSet(aaBehavior, affinityAssistantName, pr, claimTemplates, claimNames, c.Images.NopImage, cfg.Defaults.DefaultAAPodTemplate)
+
+		securityContextConfig := pipelinePod.SecurityContextConfig{
+			SetSecurityContext:        cfg.FeatureFlags.SetSecurityContext,
+			SetReadOnlyRootFilesystem: cfg.FeatureFlags.SetSecurityContextReadOnlyRootFilesystem,
+		}
+
+		containerConfig := aa.ContainerConfig{
+			Image:                 c.Images.NopImage,
+			SecurityContextConfig: securityContextConfig,
+		}
+
+		affinityAssistantStatefulSet := affinityAssistantStatefulSet(aaBehavior, affinityAssistantName, pr, claimTemplates, claimNames, containerConfig, cfg.Defaults.DefaultAAPodTemplate)
 		_, err = c.KubeClientSet.AppsV1().StatefulSets(pr.Namespace).Create(ctx, affinityAssistantStatefulSet, metav1.CreateOptions{})
 		if err != nil {
 			errs = append(errs, fmt.Errorf("failed to create StatefulSet %s: %w", affinityAssistantName, err))
@@ -281,7 +294,7 @@ func getStatefulSetLabels(pr *v1.PipelineRun, affinityAssistantName string) map[
 // with the given AffinityAssistantTemplate applied to the StatefulSet PodTemplateSpec.
 // The VolumeClaimTemplates and Volume of StatefulSet reference the PipelineRun WorkspaceBinding VolumeClaimTempalte and the PVCs respectively.
 // The PVs created by the StatefulSet are scheduled to the same availability zone which avoids PV scheduling conflict.
-func affinityAssistantStatefulSet(aaBehavior aa.AffinityAssistantBehavior, name string, pr *v1.PipelineRun, claimTemplates []corev1.PersistentVolumeClaim, claimNames []string, affinityAssistantImage string, defaultAATpl *pod.AffinityAssistantTemplate) *appsv1.StatefulSet {
+func affinityAssistantStatefulSet(aaBehavior aa.AffinityAssistantBehavior, name string, pr *v1.PipelineRun, claimTemplates []corev1.PersistentVolumeClaim, claimNames []string, containerConfig aa.ContainerConfig, defaultAATpl *pod.AffinityAssistantTemplate) *appsv1.StatefulSet {
 	// We want a singleton pod
 	replicas := int32(1)
 
@@ -296,9 +309,33 @@ func affinityAssistantStatefulSet(aaBehavior aa.AffinityAssistantBehavior, name 
 		mounts = append(mounts, corev1.VolumeMount{Name: claimTemplate.Name, MountPath: claimTemplate.Name})
 	}
 
+	securityContext := &corev1.SecurityContext{}
+	if containerConfig.SecurityContextConfig.SetSecurityContext {
+		isWindows := tpl.NodeSelector[pipelinePod.OsSelectorLabel] == "windows"
+		securityContext = containerConfig.SecurityContextConfig.GetSecurityContext(isWindows)
+	}
+
+	var priorityClassName string
+	if tpl.PriorityClassName != nil {
+		priorityClassName = *tpl.PriorityClassName
+	}
+
+	// Determine ServiceAccountName with 3-tier priority:
+	// 1. Explicit override from AffinityAssistantTemplate
+	// 2. Inherit from PipelineRun's TaskRunTemplate (default behavior for OpenShift SCC compatibility)
+	// 3. Empty string (Kubernetes defaults to "default" ServiceAccount)
+	serviceAccountName := ""
+	if tpl.ServiceAccountName != "" {
+		// Explicit override in AffinityAssistantTemplate
+		serviceAccountName = tpl.ServiceAccountName
+	} else if pr.Spec.TaskRunTemplate.ServiceAccountName != "" {
+		// Inherit from PipelineRun's TaskRunTemplate
+		serviceAccountName = pr.Spec.TaskRunTemplate.ServiceAccountName
+	}
+
 	containers := []corev1.Container{{
 		Name:  "affinity-assistant",
-		Image: affinityAssistantImage,
+		Image: containerConfig.Image,
 		Args:  []string{"tekton_run_indefinitely"},
 
 		// Set requests == limits to get QoS class _Guaranteed_.
@@ -314,7 +351,8 @@ func affinityAssistantStatefulSet(aaBehavior aa.AffinityAssistantBehavior, name 
 				"memory": resource.MustParse("100Mi"),
 			},
 		},
-		VolumeMounts: mounts,
+		VolumeMounts:    mounts,
+		SecurityContext: securityContext,
 	}}
 
 	var volumes []corev1.Volume
@@ -359,9 +397,12 @@ func affinityAssistantStatefulSet(aaBehavior aa.AffinityAssistantBehavior, name 
 				Spec: corev1.PodSpec{
 					Containers: containers,
 
-					Tolerations:      tpl.Tolerations,
-					NodeSelector:     tpl.NodeSelector,
-					ImagePullSecrets: tpl.ImagePullSecrets,
+					Tolerations:        tpl.Tolerations,
+					NodeSelector:       tpl.NodeSelector,
+					ImagePullSecrets:   tpl.ImagePullSecrets,
+					SecurityContext:    tpl.SecurityContext,
+					PriorityClassName:  priorityClassName,
+					ServiceAccountName: serviceAccountName,
 
 					Affinity: getAssistantAffinityMergedWithPodTemplateAffinity(pr, aaBehavior),
 					Volumes:  volumes,

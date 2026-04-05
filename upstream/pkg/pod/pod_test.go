@@ -17,11 +17,11 @@ limitations under the License.
 package pod
 
 import (
-	"context"
 	"fmt"
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"testing"
 	"time"
 
@@ -31,12 +31,16 @@ import (
 	"github.com/tektoncd/pipeline/pkg/apis/pipeline"
 	"github.com/tektoncd/pipeline/pkg/apis/pipeline/pod"
 	v1 "github.com/tektoncd/pipeline/pkg/apis/pipeline/v1"
+	tknreconciler "github.com/tektoncd/pipeline/pkg/reconciler"
 	"github.com/tektoncd/pipeline/pkg/spire"
 	"github.com/tektoncd/pipeline/test/diff"
 	"github.com/tektoncd/pipeline/test/names"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/apimachinery/pkg/version"
+	fakediscovery "k8s.io/client-go/discovery/fake"
 	fakek8s "k8s.io/client-go/kubernetes/fake"
 	"knative.dev/pkg/apis"
 	duckv1 "knative.dev/pkg/apis/duck/v1"
@@ -84,6 +88,7 @@ func TestPodBuild(t *testing.T) {
 	dnsPolicy := corev1.DNSNone
 	enableServiceLinks := false
 	priorityClassName := "system-cluster-critical"
+	hostUsers := false
 	taskRunName := "taskrun-name"
 
 	for _, c := range []struct {
@@ -110,7 +115,7 @@ func TestPodBuild(t *testing.T) {
 			},
 			want: &corev1.PodSpec{
 				RestartPolicy:  corev1.RestartPolicyNever,
-				InitContainers: []corev1.Container{entrypointInitContainer(images.EntrypointImage, []v1.Step{{Name: "name"}}, false /* setSecurityContext */, false /* windows */)},
+				InitContainers: []corev1.Container{entrypointInitContainer(images.EntrypointImage, []v1.Step{{Name: "name"}}, SecurityContextConfig{SetSecurityContext: false, SetReadOnlyRootFilesystem: false}, false /* windows */)},
 				Containers: []corev1.Container{{
 					Name:    "step-name",
 					Image:   "image",
@@ -160,7 +165,7 @@ func TestPodBuild(t *testing.T) {
 			},
 			want: &corev1.PodSpec{
 				RestartPolicy:  corev1.RestartPolicyNever,
-				InitContainers: []corev1.Container{entrypointInitContainer(images.EntrypointImage, []v1.Step{{Name: "name"}}, false /* setSecurityContext */, false /* windows */)},
+				InitContainers: []corev1.Container{entrypointInitContainer(images.EntrypointImage, []v1.Step{{Name: "name"}}, SecurityContextConfig{SetSecurityContext: false, SetReadOnlyRootFilesystem: false}, false /* windows */)},
 				Containers: []corev1.Container{{
 					Name:    "step-name",
 					Image:   "image",
@@ -206,7 +211,7 @@ func TestPodBuild(t *testing.T) {
 			},
 			want: &corev1.PodSpec{
 				RestartPolicy:  corev1.RestartPolicyNever,
-				InitContainers: []corev1.Container{entrypointInitContainer(images.EntrypointImage, []v1.Step{{Name: "name"}}, false /* setSecurityContext */, false /* windows */)},
+				InitContainers: []corev1.Container{entrypointInitContainer(images.EntrypointImage, []v1.Step{{Name: "name"}}, SecurityContextConfig{SetSecurityContext: false, SetReadOnlyRootFilesystem: false}, false /* windows */)},
 				Containers: []corev1.Container{{
 					Name:    "step-name",
 					Image:   "image",
@@ -253,7 +258,7 @@ func TestPodBuild(t *testing.T) {
 			want: &corev1.PodSpec{
 				ServiceAccountName: "service-account",
 				RestartPolicy:      corev1.RestartPolicyNever,
-				InitContainers:     []corev1.Container{entrypointInitContainer(images.EntrypointImage, []v1.Step{{Name: "name"}}, false /* setSecurityContext */, false /* windows */)},
+				InitContainers:     []corev1.Container{entrypointInitContainer(images.EntrypointImage, []v1.Step{{Name: "name"}}, SecurityContextConfig{SetSecurityContext: false, SetReadOnlyRootFilesystem: false}, false /* windows */)},
 				Containers: []corev1.Container{{
 					Name:    "step-name",
 					Image:   "image",
@@ -321,7 +326,7 @@ func TestPodBuild(t *testing.T) {
 			},
 			want: &corev1.PodSpec{
 				RestartPolicy:  corev1.RestartPolicyNever,
-				InitContainers: []corev1.Container{entrypointInitContainer(images.EntrypointImage, []v1.Step{{Name: "name"}}, false /* setSecurityContext */, false /* windows */)},
+				InitContainers: []corev1.Container{entrypointInitContainer(images.EntrypointImage, []v1.Step{{Name: "name"}}, SecurityContextConfig{SetSecurityContext: false, SetReadOnlyRootFilesystem: false}, false /* windows */)},
 				Containers: []corev1.Container{{
 					Name:    "step-name",
 					Image:   "image",
@@ -379,7 +384,7 @@ func TestPodBuild(t *testing.T) {
 			},
 			want: &corev1.PodSpec{
 				RestartPolicy:  corev1.RestartPolicyNever,
-				InitContainers: []corev1.Container{entrypointInitContainer(images.EntrypointImage, []v1.Step{{Name: "a-very-very-long-character-step-name-to-trigger-max-len----and-invalid-characters"}}, false /* setSecurityContext */, false /* windows */)},
+				InitContainers: []corev1.Container{entrypointInitContainer(images.EntrypointImage, []v1.Step{{Name: "a-very-very-long-character-step-name-to-trigger-max-len----and-invalid-characters"}}, SecurityContextConfig{SetSecurityContext: false, SetReadOnlyRootFilesystem: false}, false /* windows */)},
 				Containers: []corev1.Container{{
 					Name:    "step-a-very-very-long-character-step-name-to-trigger-max-len", // step name trimmed.
 					Image:   "image",
@@ -422,7 +427,7 @@ func TestPodBuild(t *testing.T) {
 			},
 			want: &corev1.PodSpec{
 				RestartPolicy:  corev1.RestartPolicyNever,
-				InitContainers: []corev1.Container{entrypointInitContainer(images.EntrypointImage, []v1.Step{{Name: "ends-with-invalid-%%__$$"}}, false /* setSecurityContext */, false /* windows */)},
+				InitContainers: []corev1.Container{entrypointInitContainer(images.EntrypointImage, []v1.Step{{Name: "ends-with-invalid-%%__$$"}}, SecurityContextConfig{SetSecurityContext: false, SetReadOnlyRootFilesystem: false}, false /* windows */)},
 				Containers: []corev1.Container{{
 					Name:    "step-ends-with-invalid", // invalid suffix removed.
 					Image:   "image",
@@ -467,7 +472,7 @@ func TestPodBuild(t *testing.T) {
 			want: &corev1.PodSpec{
 				RestartPolicy: corev1.RestartPolicyNever,
 				InitContainers: []corev1.Container{
-					entrypointInitContainer(images.EntrypointImage, []v1.Step{{Name: "name"}}, false /* setSecurityContext */, false /* windows */),
+					entrypointInitContainer(images.EntrypointImage, []v1.Step{{Name: "name"}}, SecurityContextConfig{SetSecurityContext: false, SetReadOnlyRootFilesystem: false}, false /* windows */),
 					{
 						Name:         "working-dir-initializer",
 						Image:        images.WorkingDirInitImage,
@@ -525,7 +530,7 @@ func TestPodBuild(t *testing.T) {
 			wantAnnotations: map[string]string{},
 			want: &corev1.PodSpec{
 				RestartPolicy:  corev1.RestartPolicyNever,
-				InitContainers: []corev1.Container{entrypointInitContainer(images.EntrypointImage, []v1.Step{{Name: "primary-name"}}, false /* setSecurityContext */, false /* windows */)},
+				InitContainers: []corev1.Container{entrypointInitContainer(images.EntrypointImage, []v1.Step{{Name: "primary-name"}}, SecurityContextConfig{SetSecurityContext: false, SetReadOnlyRootFilesystem: false}, false /* windows */)},
 				Containers: []corev1.Container{{
 					Name:    "step-primary-name",
 					Image:   "primary-image",
@@ -581,7 +586,7 @@ func TestPodBuild(t *testing.T) {
 			want: &corev1.PodSpec{
 				RestartPolicy: corev1.RestartPolicyNever,
 				InitContainers: []corev1.Container{
-					entrypointInitContainer(images.EntrypointImage, []v1.Step{{Name: "primary-name"}}, false /* setSecurityContext */, false /* windows */),
+					entrypointInitContainer(images.EntrypointImage, []v1.Step{{Name: "primary-name"}}, SecurityContextConfig{SetSecurityContext: false, SetReadOnlyRootFilesystem: false}, false /* windows */),
 					{
 						Name:         "place-scripts",
 						Image:        "busybox",
@@ -651,7 +656,7 @@ _EOF_
 			wantAnnotations: map[string]string{}, // no ready annotations on pod create since sidecars are present
 			want: &corev1.PodSpec{
 				RestartPolicy:  corev1.RestartPolicyNever,
-				InitContainers: []corev1.Container{entrypointInitContainer(images.EntrypointImage, []v1.Step{{Name: "primary-name"}}, false /* setSecurityContext */, false /* windows */)},
+				InitContainers: []corev1.Container{entrypointInitContainer(images.EntrypointImage, []v1.Step{{Name: "primary-name"}}, SecurityContextConfig{SetSecurityContext: false, SetReadOnlyRootFilesystem: false}, false /* windows */)},
 				Containers: []corev1.Container{{
 					Name:    "step-primary-name",
 					Image:   "primary-image",
@@ -714,7 +719,7 @@ _EOF_
 				InitContainers: []corev1.Container{entrypointInitContainer(images.EntrypointImage, []v1.Step{
 					{Name: "unnamed-0"},
 					{Name: "unnamed-1"},
-				}, false /* setSecurityContext */, false /* windows */)},
+				}, SecurityContextConfig{SetSecurityContext: false, SetReadOnlyRootFilesystem: false}, false /* windows */)},
 				Containers: []corev1.Container{{
 					Name:    "step-unnamed-0",
 					Image:   "image",
@@ -813,7 +818,7 @@ _EOF_
 				RestartPolicy: corev1.RestartPolicyNever,
 				InitContainers: []corev1.Container{entrypointInitContainer(images.EntrypointImage, []v1.Step{
 					{Name: "step1"},
-				}, false /* setSecurityContext */, false /* windows */)},
+				}, SecurityContextConfig{SetSecurityContext: false, SetReadOnlyRootFilesystem: false}, false /* windows */)},
 				Containers: []corev1.Container{{
 					Name:    "step-step1",
 					Image:   "image",
@@ -883,7 +888,7 @@ _EOF_
 				RestartPolicy: corev1.RestartPolicyNever,
 				InitContainers: []corev1.Container{entrypointInitContainer(images.EntrypointImage, []v1.Step{
 					{Name: "step1"},
-				}, false /* setSecurityContext */, false /* windows */)},
+				}, SecurityContextConfig{SetSecurityContext: false, SetReadOnlyRootFilesystem: false}, false /* windows */)},
 				Containers: []corev1.Container{{
 					Name:    "step-step1",
 					Image:   "image",
@@ -954,7 +959,7 @@ _EOF_
 			wantAnnotations: map[string]string{},
 			want: &corev1.PodSpec{
 				RestartPolicy:  corev1.RestartPolicyNever,
-				InitContainers: []corev1.Container{entrypointInitContainer(images.EntrypointImage, []v1.Step{{Name: "primary-name"}}, false /* setSecurityContext */, false /* windows */)},
+				InitContainers: []corev1.Container{entrypointInitContainer(images.EntrypointImage, []v1.Step{{Name: "primary-name"}}, SecurityContextConfig{SetSecurityContext: false, SetReadOnlyRootFilesystem: false}, false /* windows */)},
 				Containers: []corev1.Container{{
 					Name:    "step-primary-name",
 					Image:   "primary-image",
@@ -1025,7 +1030,7 @@ print("Hello from Python")`,
 						{Name: "one"},
 						{Name: "two"},
 						{Name: "regular-step"},
-					}, false /* setSecurityContext */, false /* windows */),
+					}, SecurityContextConfig{SetSecurityContext: false, SetReadOnlyRootFilesystem: false}, false /* windows */),
 					{
 						Name:    "place-scripts",
 						Image:   images.ShellImage,
@@ -1149,7 +1154,7 @@ _EOF_
 			want: &corev1.PodSpec{
 				RestartPolicy: corev1.RestartPolicyNever,
 				InitContainers: []corev1.Container{
-					entrypointInitContainer(images.EntrypointImage, []v1.Step{{Name: "one"}}, false /* setSecurityContext */, false /* windows */),
+					entrypointInitContainer(images.EntrypointImage, []v1.Step{{Name: "one"}}, SecurityContextConfig{SetSecurityContext: false, SetReadOnlyRootFilesystem: false}, false /* windows */),
 					{
 						Name:    "place-scripts",
 						Image:   images.ShellImage,
@@ -1213,7 +1218,7 @@ _EOF_
 			},
 			want: &corev1.PodSpec{
 				RestartPolicy:  corev1.RestartPolicyNever,
-				InitContainers: []corev1.Container{entrypointInitContainer(images.EntrypointImage, []v1.Step{{Name: "schedule-me"}}, false /* setSecurityContext */, false /* windows */)},
+				InitContainers: []corev1.Container{entrypointInitContainer(images.EntrypointImage, []v1.Step{{Name: "schedule-me"}}, SecurityContextConfig{SetSecurityContext: false, SetReadOnlyRootFilesystem: false}, false /* windows */)},
 				SchedulerName:  "there-scheduler",
 				Volumes: append(implicitVolumes, binVolume, runVolume(0), downwardVolume, corev1.Volume{
 					Name:         "tekton-creds-init-home-0",
@@ -1265,7 +1270,7 @@ _EOF_
 			},
 			want: &corev1.PodSpec{
 				RestartPolicy:  corev1.RestartPolicyNever,
-				InitContainers: []corev1.Container{entrypointInitContainer(images.EntrypointImage, []v1.Step{{Name: "image-pull"}}, false /* setSecurityContext */, false /* windows */)},
+				InitContainers: []corev1.Container{entrypointInitContainer(images.EntrypointImage, []v1.Step{{Name: "image-pull"}}, SecurityContextConfig{SetSecurityContext: false, SetReadOnlyRootFilesystem: false}, false /* windows */)},
 				Volumes: append(implicitVolumes, binVolume, runVolume(0), downwardVolume, corev1.Volume{
 					Name:         "tekton-creds-init-home-0",
 					VolumeSource: corev1.VolumeSource{EmptyDir: &corev1.EmptyDirVolumeSource{Medium: corev1.StorageMediumMemory}},
@@ -1316,7 +1321,7 @@ _EOF_
 			},
 			want: &corev1.PodSpec{
 				RestartPolicy:  corev1.RestartPolicyNever,
-				InitContainers: []corev1.Container{entrypointInitContainer(images.EntrypointImage, []v1.Step{{Name: "host-aliases"}}, false /* setSecurityContext */, false /* windows */)},
+				InitContainers: []corev1.Container{entrypointInitContainer(images.EntrypointImage, []v1.Step{{Name: "host-aliases"}}, SecurityContextConfig{SetSecurityContext: false, SetReadOnlyRootFilesystem: false}, false /* windows */)},
 				Volumes: append(implicitVolumes, binVolume, runVolume(0), downwardVolume, corev1.Volume{
 					Name:         "tekton-creds-init-home-0",
 					VolumeSource: corev1.VolumeSource{EmptyDir: &corev1.EmptyDirVolumeSource{Medium: corev1.StorageMediumMemory}},
@@ -1367,7 +1372,7 @@ _EOF_
 			},
 			want: &corev1.PodSpec{
 				RestartPolicy:  corev1.RestartPolicyNever,
-				InitContainers: []corev1.Container{entrypointInitContainer(images.EntrypointImage, []v1.Step{{Name: "use-my-hostNetwork"}}, false /* setSecurityContext */, false /* windows */)},
+				InitContainers: []corev1.Container{entrypointInitContainer(images.EntrypointImage, []v1.Step{{Name: "use-my-hostNetwork"}}, SecurityContextConfig{SetSecurityContext: false, SetReadOnlyRootFilesystem: false}, false /* windows */)},
 				HostNetwork:    true,
 				Volumes: append(implicitVolumes, binVolume, runVolume(0), downwardVolume, corev1.Volume{
 					Name:         "tekton-creds-init-home-0",
@@ -1375,6 +1380,57 @@ _EOF_
 				}),
 				Containers: []corev1.Container{{
 					Name:    "step-use-my-hostNetwork",
+					Image:   "image",
+					Command: []string{"/tekton/bin/entrypoint"},
+					Args: []string{
+						"-wait_file",
+						"/tekton/downward/ready",
+						"-wait_file_content",
+						"-post_file",
+						"/tekton/run/0/out",
+						"-termination_path",
+						"/tekton/termination",
+						"-step_metadata_dir",
+						"/tekton/run/0/status",
+						"-entrypoint",
+						"cmd",
+						"--",
+					},
+					VolumeMounts: append([]corev1.VolumeMount{binROMount, runMount(0, false), downwardMount, {
+						Name:      "tekton-creds-init-home-0",
+						MountPath: "/tekton/creds",
+					}}, implicitVolumeMounts...),
+					TerminationMessagePath: "/tekton/termination",
+				}},
+				ActiveDeadlineSeconds: &defaultActiveDeadlineSeconds,
+			},
+		},
+		{
+			desc: "using hostUsers false",
+			ts: v1.TaskSpec{
+				Steps: []v1.Step{
+					{
+						Name:    "use-my-hostUsers",
+						Image:   "image",
+						Command: []string{"cmd"}, // avoid entrypoint lookup.
+					},
+				},
+			},
+			trs: v1.TaskRunSpec{
+				PodTemplate: &pod.Template{
+					HostUsers: &hostUsers,
+				},
+			},
+			want: &corev1.PodSpec{
+				RestartPolicy:  corev1.RestartPolicyNever,
+				InitContainers: []corev1.Container{entrypointInitContainer(images.EntrypointImage, []v1.Step{{Name: "use-my-hostUsers"}}, SecurityContextConfig{SetSecurityContext: false, SetReadOnlyRootFilesystem: false}, false /* windows */)},
+				HostUsers:      &hostUsers,
+				Volumes: append(implicitVolumes, binVolume, runVolume(0), downwardVolume, corev1.Volume{
+					Name:         "tekton-creds-init-home-0",
+					VolumeSource: corev1.VolumeSource{EmptyDir: &corev1.EmptyDirVolumeSource{Medium: corev1.StorageMediumMemory}},
+				}),
+				Containers: []corev1.Container{{
+					Name:    "step-use-my-hostUsers",
 					Image:   "image",
 					Command: []string{"/tekton/bin/entrypoint"},
 					Args: []string{
@@ -1412,7 +1468,7 @@ _EOF_
 			},
 			want: &corev1.PodSpec{
 				RestartPolicy:  corev1.RestartPolicyNever,
-				InitContainers: []corev1.Container{entrypointInitContainer(images.EntrypointImage, []v1.Step{{Name: "name"}}, false /* setSecurityContext */, false /* windows */)},
+				InitContainers: []corev1.Container{entrypointInitContainer(images.EntrypointImage, []v1.Step{{Name: "name"}}, SecurityContextConfig{SetSecurityContext: false, SetReadOnlyRootFilesystem: false}, false /* windows */)},
 				Containers: []corev1.Container{{
 					Name:    "step-name",
 					Image:   "image",
@@ -1461,7 +1517,7 @@ _EOF_
 			},
 			want: &corev1.PodSpec{
 				RestartPolicy:  corev1.RestartPolicyNever,
-				InitContainers: []corev1.Container{entrypointInitContainer(images.EntrypointImage, []v1.Step{{Name: "name"}}, false /* setSecurityContext */, false /* windows */)},
+				InitContainers: []corev1.Container{entrypointInitContainer(images.EntrypointImage, []v1.Step{{Name: "name"}}, SecurityContextConfig{SetSecurityContext: false, SetReadOnlyRootFilesystem: false}, false /* windows */)},
 				Containers: []corev1.Container{{
 					Name:    "step-name",
 					Image:   "image",
@@ -1509,7 +1565,7 @@ _EOF_
 			},
 			want: &corev1.PodSpec{
 				RestartPolicy:  corev1.RestartPolicyNever,
-				InitContainers: []corev1.Container{entrypointInitContainer(images.EntrypointImage, []v1.Step{{Name: "name"}}, false /* setSecurityContext */, false /* windows */)},
+				InitContainers: []corev1.Container{entrypointInitContainer(images.EntrypointImage, []v1.Step{{Name: "name"}}, SecurityContextConfig{SetSecurityContext: false, SetReadOnlyRootFilesystem: false}, false /* windows */)},
 				Containers: []corev1.Container{{
 					Name:    "step-name",
 					Image:   "image",
@@ -1559,7 +1615,7 @@ _EOF_
 			},
 			want: &corev1.PodSpec{
 				RestartPolicy:  corev1.RestartPolicyNever,
-				InitContainers: []corev1.Container{entrypointInitContainer(images.EntrypointImage, []v1.Step{{Name: "name"}}, false /* setSecurityContext */, false /* windows */)},
+				InitContainers: []corev1.Container{entrypointInitContainer(images.EntrypointImage, []v1.Step{{Name: "name"}}, SecurityContextConfig{SetSecurityContext: false, SetReadOnlyRootFilesystem: false}, false /* windows */)},
 				Containers: []corev1.Container{{
 					Name:    "step-name",
 					Image:   "image",
@@ -1615,7 +1671,7 @@ _EOF_
 			},
 			want: &corev1.PodSpec{
 				RestartPolicy:  corev1.RestartPolicyNever,
-				InitContainers: []corev1.Container{entrypointInitContainer(images.EntrypointImage, []v1.Step{{Name: "name"}}, false /* setSecurityContext */, false /* windows */)},
+				InitContainers: []corev1.Container{entrypointInitContainer(images.EntrypointImage, []v1.Step{{Name: "name"}}, SecurityContextConfig{SetSecurityContext: false, SetReadOnlyRootFilesystem: false}, false /* windows */)},
 				Containers: []corev1.Container{{
 					Name:    "step-name",
 					Image:   "image",
@@ -1667,7 +1723,7 @@ _EOF_
 			},
 			want: &corev1.PodSpec{
 				RestartPolicy:  corev1.RestartPolicyNever,
-				InitContainers: []corev1.Container{entrypointInitContainer(images.EntrypointImage, []v1.Step{{Name: "name"}}, false /* setSecurityContext */, false /* windows */)},
+				InitContainers: []corev1.Container{entrypointInitContainer(images.EntrypointImage, []v1.Step{{Name: "name"}}, SecurityContextConfig{SetSecurityContext: false, SetReadOnlyRootFilesystem: false}, false /* windows */)},
 				Containers: []corev1.Container{{
 					Name:    "step-name",
 					Image:   "image",
@@ -1718,7 +1774,7 @@ _EOF_
 			},
 			want: &corev1.PodSpec{
 				RestartPolicy:  corev1.RestartPolicyNever,
-				InitContainers: []corev1.Container{entrypointInitContainer(images.EntrypointImage, []v1.Step{{Name: "name"}}, false /* setSecurityContext */, false /* windows */)},
+				InitContainers: []corev1.Container{entrypointInitContainer(images.EntrypointImage, []v1.Step{{Name: "name"}}, SecurityContextConfig{SetSecurityContext: false, SetReadOnlyRootFilesystem: false}, false /* windows */)},
 				Containers: []corev1.Container{{
 					Name:    "step-name",
 					Image:   "image",
@@ -1785,7 +1841,7 @@ _EOF_
 			},
 			want: &corev1.PodSpec{
 				RestartPolicy:  corev1.RestartPolicyNever,
-				InitContainers: []corev1.Container{entrypointInitContainer(images.EntrypointImage, []v1.Step{{Name: "name"}}, false /* setSecurityContext */, false /* windows */)},
+				InitContainers: []corev1.Container{entrypointInitContainer(images.EntrypointImage, []v1.Step{{Name: "name"}}, SecurityContextConfig{SetSecurityContext: false, SetReadOnlyRootFilesystem: false}, false /* windows */)},
 				Containers: []corev1.Container{{
 					Name:    "step-name",
 					Image:   "image",
@@ -1831,7 +1887,7 @@ _EOF_
 			wantPodName: "task-run-0123456789-01234560d38957287bb0283c59440df14069f59-pod",
 			want: &corev1.PodSpec{
 				RestartPolicy:  corev1.RestartPolicyNever,
-				InitContainers: []corev1.Container{entrypointInitContainer(images.EntrypointImage, []v1.Step{{Name: "name"}}, false /* setSecurityContext */, false /* windows */)},
+				InitContainers: []corev1.Container{entrypointInitContainer(images.EntrypointImage, []v1.Step{{Name: "name"}}, SecurityContextConfig{SetSecurityContext: false, SetReadOnlyRootFilesystem: false}, false /* windows */)},
 				Containers: []corev1.Container{{
 					Name:    "step-name",
 					Image:   "image",
@@ -1892,7 +1948,7 @@ _EOF_
 			},
 			want: &corev1.PodSpec{
 				RestartPolicy:  corev1.RestartPolicyNever,
-				InitContainers: []corev1.Container{entrypointInitContainer(images.EntrypointImage, []v1.Step{{Name: "use-topologySpreadConstraints"}}, false /* setSecurityContext */, false /* windows */)},
+				InitContainers: []corev1.Container{entrypointInitContainer(images.EntrypointImage, []v1.Step{{Name: "use-topologySpreadConstraints"}}, SecurityContextConfig{SetSecurityContext: false, SetReadOnlyRootFilesystem: false}, false /* windows */)},
 				TopologySpreadConstraints: []corev1.TopologySpreadConstraint{
 					{
 						MaxSkew:           1,
@@ -1937,7 +1993,7 @@ _EOF_
 			},
 		},
 		{
-			desc:         "sidecar logs enabled",
+			desc:         "sidecar logs enabled, artifacts not enabled",
 			featureFlags: map[string]string{"results-from": "sidecar-logs"},
 			ts: v1.TaskSpec{
 				Results: []v1.TaskResult{{
@@ -1953,7 +2009,7 @@ _EOF_
 			want: &corev1.PodSpec{
 				RestartPolicy: corev1.RestartPolicyNever,
 				InitContainers: []corev1.Container{
-					entrypointInitContainer(images.EntrypointImage, []v1.Step{{Name: "name"}}, false /* setSecurityContext */, false /* windows */),
+					entrypointInitContainer(images.EntrypointImage, []v1.Step{{Name: "name"}}, SecurityContextConfig{SetSecurityContext: false, SetReadOnlyRootFilesystem: false}, false /* windows */),
 				},
 				Containers: []corev1.Container{{
 					Name:    "step-name",
@@ -1991,6 +2047,8 @@ _EOF_
 						"/tekton/results",
 						"-result-names",
 						"foo",
+						"-step-names",
+						"",
 						"-step-results",
 						"{}",
 					},
@@ -2001,6 +2059,7 @@ _EOF_
 						{Name: "tekton-internal-bin", ReadOnly: true, MountPath: "/tekton/bin"},
 						{Name: "tekton-internal-run-0", ReadOnly: true, MountPath: "/tekton/run/0"},
 					}, implicitVolumeMounts...),
+					Env: []corev1.EnvVar{{Name: "SIDECAR_LOG_POLLING_INTERVAL", Value: "100ms"}},
 				}},
 				Volumes: append(implicitVolumes, binVolume, runVolume(0), downwardVolume, corev1.Volume{
 					Name:         "tekton-creds-init-home-0",
@@ -2010,7 +2069,7 @@ _EOF_
 			},
 		},
 		{
-			desc:         "sidecar logs enabled with step results",
+			desc:         "sidecar logs enabled with step results, artifacts not enabled",
 			featureFlags: map[string]string{"results-from": "sidecar-logs"},
 			ts: v1.TaskSpec{
 				Results: []v1.TaskResult{{
@@ -2030,7 +2089,7 @@ _EOF_
 			want: &corev1.PodSpec{
 				RestartPolicy: corev1.RestartPolicyNever,
 				InitContainers: []corev1.Container{
-					entrypointInitContainer(images.EntrypointImage, []v1.Step{{Name: "name"}}, false /* setSecurityContext */, false /* windows */),
+					entrypointInitContainer(images.EntrypointImage, []v1.Step{{Name: "name"}}, SecurityContextConfig{SetSecurityContext: false, SetReadOnlyRootFilesystem: false}, false /* windows */),
 				},
 				Containers: []corev1.Container{{
 					Name:    "step-name",
@@ -2070,6 +2129,8 @@ _EOF_
 						"/tekton/results",
 						"-result-names",
 						"foo",
+						"-step-names",
+						"",
 						"-step-results",
 						"{\"step-name\":[\"step-foo\"]}",
 					},
@@ -2080,6 +2141,7 @@ _EOF_
 						{Name: "tekton-internal-bin", ReadOnly: true, MountPath: "/tekton/bin"},
 						{Name: "tekton-internal-run-0", ReadOnly: true, MountPath: "/tekton/run/0"},
 					}, implicitVolumeMounts...),
+					Env: []corev1.EnvVar{{Name: "SIDECAR_LOG_POLLING_INTERVAL", Value: "100ms"}},
 				}},
 				Volumes: append(implicitVolumes, binVolume, runVolume(0), downwardVolume, corev1.Volume{
 					Name:         "tekton-creds-init-home-0",
@@ -2089,8 +2151,8 @@ _EOF_
 			},
 		},
 		{
-			desc:         "sidecar logs enabled with security context",
-			featureFlags: map[string]string{"results-from": "sidecar-logs", "set-security-context": "true"},
+			desc:         "sidecar logs enabled and artifacts not enabled, set security context is true",
+			featureFlags: map[string]string{"results-from": "sidecar-logs", "set-security-context": "true", "set-security-context-read-only-root-filesystem": "true"},
 			ts: v1.TaskSpec{
 				Results: []v1.TaskResult{{
 					Name: "foo",
@@ -2105,7 +2167,7 @@ _EOF_
 			want: &corev1.PodSpec{
 				RestartPolicy: corev1.RestartPolicyNever,
 				InitContainers: []corev1.Container{
-					entrypointInitContainer(images.EntrypointImage, []v1.Step{{Name: "name"}}, true /* setSecurityContext */, false /* windows */),
+					entrypointInitContainer(images.EntrypointImage, []v1.Step{{Name: "name"}}, SecurityContextConfig{SetSecurityContext: true, SetReadOnlyRootFilesystem: true}, false /* windows */),
 				},
 				Containers: []corev1.Container{{
 					Name:    "step-name",
@@ -2143,6 +2205,8 @@ _EOF_
 						"/tekton/results",
 						"-result-names",
 						"foo",
+						"-step-names",
+						"",
 						"-step-results",
 						"{}",
 					},
@@ -2153,7 +2217,252 @@ _EOF_
 						{Name: "tekton-internal-bin", ReadOnly: true, MountPath: "/tekton/bin"},
 						{Name: "tekton-internal-run-0", ReadOnly: true, MountPath: "/tekton/run/0"},
 					}, implicitVolumeMounts...),
-					SecurityContext: linuxSecurityContext,
+					SecurityContext: SecurityContextConfig{SetSecurityContext: true, SetReadOnlyRootFilesystem: true}.GetSecurityContext(false),
+					Env:             []corev1.EnvVar{{Name: "SIDECAR_LOG_POLLING_INTERVAL", Value: "100ms"}},
+				}},
+				Volumes: append(implicitVolumes, binVolume, runVolume(0), downwardVolume, corev1.Volume{
+					Name:         "tekton-creds-init-home-0",
+					VolumeSource: corev1.VolumeSource{EmptyDir: &corev1.EmptyDirVolumeSource{Medium: corev1.StorageMediumMemory}},
+				}),
+				ActiveDeadlineSeconds: &defaultActiveDeadlineSeconds,
+			},
+		},
+		{
+			desc:         "sidecar logs enabled and artifacts referenced",
+			featureFlags: map[string]string{"results-from": "sidecar-logs", "enable-artifacts": "true"},
+			ts: v1.TaskSpec{
+				Results: []v1.TaskResult{{
+					Name: "foo",
+					Type: v1.ResultsTypeString,
+				}},
+				Steps: []v1.Step{{
+					Name:    "name",
+					Image:   "image",
+					Command: []string{"echo", "aaa", ">>>", "/tekton/steps/step-name/artifacts/provenance.json"}, // avoid entrypoint lookup.
+				}},
+			},
+			want: &corev1.PodSpec{
+				RestartPolicy: corev1.RestartPolicyNever,
+				InitContainers: []corev1.Container{
+					entrypointInitContainer(images.EntrypointImage, []v1.Step{{Name: "name"}}, SecurityContextConfig{SetSecurityContext: false, SetReadOnlyRootFilesystem: false}, false /* windows */),
+				},
+				Containers: []corev1.Container{{
+					Name:    "step-name",
+					Image:   "image",
+					Command: []string{"/tekton/bin/entrypoint"},
+					Args: []string{
+						"-wait_file",
+						"/tekton/downward/ready",
+						"-wait_file_content",
+						"-post_file",
+						"/tekton/run/0/out",
+						"-termination_path",
+						"/tekton/termination",
+						"-step_metadata_dir",
+						"/tekton/run/0/status",
+						"-result_from",
+						"sidecar-logs",
+						"-results",
+						"foo",
+						"-entrypoint",
+						"echo",
+						"--",
+						"aaa",
+						">>>",
+						"/tekton/steps/step-name/artifacts/provenance.json",
+					},
+					VolumeMounts: append([]corev1.VolumeMount{binROMount, runMount(0, false), downwardMount, {
+						Name:      "tekton-creds-init-home-0",
+						MountPath: "/tekton/creds",
+					}}, implicitVolumeMounts...),
+					TerminationMessagePath: "/tekton/termination",
+				}, {
+					Name:  pipeline.ReservedResultsSidecarContainerName,
+					Image: "",
+					Command: []string{
+						"/ko-app/sidecarlogresults",
+						"-results-dir",
+						"/tekton/results",
+						"-result-names",
+						"foo",
+						"-step-names",
+						"step-name",
+						"-step-results",
+						"{}",
+					},
+					Resources: corev1.ResourceRequirements{
+						Requests: nil,
+					},
+					VolumeMounts: append([]corev1.VolumeMount{
+						{Name: "tekton-internal-bin", ReadOnly: true, MountPath: "/tekton/bin"},
+						{Name: "tekton-internal-run-0", ReadOnly: true, MountPath: "/tekton/run/0"},
+					}, implicitVolumeMounts...),
+					Env: []corev1.EnvVar{{Name: "SIDECAR_LOG_POLLING_INTERVAL", Value: "100ms"}},
+				}},
+				Volumes: append(implicitVolumes, binVolume, runVolume(0), downwardVolume, corev1.Volume{
+					Name:         "tekton-creds-init-home-0",
+					VolumeSource: corev1.VolumeSource{EmptyDir: &corev1.EmptyDirVolumeSource{Medium: corev1.StorageMediumMemory}},
+				}),
+				ActiveDeadlineSeconds: &defaultActiveDeadlineSeconds,
+			},
+		},
+		{
+			desc:         "sidecar logs enabled with step results, artifacts referenced",
+			featureFlags: map[string]string{"results-from": "sidecar-logs", "enable-artifacts": "true"},
+			ts: v1.TaskSpec{
+				Results: []v1.TaskResult{{
+					Name: "foo",
+					Type: v1.ResultsTypeString,
+				}},
+				Steps: []v1.Step{{
+					Name: "name",
+					Results: []v1.StepResult{{
+						Name: "step-foo",
+						Type: v1.ResultsTypeString,
+					}},
+					Image:   "image",
+					Command: []string{"echo", "aaa", ">>>", "/tekton/steps/step-name/artifacts/provenance.json"}, //
+				}},
+			},
+			want: &corev1.PodSpec{
+				RestartPolicy: corev1.RestartPolicyNever,
+				InitContainers: []corev1.Container{
+					entrypointInitContainer(images.EntrypointImage, []v1.Step{{Name: "name"}}, SecurityContextConfig{SetSecurityContext: false, SetReadOnlyRootFilesystem: false}, false /* windows */),
+				},
+				Containers: []corev1.Container{{
+					Name:    "step-name",
+					Image:   "image",
+					Command: []string{"/tekton/bin/entrypoint"},
+					Args: []string{
+						"-wait_file",
+						"/tekton/downward/ready",
+						"-wait_file_content",
+						"-post_file",
+						"/tekton/run/0/out",
+						"-termination_path",
+						"/tekton/termination",
+						"-step_metadata_dir",
+						"/tekton/run/0/status",
+						"-result_from",
+						"sidecar-logs",
+						"-step_results",
+						"step-foo",
+						"-results",
+						"foo",
+						"-entrypoint",
+						"echo",
+						"--",
+						"aaa",
+						">>>",
+						"/tekton/steps/step-name/artifacts/provenance.json",
+					},
+					VolumeMounts: append([]corev1.VolumeMount{binROMount, runMount(0, false), downwardMount, {
+						Name:      "tekton-creds-init-home-0",
+						MountPath: "/tekton/creds",
+					}}, implicitVolumeMounts...),
+					TerminationMessagePath: "/tekton/termination",
+				}, {
+					Name:  pipeline.ReservedResultsSidecarContainerName,
+					Image: "",
+					Command: []string{
+						"/ko-app/sidecarlogresults",
+						"-results-dir",
+						"/tekton/results",
+						"-result-names",
+						"foo",
+						"-step-names",
+						"step-name",
+						"-step-results",
+						"{\"step-name\":[\"step-foo\"]}",
+					},
+					Resources: corev1.ResourceRequirements{
+						Requests: nil,
+					},
+					VolumeMounts: append([]corev1.VolumeMount{
+						{Name: "tekton-internal-bin", ReadOnly: true, MountPath: "/tekton/bin"},
+						{Name: "tekton-internal-run-0", ReadOnly: true, MountPath: "/tekton/run/0"},
+					}, implicitVolumeMounts...),
+					Env: []corev1.EnvVar{{Name: "SIDECAR_LOG_POLLING_INTERVAL", Value: "100ms"}},
+				}},
+				Volumes: append(implicitVolumes, binVolume, runVolume(0), downwardVolume, corev1.Volume{
+					Name:         "tekton-creds-init-home-0",
+					VolumeSource: corev1.VolumeSource{EmptyDir: &corev1.EmptyDirVolumeSource{Medium: corev1.StorageMediumMemory}},
+				}),
+				ActiveDeadlineSeconds: &defaultActiveDeadlineSeconds,
+			},
+		},
+		{
+			desc:         "sidecar logs enabled, artifacts referenced and security context set ",
+			featureFlags: map[string]string{"results-from": "sidecar-logs", "set-security-context": "true", "set-security-context-read-only-root-filesystem": "true", "enable-artifacts": "true"},
+			ts: v1.TaskSpec{
+				Results: []v1.TaskResult{{
+					Name: "foo",
+					Type: v1.ResultsTypeString,
+				}},
+				Steps: []v1.Step{{
+					Name:    "name",
+					Image:   "image",
+					Command: []string{"echo", "aaa", ">>>", "/tekton/steps/step-name/artifacts/provenance.json"},
+				}},
+			},
+			want: &corev1.PodSpec{
+				RestartPolicy: corev1.RestartPolicyNever,
+				InitContainers: []corev1.Container{
+					entrypointInitContainer(images.EntrypointImage, []v1.Step{{Name: "name"}}, SecurityContextConfig{SetSecurityContext: true, SetReadOnlyRootFilesystem: true}, false /* windows */),
+				},
+				Containers: []corev1.Container{{
+					Name:    "step-name",
+					Image:   "image",
+					Command: []string{"/tekton/bin/entrypoint"},
+					Args: []string{
+						"-wait_file",
+						"/tekton/downward/ready",
+						"-wait_file_content",
+						"-post_file",
+						"/tekton/run/0/out",
+						"-termination_path",
+						"/tekton/termination",
+						"-step_metadata_dir",
+						"/tekton/run/0/status",
+						"-result_from",
+						"sidecar-logs",
+						"-results",
+						"foo",
+						"-entrypoint",
+						"echo",
+						"--",
+						"aaa",
+						">>>",
+						"/tekton/steps/step-name/artifacts/provenance.json",
+					},
+					VolumeMounts: append([]corev1.VolumeMount{binROMount, runMount(0, false), downwardMount, {
+						Name:      "tekton-creds-init-home-0",
+						MountPath: "/tekton/creds",
+					}}, implicitVolumeMounts...),
+					TerminationMessagePath: "/tekton/termination",
+				}, {
+					Name:  pipeline.ReservedResultsSidecarContainerName,
+					Image: "",
+					Command: []string{
+						"/ko-app/sidecarlogresults",
+						"-results-dir",
+						"/tekton/results",
+						"-result-names",
+						"foo",
+						"-step-names",
+						"step-name",
+						"-step-results",
+						"{}",
+					},
+					Resources: corev1.ResourceRequirements{
+						Requests: nil,
+					},
+					VolumeMounts: append([]corev1.VolumeMount{
+						{Name: "tekton-internal-bin", ReadOnly: true, MountPath: "/tekton/bin"},
+						{Name: "tekton-internal-run-0", ReadOnly: true, MountPath: "/tekton/run/0"},
+					}, implicitVolumeMounts...),
+					SecurityContext: SecurityContextConfig{SetSecurityContext: true, SetReadOnlyRootFilesystem: true}.GetSecurityContext(false),
+					Env:             []corev1.EnvVar{{Name: "SIDECAR_LOG_POLLING_INTERVAL", Value: "100ms"}},
 				}},
 				Volumes: append(implicitVolumes, binVolume, runVolume(0), downwardVolume, corev1.Volume{
 					Name:         "tekton-creds-init-home-0",
@@ -2171,10 +2480,10 @@ _EOF_
 					Command: []string{"cmd"}, // avoid entrypoint lookup.
 				}},
 			},
-			featureFlags: map[string]string{"set-security-context": "true"},
+			featureFlags: map[string]string{"set-security-context": "true", "set-security-context-read-only-root-filesystem": "true"},
 			want: &corev1.PodSpec{
 				RestartPolicy:  corev1.RestartPolicyNever,
-				InitContainers: []corev1.Container{entrypointInitContainer(images.EntrypointImage, []v1.Step{{Name: "name"}}, true /* setSecurityContext */, false /* windows */)},
+				InitContainers: []corev1.Container{entrypointInitContainer(images.EntrypointImage, []v1.Step{{Name: "name"}}, SecurityContextConfig{SetSecurityContext: true, SetReadOnlyRootFilesystem: true}, false /* windows */)},
 				Containers: []corev1.Container{{
 					Name:    "step-name",
 					Image:   "image",
@@ -2219,7 +2528,7 @@ _EOF_
 			want: &corev1.PodSpec{
 				RestartPolicy: corev1.RestartPolicyNever,
 				InitContainers: []corev1.Container{
-					entrypointInitContainer(images.EntrypointImage, []v1.Step{{Name: "name"}}, false, false),
+					entrypointInitContainer(images.EntrypointImage, []v1.Step{{Name: "name"}}, SecurityContextConfig{SetSecurityContext: false, SetReadOnlyRootFilesystem: false}, false /* windows */),
 				},
 				Containers: []corev1.Container{{
 					Name:    "step-name",
@@ -2277,7 +2586,7 @@ _EOF_
 			want: &corev1.PodSpec{
 				RestartPolicy: corev1.RestartPolicyNever,
 				InitContainers: []corev1.Container{
-					entrypointInitContainer(images.EntrypointImage, []v1.Step{{Name: "name"}}, false, false),
+					entrypointInitContainer(images.EntrypointImage, []v1.Step{{Name: "name"}}, SecurityContextConfig{SetSecurityContext: false, SetReadOnlyRootFilesystem: false}, false),
 				},
 				Containers: []corev1.Container{{
 					Name:    "step-name",
@@ -2395,7 +2704,7 @@ _EOF_
 				KubeClient:      kubeclient,
 				EntrypointCache: entrypointCache,
 			}
-			got, err := builder.Build(store.ToContext(context.Background()), tr, c.ts)
+			got, err := builder.Build(store.ToContext(t.Context()), tr, c.ts)
 			if err != nil {
 				t.Fatalf("builder.Build: %v", err)
 			}
@@ -2508,7 +2817,7 @@ debug-fail-continue-heredoc-randomly-generated-mz4c7
 		},
 		want: &corev1.PodSpec{
 			RestartPolicy:  corev1.RestartPolicyNever,
-			InitContainers: []corev1.Container{entrypointInitContainer(images.EntrypointImage, []v1.Step{{Name: "name"}}, false /* setSecurityContext */, false /* windows */), placeScriptsContainer},
+			InitContainers: []corev1.Container{entrypointInitContainer(images.EntrypointImage, []v1.Step{{Name: "name"}}, SecurityContextConfig{SetSecurityContext: false, SetReadOnlyRootFilesystem: false}, false /* windows */), placeScriptsContainer},
 			Containers: []corev1.Container{{
 				Name:    "step-name",
 				Image:   "image",
@@ -2602,7 +2911,7 @@ debug-fail-continue-heredoc-randomly-generated-mz4c7
 				EntrypointCache: entrypointCache,
 			}
 
-			got, err := builder.Build(store.ToContext(context.Background()), tr, c.ts)
+			got, err := builder.Build(store.ToContext(t.Context()), tr, c.ts)
 			if err != nil {
 				t.Fatalf("builder.Build: %v", err)
 			}
@@ -2808,7 +3117,7 @@ func TestPodBuild_TaskLevelResourceRequirements(t *testing.T) {
 				Spec: tc.trs,
 			}
 
-			gotPod, err := builder.Build(store.ToContext(context.Background()), tr, tc.ts)
+			gotPod, err := builder.Build(store.ToContext(t.Context()), tr, tc.ts)
 			if err != nil {
 				t.Fatalf("builder.Build: %v", err)
 			}
@@ -2821,7 +3130,7 @@ func TestPodBuild_TaskLevelResourceRequirements(t *testing.T) {
 }
 
 func TestPodBuildwithSpireEnabled(t *testing.T) {
-	initContainers := []corev1.Container{entrypointInitContainer(images.EntrypointImage, []v1.Step{{Name: "name"}}, false /* setSecurityContext */, false /* windows */)}
+	initContainers := []corev1.Container{entrypointInitContainer(images.EntrypointImage, []v1.Step{{Name: "name"}}, SecurityContextConfig{SetSecurityContext: false, SetReadOnlyRootFilesystem: false}, false /* windows */)}
 	readonly := true
 	for i := range initContainers {
 		c := &initContainers[i]
@@ -2960,7 +3269,7 @@ func TestPodBuildwithSpireEnabled(t *testing.T) {
 				EntrypointCache: entrypointCache,
 			}
 
-			got, err := builder.Build(store.ToContext(context.Background()), tr, c.ts)
+			got, err := builder.Build(store.ToContext(t.Context()), tr, c.ts)
 			if err != nil {
 				t.Fatalf("builder.Build: %v", err)
 			}
@@ -3001,20 +3310,24 @@ func verifyTaskLevelComputeResources(expectedComputeResources []ExpectedComputeR
 
 func TestMakeLabels(t *testing.T) {
 	taskRunName := "task-run-name"
+	taskRunUID := types.UID("taskrunuid")
 	want := map[string]string{
-		pipeline.TaskRunLabelKey: taskRunName,
-		"foo":                    "bar",
-		"hello":                  "world",
+		pipeline.TaskRunLabelKey:    taskRunName,
+		"foo":                       "bar",
+		"hello":                     "world",
+		pipeline.TaskRunUIDLabelKey: string(taskRunUID),
+		tknreconciler.KubernetesManagedByAnnotationKey: "foo",
 	}
 	got := makeLabels(&v1.TaskRun{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: taskRunName,
+			UID:  taskRunUID,
 			Labels: map[string]string{
 				"foo":   "bar",
 				"hello": "world",
 			},
 		},
-	})
+	}, "foo")
 	if d := cmp.Diff(want, got); d != "" {
 		t.Errorf("Diff labels %s", diff.PrintWantGot(d))
 	}
@@ -3125,12 +3438,13 @@ func TestIsPodReadyImmediately(t *testing.T) {
 
 func TestPrepareInitContainers(t *testing.T) {
 	tcs := []struct {
-		name               string
-		steps              []v1.Step
-		windows            bool
-		setSecurityContext bool
-		want               corev1.Container
-		featureFlags       map[string]string
+		name                                     string
+		steps                                    []v1.Step
+		windows                                  bool
+		setSecurityContext                       bool
+		setSecurityContextReadOnlyRootFilesystem bool
+		want                                     corev1.Container
+		featureFlags                             map[string]string
 	}{{
 		name: "nothing-special",
 		steps: []v1.Step{{
@@ -3164,14 +3478,18 @@ func TestPrepareInitContainers(t *testing.T) {
 		}, {
 			Name: "bar",
 		}},
-		setSecurityContext: true,
+		setSecurityContext:                       true,
+		setSecurityContextReadOnlyRootFilesystem: true,
 		want: corev1.Container{
-			Name:            "prepare",
-			Image:           images.EntrypointImage,
-			WorkingDir:      "/",
-			Command:         []string{"/ko-app/entrypoint", "init", "/ko-app/entrypoint", entrypointBinary, "step-foo", "step-bar"},
-			VolumeMounts:    []corev1.VolumeMount{binMount, internalStepsMount},
-			SecurityContext: linuxSecurityContext,
+			Name:         "prepare",
+			Image:        images.EntrypointImage,
+			WorkingDir:   "/",
+			Command:      []string{"/ko-app/entrypoint", "init", "/ko-app/entrypoint", entrypointBinary, "step-foo", "step-bar"},
+			VolumeMounts: []corev1.VolumeMount{binMount, internalStepsMount},
+			SecurityContext: SecurityContextConfig{
+				SetSecurityContext:        true,
+				SetReadOnlyRootFilesystem: true,
+			}.GetSecurityContext(false),
 		},
 	}, {
 		name: "nothing-special-two-steps-windows",
@@ -3195,20 +3513,25 @@ func TestPrepareInitContainers(t *testing.T) {
 		}, {
 			Name: "bar",
 		}},
-		setSecurityContext: true,
-		windows:            true,
+		setSecurityContext:                       true,
+		setSecurityContextReadOnlyRootFilesystem: true,
+		windows:                                  true,
 		want: corev1.Container{
 			Name:            "prepare",
 			Image:           images.EntrypointImage,
 			WorkingDir:      "/",
 			Command:         []string{"/ko-app/entrypoint", "init", "/ko-app/entrypoint", entrypointBinary, "step-foo", "step-bar"},
 			VolumeMounts:    []corev1.VolumeMount{binMount, internalStepsMount},
-			SecurityContext: windowsSecurityContext,
+			SecurityContext: WindowsSecurityContext,
 		},
 	}}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			container := entrypointInitContainer(images.EntrypointImage, tc.steps, tc.setSecurityContext, tc.windows)
+			securityContextConfig := SecurityContextConfig{
+				SetSecurityContext:        tc.setSecurityContext,
+				SetReadOnlyRootFilesystem: tc.setSecurityContextReadOnlyRootFilesystem,
+			}
+			container := entrypointInitContainer(images.EntrypointImage, tc.steps, securityContextConfig, tc.windows)
 			if d := cmp.Diff(tc.want, container); d != "" {
 				t.Errorf("Diff %s", diff.PrintWantGot(d))
 			}
@@ -3232,13 +3555,13 @@ func TestUsesWindows(t *testing.T) {
 	}, {
 		name: "uses linux",
 		taskRun: &v1.TaskRun{Spec: v1.TaskRunSpec{PodTemplate: &pod.Template{NodeSelector: map[string]string{
-			osSelectorLabel: "linux",
+			OsSelectorLabel: "linux",
 		}}}},
 		want: false,
 	}, {
 		name: "uses windows",
 		taskRun: &v1.TaskRun{Spec: v1.TaskRunSpec{PodTemplate: &pod.Template{NodeSelector: map[string]string{
-			osSelectorLabel: "windows",
+			OsSelectorLabel: "windows",
 		}}}},
 		want: true,
 	}}
@@ -3252,376 +3575,489 @@ func TestUsesWindows(t *testing.T) {
 	}
 }
 
-func TestUpdateResourceRequirements(t *testing.T) {
-	testPod := &corev1.Pod{
-		ObjectMeta: metav1.ObjectMeta{Name: "test-pod", Namespace: "custom-ns"},
-		Spec: corev1.PodSpec{
-			InitContainers: []corev1.Container{
-				{Name: "place-scripts"},
-				{Name: "prepare"},
-				{Name: "working-dir-initializer"},
-				{Name: "test-01"},
-				{Name: "foo"},
-			},
-			Containers: []corev1.Container{
-				{Name: "scripts-01"},
-				{Name: "scripts-02"},
-				{Name: "sidecar-scripts-01"},
-				{Name: "sidecar-scripts-02"},
-				{Name: "test-01"},
-				{Name: "foo"},
-			},
-		},
-	}
-
-	tcs := []struct {
-		name                 string
-		targetPod            *corev1.Pod
-		resourceRequirements map[string]corev1.ResourceRequirements
-		getExpectedPod       func() *corev1.Pod
+func Test_artifactsPathReferenced(t *testing.T) {
+	tests := []struct {
+		name  string
+		steps []v1.Step
+		want  bool
 	}{
-		// verifies with no resource requirements data from a config map
 		{
-			name:                 "test-with-no-data",
-			targetPod:            testPod.DeepCopy(),
-			resourceRequirements: map[string]corev1.ResourceRequirements{},
-			getExpectedPod: func() *corev1.Pod {
-				return testPod.DeepCopy()
-			},
+			name:  "No Steps",
+			steps: []v1.Step{},
+			want:  false,
 		},
-
-		// verifies with empty resource requirements data from a config map
 		{
-			name:      "test-with-empty-resource-requirements",
-			targetPod: testPod.DeepCopy(),
-			resourceRequirements: map[string]corev1.ResourceRequirements{
-				"default":        {},
-				"place-scripts":  {},
-				"prefix-scripts": {},
-			},
-			getExpectedPod: func() *corev1.Pod {
-				return testPod.DeepCopy()
-			},
-		},
-
-		// verifies only with 'default' resource requirements data from a config map
-		{
-			name:      "test-with-default-set",
-			targetPod: testPod.DeepCopy(),
-			resourceRequirements: map[string]corev1.ResourceRequirements{
-				"default": {
-					Limits: corev1.ResourceList{
-						corev1.ResourceCPU:    resource.MustParse("500m"),
-						corev1.ResourceMemory: resource.MustParse("256Mi"),
-					},
-					Requests: corev1.ResourceList{
-						corev1.ResourceMemory: resource.MustParse("128Mi"),
-					},
+			name: "No Reference",
+			steps: []v1.Step{
+				{
+					Name:    "name",
+					Script:  "echo hello",
+					Command: []string{"echo", "hello"},
 				},
 			},
-			getExpectedPod: func() *corev1.Pod {
-				expectedPod := testPod.DeepCopy()
-				defaultResource := corev1.ResourceRequirements{
-					Limits: corev1.ResourceList{
-						corev1.ResourceCPU:    resource.MustParse("500m"),
-						corev1.ResourceMemory: resource.MustParse("256Mi"),
-					},
-					Requests: corev1.ResourceList{
-						corev1.ResourceMemory: resource.MustParse("128Mi"),
-					},
-				}
-				expectedPod.Spec = corev1.PodSpec{
-					InitContainers: []corev1.Container{
-						{Name: "place-scripts", Resources: defaultResource},
-						{Name: "prepare", Resources: defaultResource},
-						{Name: "working-dir-initializer", Resources: defaultResource},
-						{Name: "test-01", Resources: defaultResource},
-						{Name: "foo", Resources: defaultResource},
-					},
-					Containers: []corev1.Container{
-						{Name: "scripts-01", Resources: defaultResource},
-						{Name: "scripts-02", Resources: defaultResource},
-						{Name: "sidecar-scripts-01", Resources: defaultResource},
-						{Name: "sidecar-scripts-02", Resources: defaultResource},
-						{Name: "test-01", Resources: defaultResource},
-						{Name: "foo", Resources: defaultResource},
-					},
-				}
-				return expectedPod
-			},
+			want: false,
 		},
-
-		// verifies only with 'place-scripts' resource requirements data from a config map
 		{
-			name:      "test-with-place-scripts-set",
-			targetPod: testPod.DeepCopy(),
-			resourceRequirements: map[string]corev1.ResourceRequirements{
-				"place-scripts": {
-					Limits: corev1.ResourceList{
-						corev1.ResourceCPU:    resource.MustParse("500m"),
-						corev1.ResourceMemory: resource.MustParse("256Mi"),
-					},
-					Requests: corev1.ResourceList{
-						corev1.ResourceMemory: resource.MustParse("128Mi"),
-						corev1.ResourceCPU:    resource.MustParse("200m"),
-					},
+			name: "Reference in Script",
+			steps: []v1.Step{
+				{
+					Name:   "name",
+					Script: "echo aaa >> /tekton/steps/step-name/artifacts/provenance.json",
 				},
 			},
-			getExpectedPod: func() *corev1.Pod {
-				expectedPod := testPod.DeepCopy()
-				expectedPod.Spec.InitContainers = []corev1.Container{
-					{
-						Name: "place-scripts",
-						Resources: corev1.ResourceRequirements{
-							Limits: corev1.ResourceList{
-								corev1.ResourceCPU:    resource.MustParse("500m"),
-								corev1.ResourceMemory: resource.MustParse("256Mi"),
-							},
-							Requests: corev1.ResourceList{
-								corev1.ResourceMemory: resource.MustParse("128Mi"),
-								corev1.ResourceCPU:    resource.MustParse("200m"),
-							},
+			want: true,
+		},
+		{
+			name: "Reference in Args",
+			steps: []v1.Step{
+				{
+					Name:    "name",
+					Command: []string{"cat"},
+					Args:    []string{"/tekton/steps/step-name/artifacts/provenance.json"},
+				},
+			},
+			want: true,
+		},
+		{
+			name: "Reference in Command",
+			steps: []v1.Step{
+				{
+					Name:    "name",
+					Command: []string{"cat", "/tekton/steps/step-name/artifacts/provenance.json"},
+				},
+			},
+			want: true,
+		},
+		{
+			name: "Reference in Env",
+			steps: []v1.Step{
+				{
+					Name: "name",
+					Env: []corev1.EnvVar{
+						{
+							Name:  "MY_VAR",
+							Value: "/tekton/steps/step-name/artifacts/provenance.json",
 						},
 					},
-					{Name: "prepare"},
-					{Name: "working-dir-initializer"},
-					{Name: "test-01"},
-					{Name: "foo"},
-				}
-				return expectedPod
+				},
 			},
+			want: true,
 		},
-
-		// verifies only with 'prefix-scripts' resource requirements data from a config map
 		{
-			name:      "test-with-prefix-scripts-set",
-			targetPod: testPod.DeepCopy(),
-			resourceRequirements: map[string]corev1.ResourceRequirements{
-				"prefix-scripts": {
-					Limits: corev1.ResourceList{
-						corev1.ResourceCPU:    resource.MustParse("500m"),
-						corev1.ResourceMemory: resource.MustParse("256Mi"),
-					},
-					Requests: corev1.ResourceList{
-						corev1.ResourceMemory: resource.MustParse("128Mi"),
-						corev1.ResourceCPU:    resource.MustParse("200m"),
-					},
+			name: "Unresolved reference in Script",
+			steps: []v1.Step{
+				{
+					Name:   "name",
+					Script: "echo aaa >> $(step.artifacts.path)",
 				},
 			},
-			getExpectedPod: func() *corev1.Pod {
-				expectedPod := testPod.DeepCopy()
-				prefixScripts := corev1.ResourceRequirements{
-					Limits: corev1.ResourceList{
-						corev1.ResourceCPU:    resource.MustParse("500m"),
-						corev1.ResourceMemory: resource.MustParse("256Mi"),
-					},
-					Requests: corev1.ResourceList{
-						corev1.ResourceMemory: resource.MustParse("128Mi"),
-						corev1.ResourceCPU:    resource.MustParse("200m"),
-					},
-				}
-				expectedPod.Spec.Containers = []corev1.Container{
-					{Name: "scripts-01", Resources: prefixScripts},
-					{Name: "scripts-02", Resources: prefixScripts},
-					{Name: "sidecar-scripts-01"},
-					{Name: "sidecar-scripts-02"},
-					{Name: "test-01"},
-					{Name: "foo"},
-				}
-				return expectedPod
-			},
+			want: true,
 		},
-
-		// verifies with 'working-dir-initializer', 'prefix-sidecar-scripts', and 'default' resource requirements data from a config map
 		{
-			name:      "test-with_name_prefix_and_default-set",
-			targetPod: testPod.DeepCopy(),
-			resourceRequirements: map[string]corev1.ResourceRequirements{
-				"working-dir-initializer": {
-					Limits: corev1.ResourceList{
-						corev1.ResourceCPU:    resource.MustParse("400m"),
-						corev1.ResourceMemory: resource.MustParse("512Mi"),
-					},
-					Requests: corev1.ResourceList{
-						corev1.ResourceMemory: resource.MustParse("256Mi"),
-						corev1.ResourceCPU:    resource.MustParse("250m"),
-					},
-				},
-				"prefix-sidecar-scripts": {
-					Limits: corev1.ResourceList{
-						corev1.ResourceCPU:    resource.MustParse("1"),
-						corev1.ResourceMemory: resource.MustParse("1Gi"),
-					},
-					Requests: corev1.ResourceList{
-						corev1.ResourceMemory: resource.MustParse("512Mi"),
-						corev1.ResourceCPU:    resource.MustParse("500m"),
-					},
-				},
-				"default": {
-					Limits: corev1.ResourceList{
-						corev1.ResourceCPU:    resource.MustParse("500m"),
-						corev1.ResourceMemory: resource.MustParse("256Mi"),
-					},
-					Requests: corev1.ResourceList{
-						corev1.ResourceMemory: resource.MustParse("128Mi"),
-					},
-				},
-				"prefix-test": {
-					Limits: corev1.ResourceList{
-						corev1.ResourceCPU:    resource.MustParse("100m"),
-						corev1.ResourceMemory: resource.MustParse("32Mi"),
-					},
-				},
-				"foo": {
-					Limits: corev1.ResourceList{
-						corev1.ResourceCPU:    resource.MustParse("200m"),
-						corev1.ResourceMemory: resource.MustParse("64Mi"),
-					},
+			name: "Unresolved reference in Args",
+			steps: []v1.Step{
+				{
+					Name:    "name",
+					Command: []string{"cat"},
+					Args:    []string{"$(step.artifacts.path)"},
 				},
 			},
-			getExpectedPod: func() *corev1.Pod {
-				expectedPod := testPod.DeepCopy()
-				workDirResourceReqs := corev1.ResourceRequirements{
-					Limits: corev1.ResourceList{
-						corev1.ResourceCPU:    resource.MustParse("400m"),
-						corev1.ResourceMemory: resource.MustParse("512Mi"),
-					},
-					Requests: corev1.ResourceList{
-						corev1.ResourceMemory: resource.MustParse("256Mi"),
-						corev1.ResourceCPU:    resource.MustParse("250m"),
-					},
-				}
-				sideCarResourceReqs := corev1.ResourceRequirements{
-					Limits: corev1.ResourceList{
-						corev1.ResourceCPU:    resource.MustParse("1"),
-						corev1.ResourceMemory: resource.MustParse("1Gi"),
-					},
-					Requests: corev1.ResourceList{
-						corev1.ResourceMemory: resource.MustParse("512Mi"),
-						corev1.ResourceCPU:    resource.MustParse("500m"),
-					},
-				}
-				defaultResourceReqs := corev1.ResourceRequirements{
-					Limits: corev1.ResourceList{
-						corev1.ResourceCPU:    resource.MustParse("500m"),
-						corev1.ResourceMemory: resource.MustParse("256Mi"),
-					},
-					Requests: corev1.ResourceList{
-						corev1.ResourceMemory: resource.MustParse("128Mi"),
-					},
-				}
-
-				testResourceReqs := corev1.ResourceRequirements{
-					Limits: corev1.ResourceList{
-						corev1.ResourceCPU:    resource.MustParse("100m"),
-						corev1.ResourceMemory: resource.MustParse("32Mi"),
-					},
-				}
-				fooResourceReqs := corev1.ResourceRequirements{
-					Limits: corev1.ResourceList{
-						corev1.ResourceCPU:    resource.MustParse("200m"),
-						corev1.ResourceMemory: resource.MustParse("64Mi"),
-					},
-				}
-
-				expectedPod.Spec = corev1.PodSpec{
-					InitContainers: []corev1.Container{
-						{Name: "place-scripts", Resources: defaultResourceReqs},
-						{Name: "prepare", Resources: defaultResourceReqs},
-						{Name: "working-dir-initializer", Resources: workDirResourceReqs},
-						{Name: "test-01", Resources: testResourceReqs},
-						{Name: "foo", Resources: fooResourceReqs},
-					},
-					Containers: []corev1.Container{
-						{Name: "scripts-01", Resources: defaultResourceReqs},
-						{Name: "scripts-02", Resources: defaultResourceReqs},
-						{Name: "sidecar-scripts-01", Resources: sideCarResourceReqs},
-						{Name: "sidecar-scripts-02", Resources: sideCarResourceReqs},
-						{Name: "test-01", Resources: testResourceReqs},
-						{Name: "foo", Resources: fooResourceReqs},
-					},
-				}
-				return expectedPod
-			},
+			want: true,
 		},
-
-		// verifies with existing data
 		{
-			name: "test-with-existing-data",
-			targetPod: &corev1.Pod{
-				ObjectMeta: metav1.ObjectMeta{Name: "test-pod", Namespace: "custom-ns"},
-				Spec: corev1.PodSpec{
-					InitContainers: []corev1.Container{
-						{Name: "place-scripts"},
-						{Name: "prepare", Resources: corev1.ResourceRequirements{
-							Limits: corev1.ResourceList{
-								corev1.ResourceCPU:    resource.MustParse("500m"),
-								corev1.ResourceMemory: resource.MustParse("256Mi"),
-							},
-							Requests: corev1.ResourceList{
-								corev1.ResourceMemory: resource.MustParse("128Mi"),
-							},
-						}},
-						{Name: "working-dir-initializer"},
-					},
-					Containers: []corev1.Container{
-						{Name: "scripts-01"},
-						{Name: "scripts-02"},
-						{Name: "sidecar-scripts-01"},
-						{Name: "sidecar-scripts-02"},
-					},
+			name: "Unresolved reference in Command",
+			steps: []v1.Step{
+				{
+					Name:    "name",
+					Command: []string{"cat", "$(step.artifacts.path)"},
 				},
 			},
-			resourceRequirements: map[string]corev1.ResourceRequirements{
-				"prepare": {
-					Limits: corev1.ResourceList{
-						corev1.ResourceCPU:    resource.MustParse("1"),
-						corev1.ResourceMemory: resource.MustParse("512Mi"),
-					},
-					Requests: corev1.ResourceList{
-						corev1.ResourceCPU:    resource.MustParse("500m"),
-						corev1.ResourceMemory: resource.MustParse("256Mi"),
-					},
-				},
-			},
-			getExpectedPod: func() *corev1.Pod {
-				expectedPod := &corev1.Pod{
-					ObjectMeta: metav1.ObjectMeta{Name: "test-pod", Namespace: "custom-ns"},
-					Spec: corev1.PodSpec{
-						InitContainers: []corev1.Container{
-							{Name: "place-scripts"},
-							{Name: "prepare", Resources: corev1.ResourceRequirements{
-								Limits: corev1.ResourceList{
-									corev1.ResourceCPU:    resource.MustParse("500m"),
-									corev1.ResourceMemory: resource.MustParse("256Mi"),
-								},
-								Requests: corev1.ResourceList{
-									corev1.ResourceMemory: resource.MustParse("128Mi"),
-								},
-							}},
-							{Name: "working-dir-initializer"},
-						},
-						Containers: []corev1.Container{
-							{Name: "scripts-01"},
-							{Name: "scripts-02"},
-							{Name: "sidecar-scripts-01"},
-							{Name: "sidecar-scripts-02"},
+			want: true,
+		},
+		{
+			name: "Unresolved reference in Env",
+			steps: []v1.Step{
+				{
+					Name: "name",
+					Env: []corev1.EnvVar{
+						{
+							Name:  "MY_VAR",
+							Value: "$(step.artifacts.path)",
 						},
 					},
-				}
-				return expectedPod
+				},
 			},
+			want: true,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := artifactsPathReferenced(tt.steps)
+			if d := cmp.Diff(tt.want, got); d != "" {
+				t.Errorf("Diff %s", diff.PrintWantGot(d))
+			}
+		})
+	}
+}
+
+func TestPodBuildWithK8s129(t *testing.T) {
+	always := corev1.ContainerRestartPolicyAlways
+	ts := v1.TaskSpec{
+		Steps: []v1.Step{{
+			Name:    "name",
+			Image:   "image",
+			Command: []string{"cmd"}, // avoid entrypoint lookup.
+		}},
+		Sidecars: []v1.Sidecar{{
+			Name:    "name",
+			Image:   "image",
+			Command: []string{"cmd"},
+		}},
+	}
+	want := &corev1.PodSpec{
+		RestartPolicy: corev1.RestartPolicyNever,
+		InitContainers: []corev1.Container{
+			entrypointInitContainer(
+				images.EntrypointImage,
+				[]v1.Step{{Name: "name"}},
+				SecurityContextConfig{
+					SetSecurityContext:        false,
+					SetReadOnlyRootFilesystem: false,
+				},
+				false /* windows */),
+			{
+				Name:    "sidecar-name",
+				Image:   "image",
+				Command: []string{"/tekton/bin/entrypoint"},
+				Args: []string{
+					"-wait_file",
+					"/tekton/downward/ready",
+					"-wait_file_content",
+					"-post_file",
+					"/tekton/run/0/out",
+					"-termination_path",
+					"/tekton/termination",
+					"-step_metadata_dir",
+					"/tekton/run/0/status",
+					"-entrypoint",
+					"cmd",
+					"--",
+				},
+				RestartPolicy: &always,
+			},
+		},
+		Containers: []corev1.Container{{
+			Name:    "step-name",
+			Image:   "image",
+			Command: []string{"/tekton/bin/entrypoint"},
+			Args: []string{
+				"-wait_file",
+				"/tekton/downward/ready",
+				"-wait_file_content",
+				"-post_file",
+				"/tekton/run/0/out",
+				"-termination_path",
+				"/tekton/termination",
+				"-step_metadata_dir",
+				"/tekton/run/0/status",
+				"-entrypoint",
+				"cmd",
+				"--",
+			},
+		}},
+	}
+	featureFlags := map[string]string{
+		"enable-kubernetes-sidecar": "true",
+	}
+	store := config.NewStore(logtesting.TestLogger(t))
+	store.OnConfigChanged(
+		&corev1.ConfigMap{
+			ObjectMeta: metav1.ObjectMeta{Name: config.GetFeatureFlagsConfigName(), Namespace: system.Namespace()},
+			Data:       featureFlags,
+		},
+	)
+	kubeclient := fakek8s.NewSimpleClientset(
+		&corev1.ServiceAccount{ObjectMeta: metav1.ObjectMeta{Name: "default", Namespace: "default"}},
+		&corev1.ServiceAccount{
+			ObjectMeta: metav1.ObjectMeta{Name: "service-account", Namespace: "default"},
+			Secrets: []corev1.ObjectReference{{
+				Name: "multi-creds",
+			}},
+		},
+		&corev1.Secret{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "multi-creds",
+				Namespace: "default",
+				Annotations: map[string]string{
+					"tekton.dev/docker-0": "https://us.gcr.io",
+					"tekton.dev/docker-1": "https://docker.io",
+					"tekton.dev/git-0":    "github.com",
+					"tekton.dev/git-1":    "gitlab.com",
+				},
+			},
+			Type: "kubernetes.io/basic-auth",
+			Data: map[string][]byte{
+				"username": []byte("foo"),
+				"password": []byte("BestEver"),
+			},
+		},
+	)
+	fakeDisc, _ := kubeclient.Discovery().(*fakediscovery.FakeDiscovery)
+	fakeDisc.FakedServerVersion = &version.Info{
+		Major: "1",
+		Minor: "29",
+	}
+
+	trs := v1.TaskRunSpec{
+		TaskSpec: &ts,
+	}
+
+	tr := &v1.TaskRun{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "taskrunName",
+			Namespace: "default",
+		},
+		Spec: trs,
+	}
+
+	// No entrypoints should be looked up.
+	entrypointCache := fakeCache{}
+
+	builder := Builder{
+		Images:          images,
+		KubeClient:      kubeclient,
+		EntrypointCache: entrypointCache,
+	}
+	got, err := builder.Build(store.ToContext(t.Context()), tr, ts)
+	if err != nil {
+		t.Errorf("Pod build failed: %s", err)
+	}
+	if d := cmp.Diff(want.InitContainers[1].Name, got.Spec.InitContainers[1].Name); d != "" {
+		t.Errorf("Pod does not have sidecar in init list: %s", diff.PrintWantGot(d))
+	}
+
+	if d := cmp.Diff(want.InitContainers[1].RestartPolicy, got.Spec.InitContainers[1].RestartPolicy); d != "" {
+		t.Errorf("Sidecar does not have RestartPolicy Always: %s", diff.PrintWantGot(d))
+	}
+}
+func TestIsNativeSidecarSupport(t *testing.T) {
+	tests := []struct {
+		name          string
+		serverVersion *version.Info
+		want          bool
+	}{
+		{
+			name: "Kubernetes version 1.29",
+			serverVersion: &version.Info{
+				Major: "1",
+				Minor: "29",
+			},
+			want: true,
+		},
+		{
+			name: "Kubernetes version 1.30",
+			serverVersion: &version.Info{
+				Major: "1",
+				Minor: "30",
+			},
+			want: true,
+		},
+		{
+			name: "Kubernetes version 2.0",
+			serverVersion: &version.Info{
+				Major: "2",
+				Minor: "0",
+			},
+			want: true,
+		},
+		{
+			name: "Kubernetes version 1.28",
+			serverVersion: &version.Info{
+				Major: "1",
+				Minor: "28",
+			},
+			want: false,
+		},
+		{
+			name: "Kubernetes version 1.29+",
+			serverVersion: &version.Info{
+				Major: "1",
+				Minor: "29+",
+			},
+			want: true,
+		},
+		{
+			name: "Kubernetes version 1.28+",
+			serverVersion: &version.Info{
+				Major: "1",
+				Minor: "28+",
+			},
+			want: false,
+		},
+		{
+			name: "Kubernetes version 0.29",
+			serverVersion: &version.Info{
+				Major: "0",
+				Minor: "29",
+			},
+			want: false,
 		},
 	}
 
-	for _, tc := range tcs {
-		t.Run(tc.name, func(t *testing.T) {
-			targetPod := tc.targetPod
-			updateResourceRequirements(tc.resourceRequirements, targetPod)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := IsNativeSidecarSupport(tt.serverVersion); got != tt.want {
+				t.Errorf("IsNativeSidecarSupport() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
 
-			expectedPod := tc.getExpectedPod()
-			if d := cmp.Diff(expectedPod, targetPod); d != "" {
-				t.Errorf("Diff %s", diff.PrintWantGot(d))
+func TestCreateResultsSidecarWithWaitForever(t *testing.T) {
+	tests := []struct {
+		name                    string
+		enableKubernetesSidecar bool
+		wantWaitForeverFlag     bool
+	}{
+		{
+			name:                    "Kubernetes sidecar disabled",
+			enableKubernetesSidecar: false,
+			wantWaitForeverFlag:     false,
+		},
+		{
+			name:                    "Kubernetes sidecar enabled",
+			enableKubernetesSidecar: true,
+			wantWaitForeverFlag:     true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Setup test context with feature flags
+			store := config.NewStore(logtesting.TestLogger(t))
+			featureFlags := map[string]string{
+				"results-from": "sidecar-logs",
+			}
+			if tt.enableKubernetesSidecar {
+				featureFlags["enable-kubernetes-sidecar"] = "true"
+			}
+			store.OnConfigChanged(
+				&corev1.ConfigMap{
+					ObjectMeta: metav1.ObjectMeta{Name: config.GetFeatureFlagsConfigName(), Namespace: system.Namespace()},
+					Data:       featureFlags,
+				},
+			)
+			always := corev1.ContainerRestartPolicyAlways
+			ts := v1.TaskSpec{
+				Results: []v1.TaskResult{{
+					Name: "result1",
+					Type: v1.ResultsTypeString,
+				}},
+				Steps: []v1.Step{{
+					Name:    "name",
+					Image:   "image",
+					Command: []string{"cmd"}, // avoid entrypoint lookup.
+				}},
+			}
+
+			// Set up test images
+			testImages := pipeline.Images{
+				EntrypointImage:        "entrypoint-image",
+				ShellImage:             "busybox",
+				SidecarLogResultsImage: "sidecar-log-results-image",
+			}
+
+			kubeclient := fakek8s.NewSimpleClientset(
+				&corev1.ServiceAccount{ObjectMeta: metav1.ObjectMeta{Name: "default", Namespace: "default"}},
+			)
+			fakeDisc, _ := kubeclient.Discovery().(*fakediscovery.FakeDiscovery)
+			fakeDisc.FakedServerVersion = &version.Info{
+				Major: "1",
+				Minor: "29",
+			}
+
+			trs := v1.TaskRunSpec{
+				TaskSpec: &ts,
+			}
+
+			tr := &v1.TaskRun{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "taskrunName",
+					Namespace: "default",
+				},
+				Spec: trs,
+			}
+
+			// No entrypoints should be looked up.
+			entrypointCache := fakeCache{}
+
+			builder := Builder{
+				Images:          testImages,
+				KubeClient:      kubeclient,
+				EntrypointCache: entrypointCache,
+			}
+			got, err := builder.Build(store.ToContext(t.Context()), tr, ts)
+			if err != nil {
+				t.Errorf("Pod build failed: %s", err)
+			}
+
+			// Find the results sidecar container in the appropriate location
+			var resultsSidecar *corev1.Container
+
+			// When Kubernetes sidecar is enabled, the sidecar should be in init containers
+			// When disabled, it should be in regular containers
+			if tt.enableKubernetesSidecar {
+				for i, container := range got.Spec.InitContainers {
+					if strings.HasPrefix(container.Name, "sidecar-"+pipeline.ReservedResultsSidecarName) {
+						resultsSidecar = &got.Spec.InitContainers[i]
+						break
+					}
+				}
+
+				if resultsSidecar == nil {
+					t.Fatalf("Results sidecar not found in init containers")
+				}
+
+				// Check that the sidecar has RestartPolicy Always
+				if resultsSidecar.RestartPolicy == nil || *resultsSidecar.RestartPolicy != always {
+					t.Errorf("Results sidecar does not have RestartPolicy Always")
+				}
+			} else {
+				for i, container := range got.Spec.Containers {
+					if container.Name == pipeline.ReservedResultsSidecarContainerName {
+						resultsSidecar = &got.Spec.Containers[i]
+						break
+					}
+				}
+
+				if resultsSidecar == nil {
+					t.Fatalf("Results sidecar not found in containers")
+				}
+
+				// When Kubernetes sidecar is disabled, the container shouldn't have a RestartPolicy
+				if resultsSidecar.RestartPolicy != nil {
+					t.Errorf("Results sidecar should not have RestartPolicy when Kubernetes sidecar is disabled")
+				}
+			}
+
+			// Check for the kubernetes-sidecar-mode flag
+			hasKubernetesSidecarModeFlag := false
+			for i := range len(resultsSidecar.Command) - 1 {
+				if resultsSidecar.Command[i] == "-kubernetes-sidecar-mode" && resultsSidecar.Command[i+1] == "true" {
+					hasKubernetesSidecarModeFlag = true
+					break
+				}
+			}
+
+			// Only check for the flag when it's expected to be present
+			if tt.wantWaitForeverFlag {
+				if !hasKubernetesSidecarModeFlag {
+					t.Errorf("Results sidecar does not have -kubernetes-sidecar-mode flag set")
+				}
+			} else {
+				if hasKubernetesSidecarModeFlag {
+					t.Errorf("Results sidecar should not have -kubernetes-sidecar-mode flag set")
+				}
 			}
 		})
 	}

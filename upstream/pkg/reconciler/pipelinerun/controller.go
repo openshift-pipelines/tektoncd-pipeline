@@ -33,7 +33,7 @@ import (
 	"github.com/tektoncd/pipeline/pkg/pipelinerunmetrics"
 	cloudeventclient "github.com/tektoncd/pipeline/pkg/reconciler/events/cloudevent"
 	"github.com/tektoncd/pipeline/pkg/reconciler/volumeclaim"
-	resolution "github.com/tektoncd/pipeline/pkg/resolution/resource"
+	resolution "github.com/tektoncd/pipeline/pkg/remoteresolution/resource"
 	"github.com/tektoncd/pipeline/pkg/tracing"
 	"k8s.io/client-go/tools/cache"
 	"k8s.io/utils/clock"
@@ -49,6 +49,18 @@ const (
 	TracerProviderName = "pipelinerun-reconciler"
 )
 
+var pipelineRunFilterManagedBy = func(obj interface{}) bool {
+	pr, ok := obj.(*v1.PipelineRun)
+	if !ok {
+		return true
+	}
+	// Only promote PipelineRuns that are managed by this controller
+	if pr.Spec.ManagedBy != nil && *pr.Spec.ManagedBy != pipeline.ManagedBy {
+		return false
+	}
+	return true
+}
+
 // NewController instantiates a new controller.Impl from knative.dev/pkg/controller
 func NewController(opts *pipeline.Options, clock clock.PassiveClock) func(context.Context, configmap.Watcher) *controller.Impl {
 	return func(ctx context.Context, cmw configmap.Watcher) *controller.Impl {
@@ -62,8 +74,12 @@ func NewController(opts *pipeline.Options, clock clock.PassiveClock) func(contex
 		verificationpolicyInformer := verificationpolicyinformer.Get(ctx)
 		secretinformer := secretinformer.Get(ctx)
 		tracerProvider := tracing.New(TracerProviderName, logger.Named("tracing"))
+		pipelinerunmetricsRecorder := pipelinerunmetrics.Get(ctx)
 		//nolint:contextcheck // OnStore methods does not support context as a parameter
-		configStore := config.NewStore(logger.Named("config-store"), pipelinerunmetrics.MetricsOnStore(logger), tracerProvider.OnStore(secretinformer.Lister()))
+		configStore := config.NewStore(logger.Named("config-store"),
+			pipelinerunmetrics.OnStore(logger, pipelinerunmetricsRecorder),
+			tracerProvider.OnStore(secretinformer.Lister()),
+		)
 		configStore.WatchConfigs(cmw)
 
 		c := &Reconciler{
@@ -76,15 +92,16 @@ func NewController(opts *pipeline.Options, clock clock.PassiveClock) func(contex
 			customRunLister:          customRunInformer.Lister(),
 			verificationPolicyLister: verificationpolicyInformer.Lister(),
 			cloudEventClient:         cloudeventclient.Get(ctx),
-			metrics:                  pipelinerunmetrics.Get(ctx),
+			metrics:                  pipelinerunmetricsRecorder,
 			pvcHandler:               volumeclaim.NewPVCHandler(kubeclientset, logger),
 			resolutionRequester:      resolution.NewCRDRequester(resolutionclient.Get(ctx), resolutionInformer.Lister()),
 			tracerProvider:           tracerProvider,
 		}
 		impl := pipelinerunreconciler.NewImpl(ctx, c, func(impl *controller.Impl) controller.Options {
 			return controller.Options{
-				AgentName:   pipeline.PipelineRunControllerName,
-				ConfigStore: configStore,
+				AgentName:         pipeline.PipelineRunControllerName,
+				ConfigStore:       configStore,
+				PromoteFilterFunc: pipelineRunFilterManagedBy,
 			}
 		})
 
@@ -92,7 +109,17 @@ func NewController(opts *pipeline.Options, clock clock.PassiveClock) func(contex
 			logging.FromContext(ctx).Panicf("Couldn't register Secret informer event handler: %w", err)
 		}
 
-		if _, err := pipelineRunInformer.Informer().AddEventHandler(controller.HandleAll(impl.Enqueue)); err != nil {
+		if _, err := pipelineRunInformer.Informer().AddEventHandler(cache.FilteringResourceEventHandler{
+			FilterFunc: pipelineRunFilterManagedBy,
+			Handler:    controller.HandleAll(impl.Enqueue),
+		}); err != nil {
+			logging.FromContext(ctx).Panicf("Couldn't register PipelineRun informer event handler: %w", err)
+		}
+
+		if _, err := pipelineRunInformer.Informer().AddEventHandler(cache.FilteringResourceEventHandler{
+			FilterFunc: controller.FilterController(&v1.PipelineRun{}),
+			Handler:    controller.HandleAll(impl.EnqueueControllerOf),
+		}); err != nil {
 			logging.FromContext(ctx).Panicf("Couldn't register PipelineRun informer event handler: %w", err)
 		}
 
