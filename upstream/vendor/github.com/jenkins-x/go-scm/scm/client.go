@@ -7,10 +7,8 @@ package scm
 import (
 	"context"
 	"errors"
-
 	"io"
 	"net/http"
-
 	"net/url"
 	"strconv"
 	"strings"
@@ -19,21 +17,12 @@ import (
 
 var (
 	// ErrNotFound indicates a resource is not found.
-	ErrNotFound = errors.New("not Found")
+	// We use http.StatusText to match the behavior when 404 is returned from the server
+	ErrNotFound = errors.New(http.StatusText(http.StatusNotFound))
 
 	// ErrNotSupported indicates a resource endpoint is not
 	// supported or implemented.
-	ErrNotSupported = errors.New("not Supported")
-
-	// ErrNotAuthorized indicates the request is not
-	// authorized or the user does not have access to the
-	// resource.
-	ErrNotAuthorized = errors.New("not Authorized")
-
-	// ErrForbidden indicates the user does not have access to
-	// the resource, this is similar to 401, but in this case,
-	// re-authenticating will make no difference.
-	ErrForbidden = errors.New("Forbidden")
+	ErrNotSupported = errors.New("Not Supported")
 )
 
 type (
@@ -182,6 +171,8 @@ func (c *Client) Do(ctx context.Context, in *Request) (*Response, error) {
 	if client == nil {
 		client = http.DefaultClient
 	}
+	// The callers of this method should do the closing
+	//nolint:bodyclose
 	res, err := client.Do(req)
 	if err != nil {
 		return nil, err

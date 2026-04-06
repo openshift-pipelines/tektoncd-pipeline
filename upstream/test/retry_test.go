@@ -1,5 +1,4 @@
 //go:build e2e
-// +build e2e
 
 /*
 Copyright 2019 The Tekton Authors
@@ -33,8 +32,9 @@ import (
 
 // TestTaskRunRetry tests that retries behave as expected, by creating multiple
 // Pods for the same TaskRun each time it fails, up to the configured max.
+// @test:execution=parallel
 func TestTaskRunRetry(t *testing.T) {
-	ctx := context.Background()
+	ctx := t.Context()
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	c, namespace := setup(ctx, t)
@@ -55,7 +55,7 @@ spec:
       retries: %d
       taskSpec:
         steps:
-        - image: busybox
+        - image: mirror.gcr.io/busybox
           script: exit 1
 `, pipelineRunName, numRetries)), metav1.CreateOptions{}); err != nil {
 		t.Fatalf("Failed to create PipelineRun %q: %v", pipelineRunName, err)

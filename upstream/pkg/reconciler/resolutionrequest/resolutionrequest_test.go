@@ -24,7 +24,9 @@ import (
 
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
+	"github.com/tektoncd/pipeline/pkg/apis/config"
 	"github.com/tektoncd/pipeline/pkg/apis/resolution/v1beta1"
+	th "github.com/tektoncd/pipeline/pkg/reconciler/testing"
 	ttesting "github.com/tektoncd/pipeline/pkg/reconciler/testing"
 	resolutioncommon "github.com/tektoncd/pipeline/pkg/resolution/common"
 	"github.com/tektoncd/pipeline/test"
@@ -63,6 +65,7 @@ func initializeResolutionRequestControllerAssets(t *testing.T, d test.Data) (tes
 	t.Helper()
 	ctx, _ := ttesting.SetupFakeContext(t)
 	ctx, cancel := context.WithCancel(ctx)
+	test.EnsureConfigurationConfigMapsExist(&d)
 	c, informers := test.SeedTestData(t, ctx, d)
 	configMapWatcher := cminformer.NewInformedWatcher(c.Kube, system.Namespace())
 	ctl := NewController(testClock)(ctx, configMapWatcher)
@@ -129,7 +132,7 @@ func TestReconcile(t *testing.T) {
 						Type:    apis.ConditionSucceeded,
 						Status:  corev1.ConditionFalse,
 						Reason:  resolutioncommon.ReasonResolutionTimedOut,
-						Message: timeoutMessage(),
+						Message: timeoutMessage(config.FromContextOrDefaults(t.Context()).Defaults.DefaultMaximumResolutionTimeout),
 					}},
 				},
 				ResolutionRequestStatusFields: v1beta1.ResolutionRequestStatusFields{},
@@ -167,6 +170,7 @@ func TestReconcile(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			d := test.Data{
 				ResolutionRequests: []*v1beta1.ResolutionRequest{tc.input},
+				ConfigMaps:         th.NewDefaultsCofigMapInSlice(),
 			}
 
 			testAssets, cancel := getResolutionRequestController(t, d)

@@ -13,11 +13,53 @@ This Resolver responds to type `cluster`.
 
 ## Parameters
 
-| Param Name  | Description                                           | Example Value                |
-|-------------|-------------------------------------------------------|------------------------------|
-| `kind`      | The kind of resource to fetch.                        | `task`, `pipeline`           |
-| `name`      | The name of the resource to fetch.                    | `some-pipeline`, `some-task` |
-| `namespace` | The namespace in the cluster containing the resource. | `default`, `other-namespace` |
+| Param Name  | Description                                           | Example Value                    |
+|-------------|-------------------------------------------------------|----------------------------------|
+| `kind`      | The kind of resource to fetch.                        | `task`, `pipeline`, `stepaction` |
+| `name`      | The name of the resource to fetch.                    | `some-pipeline`, `some-task`     |
+| `namespace` | The namespace in the cluster containing the resource. | `default`, `other-namespace`     |
+| `cache`     | Optional cache mode for the resolver.                 | `always`, `never`, `auto`        |
+
+### Cache Parameter
+
+The `cache` parameter controls whether the cluster resolver caches resolved resources:
+
+| Cache Mode | Description |
+|------------|-------------|
+| `always`   | Always cache the resolved resource, regardless of whether it has an immutable reference. |
+| `never`    | Never cache the resolved resource. |
+| `auto`     | **Cluster resolver behavior**: Never cache (cluster resources lack immutable references). |
+| (not specified) | **Default behavior**: Never cache (same as `auto` for cluster resolver). |
+
+**Note**: The cluster resolver only caches when `cache: always` is explicitly specified. This is because cluster resources (Tasks, Pipelines, etc.) do not have immutable references like Git commit hashes or bundle digests, making automatic caching unreliable.
+
+### Cache Configuration
+
+The resolver cache can be configured globally using the `resolver-cache-config` ConfigMap. This ConfigMap controls the cache size and TTL (time-to-live) for all resolvers.
+
+| Option Name | Description | Default Value | Example Values |
+|-------------|-------------|---------------|----------------|
+| `max-size` | Maximum number of entries in the cache | `1000` | `500`, `2000` |
+| `ttl` | Time-to-live for cache entries | `5m` | `10m`, `1h` |
+
+The ConfigMap name can be customized using the `RESOLVER_CACHE_CONFIG_MAP_NAME` environment variable. If not set, it defaults to `resolver-cache-config`.
+
+Additionally, you can set a default cache mode for the cluster resolver by adding the `default-cache-mode` option to the `cluster-resolver-config` ConfigMap. This overrides the system default (`auto`) for this resolver:
+
+| Option Name | Description | Valid Values | Default |
+|-------------|-------------|--------------|---------|
+| `default-cache-mode` | Default caching behavior when `cache` parameter is not specified | `always`, `never`, `auto` | `auto` |
+
+Example:
+```yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: cluster-resolver-config
+  namespace: tekton-pipelines-resolvers
+data:
+  default-cache-mode: "never"  # Never cache by default (since cluster resources are mutable)
+```
 
 ## Requirements
 
@@ -37,7 +79,7 @@ for the name, namespace and defaults that the resolver ships with.
 
 | Option Name          | Description                                                                                                                                         | Example Values                     |
 |----------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------|------------------------------------|
-| `default-kind`       | The default resource kind to fetch if not specified in parameters.                                                                                  | `task`, `pipeline`                 |
+| `default-kind`       | The default resource kind to fetch if not specified in parameters.                                                                                  | `task`, `pipeline`, `stepaction`   |
 | `default-namespace`  | The default namespace to fetch resources from if not specified in parameters.                                                                       | `default`, `some-namespace`        |
 | `allowed-namespaces` | An optional comma-separated list of namespaces which the resolver is allowed to access. Defaults to empty, meaning all namespaces are allowed.      | `default,some-namespace`, (empty)  |
 | `blocked-namespaces` | An optional comma-separated list of namespaces which the resolver is blocked from accessing. If the value is a `*` all namespaces will be disallowed and allowed namespace will need to be explicitely listed in `allowed-namespaces`. Defaults to empty, meaning all namespaces are allowed. | `default,other-namespace`, `*`, (empty) |
@@ -61,6 +103,69 @@ spec:
       value: some-task
     - name: namespace
       value: namespace-containing-task
+```
+
+### Task Resolution with Caching
+
+```yaml
+apiVersion: tekton.dev/v1beta1
+kind: TaskRun
+metadata:
+  name: remote-task-reference-cached
+spec:
+  taskRef:
+    resolver: cluster
+    params:
+    - name: kind
+      value: task
+    - name: name
+      value: some-task
+    - name: namespace
+      value: namespace-containing-task
+    - name: cache
+      value: always
+```
+
+### Task Resolution without Caching
+
+```yaml
+apiVersion: tekton.dev/v1beta1
+kind: TaskRun
+metadata:
+  name: remote-task-reference-no-cache
+spec:
+  taskRef:
+    resolver: cluster
+    params:
+    - name: kind
+      value: task
+    - name: name
+      value: some-task
+    - name: namespace
+      value: namespace-containing-task
+    - name: cache
+      value: never
+```
+
+### StepAction Resolution
+
+```yaml
+apiVersion: tekton.dev/v1beta1
+kind: Task
+metadata:
+  name: remote-stepaction-reference
+spec:
+  steps:
+  - name: step-action-example
+    ref
+      resolver: cluster
+      params:
+      - name: kind
+        value: stepaction
+      - name: name
+        value: some-stepaction
+      - name: namespace
+        value: namespace-containing-stepaction
 ```
 
 ### Pipeline resolution
