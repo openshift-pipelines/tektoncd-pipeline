@@ -9,7 +9,7 @@ TESTPKGS = $(shell env GO111MODULE=on $(GO) list -f \
 BIN      = $(CURDIR)/.bin
 WOKE 	?= go run -modfile go.mod github.com/get-woke/woke
 
-GOLANGCI_VERSION = v1.57.2
+GOLANGCI_VERSION := $(shell yq '.jobs.linting.steps[] | select(.name == "golangci-lint") | .with.version' .github/workflows/ci.yaml)
 WOKE_VERSION     = v0.19.0
 
 GO           = go
@@ -165,12 +165,14 @@ $(BIN)/errcheck: PACKAGE=github.com/kisielk/errcheck
 errcheck: | $(ERRCHECK) ; $(info $(M) running errcheck…) ## Run errcheck
 	$Q $(ERRCHECK) ./...
 
-GOLANGCILINT = $(BIN)/golangci-lint
-$(BIN)/golangci-lint: ; $(info $(M) getting golangci-lint $(GOLANGCI_VERSION))
-	cd tools; GOBIN=$(BIN) go install github.com/golangci/golangci-lint/cmd/golangci-lint@$(GOLANGCI_VERSION)
+GOLANGCILINT = $(BIN)/golangci-lint-$(GOLANGCI_VERSION)
+$(BIN)/golangci-lint-$(GOLANGCI_VERSION): ; $(info $(M) getting golangci-lint $(GOLANGCI_VERSION))
+	curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $(BIN) $(GOLANGCI_VERSION)
+	mv $(BIN)/golangci-lint $(BIN)/golangci-lint-$(GOLANGCI_VERSION)
 
 .PHONY: golangci-lint
 golangci-lint: | $(GOLANGCILINT) ; $(info $(M) running golangci-lint…) @ ## Run golangci-lint
+	$Q $(GOLANGCILINT) config verify
 	$Q $(GOLANGCILINT) run --modules-download-mode=vendor --max-issues-per-linter=0 --max-same-issues=0 --timeout 5m
 
 .PHONY: golangci-lint-check
@@ -178,7 +180,8 @@ golangci-lint-check: | $(GOLANGCILINT) ; $(info $(M) Testing if golint has been 
 	$Q $(GOLANGCILINT) run -j 1 --color=never
 
 GOIMPORTS = $(BIN)/goimports
-$(BIN)/goimports: PACKAGE=golang.org/x/tools/cmd/goimports
+$(BIN)/goimports: | $(BIN) ; $(info $(M) building goimports…)
+	GOBIN=$(BIN) go install golang.org/x/tools/cmd/goimports@latest
 
 .PHONY: goimports
 goimports: | $(GOIMPORTS) ; $(info $(M) running goimports…) ## Run goimports
@@ -195,6 +198,11 @@ $(BIN)/woke: ; $(info $(M) getting woke $(WOKE_VERSION))
 .PHONY: woke 
 woke: | $(WOKE) ; $(info $(M) running woke...) @ ## Run woke
 	$Q $(WOKE) -c https://github.com/canonical/Inclusive-naming/raw/main/config.yml
+
+.PHONY: yamlint
+YAMLLINT := $(shell find . -path ./vendor -prune -o -type f -regex ".*y[a]ml" -print) 
+yamllint: | $(BIN) ; $(info $(M) running yamlint…)
+	yamllint -c .yamllint $(YAMLLINT)
 
 # Misc
 

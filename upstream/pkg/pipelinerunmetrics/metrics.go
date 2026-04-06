@@ -27,299 +27,162 @@ import (
 	"github.com/tektoncd/pipeline/pkg/apis/pipeline"
 	v1 "github.com/tektoncd/pipeline/pkg/apis/pipeline/v1"
 	listers "github.com/tektoncd/pipeline/pkg/client/listers/pipeline/v1"
-	"go.opencensus.io/stats"
-	"go.opencensus.io/stats/view"
-	"go.opencensus.io/tag"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/metric"
 	"go.uber.org/zap"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/equality"
 	"k8s.io/apimachinery/pkg/labels"
 	"knative.dev/pkg/apis"
 	"knative.dev/pkg/logging"
-	"knative.dev/pkg/metrics"
-)
-
-var (
-	pipelinerunTag = tag.MustNewKey("pipelinerun")
-	pipelineTag    = tag.MustNewKey("pipeline")
-	namespaceTag   = tag.MustNewKey("namespace")
-	statusTag      = tag.MustNewKey("status")
-	reasonTag      = tag.MustNewKey("reason")
-
-	prDuration = stats.Float64(
-		"pipelinerun_duration_seconds",
-		"The pipelinerun execution time in seconds",
-		stats.UnitDimensionless)
-	prDurationView *view.View
-
-	prCount = stats.Float64("pipelinerun_count",
-		"number of pipelineruns",
-		stats.UnitDimensionless)
-	prCountView *view.View
-
-	prTotal = stats.Float64("pipelinerun_total",
-		"Number of pipelineruns",
-		stats.UnitDimensionless)
-	prTotalView *view.View
-
-	runningPRsCount = stats.Float64("running_pipelineruns_count",
-		"Number of pipelineruns executing currently",
-		stats.UnitDimensionless)
-	runningPRsCountView *view.View
-
-	runningPRs = stats.Float64("running_pipelineruns",
-		"Number of pipelineruns executing currently",
-		stats.UnitDimensionless)
-	runningPRsView *view.View
-
-	runningPRsWaitingOnPipelineResolutionCount = stats.Float64("running_pipelineruns_waiting_on_pipeline_resolution_count",
-		"Number of pipelineruns executing currently that are waiting on resolution requests for their pipeline references.",
-		stats.UnitDimensionless)
-	runningPRsWaitingOnPipelineResolutionCountView *view.View
-
-	runningPRsWaitingOnPipelineResolution = stats.Float64("running_pipelineruns_waiting_on_pipeline_resolution",
-		"Number of pipelineruns executing currently that are waiting on resolution requests for their pipeline references.",
-		stats.UnitDimensionless)
-	runningPRsWaitingOnPipelineResolutionView *view.View
-
-	runningPRsWaitingOnTaskResolutionCount = stats.Float64("running_pipelineruns_waiting_on_task_resolution_count",
-		"Number of pipelineruns executing currently that are waiting on resolution requests for the task references of their taskrun children.",
-		stats.UnitDimensionless)
-	runningPRsWaitingOnTaskResolutionCountView *view.View
-
-	runningPRsWaitingOnTaskResolution = stats.Float64("running_pipelineruns_waiting_on_task_resolution",
-		"Number of pipelineruns executing currently that are waiting on resolution requests for the task references of their taskrun children.",
-		stats.UnitDimensionless)
-	runningPRsWaitingOnTaskResolutionView *view.View
 )
 
 const (
 	// ReasonCancelled indicates that a PipelineRun was cancelled.
 	// Aliased for backwards compatibility; additional reasons should not be added here.
 	ReasonCancelled = v1.PipelineRunReasonCancelled
-
-	anonymous = "anonymous"
+	anonymous       = "anonymous"
 )
 
-// Recorder holds keys for Tekton metrics
+// Recorder holds OpenTelemetry instruments for PipelineRun metrics
 type Recorder struct {
 	mutex       sync.Mutex
 	initialized bool
+	cfg         *config.Metrics
 
-	insertTag func(pipeline,
-		pipelinerun string) []tag.Mutator
+	meter metric.Meter
 
-	ReportingPeriod time.Duration
+	prDurationHistogram                        metric.Float64Histogram
+	prDurationGauge                            metric.Float64Gauge
+	prTotalCounter                             metric.Int64Counter
+	runningPRsGauge                            metric.Int64ObservableGauge
+	runningPRsWaitingOnPipelineResolutionGauge metric.Int64ObservableGauge
+	runningPRsWaitingOnTaskResolutionGauge     metric.Int64ObservableGauge
+
+	insertTag func(pipeline, pipelinerun string) []attribute.KeyValue
 }
 
-// We cannot register the view multiple times, so NewRecorder lazily
-// initializes this singleton and returns the same recorder across any
-// subsequent invocations.
 var (
 	once           sync.Once
 	r              *Recorder
 	errRegistering error
 )
 
-// NewRecorder creates a new metrics recorder instance
-// to log the PipelineRun related metrics
+// NewRecorder creates a new OpenTelemetry-based metrics recorder instance
 func NewRecorder(ctx context.Context) (*Recorder, error) {
 	once.Do(func() {
+		cfg := config.FromContextOrDefaults(ctx)
 		r = &Recorder{
 			initialized: true,
-
-			// Default to 30s intervals.
-			ReportingPeriod: 30 * time.Second,
+			cfg:         cfg.Metrics,
 		}
 
-		cfg := config.FromContextOrDefaults(ctx)
-		errRegistering = viewRegister(cfg.Metrics)
+		errRegistering = r.configure(cfg.Metrics)
 		if errRegistering != nil {
 			r.initialized = false
 			return
 		}
 	})
-
 	return r, errRegistering
 }
 
-func viewRegister(cfg *config.Metrics) error {
+func (r *Recorder) configure(cfg *config.Metrics) error {
 	r.mutex.Lock()
 	defer r.mutex.Unlock()
 
-	var prunTag []tag.Key
+	if r.meter == nil {
+		r.meter = otel.GetMeterProvider().Meter("tekton_pipelines_controller")
+	}
 
 	switch cfg.PipelinerunLevel {
 	case config.PipelinerunLevelAtPipelinerun:
-		prunTag = []tag.Key{pipelinerunTag, pipelineTag}
 		r.insertTag = pipelinerunInsertTag
 	case config.PipelinerunLevelAtPipeline:
-		prunTag = []tag.Key{pipelineTag}
 		r.insertTag = pipelineInsertTag
 	case config.PipelinerunLevelAtNS:
-		prunTag = []tag.Key{}
 		r.insertTag = nilInsertTag
 	default:
 		return errors.New("invalid config for PipelinerunLevel: " + cfg.PipelinerunLevel)
 	}
 
-	distribution := view.Distribution(10, 30, 60, 300, 900, 1800, 3600, 5400, 10800, 21600, 43200, 86400)
-
-	if cfg.PipelinerunLevel == config.PipelinerunLevelAtPipelinerun {
-		distribution = view.LastValue()
-	} else {
-		switch cfg.DurationPipelinerunType {
-		case config.DurationTaskrunTypeHistogram:
-		case config.DurationTaskrunTypeLastValue:
-			distribution = view.LastValue()
-		default:
-			return errors.New("invalid config for DurationTaskrunType: " + cfg.DurationTaskrunType)
-		}
-	}
-
-	prDurationView = &view.View{
-		Description: prDuration.Description(),
-		Measure:     prDuration,
-		Aggregation: distribution,
-		TagKeys:     append([]tag.Key{statusTag, namespaceTag}, prunTag...),
-	}
-
-	prCountViewTags := []tag.Key{statusTag}
-	if cfg.CountWithReason {
-		prCountViewTags = append(prCountViewTags, reasonTag)
-	}
-	prCountView = &view.View{
-		Description: prCount.Description(),
-		Measure:     prCount,
-		Aggregation: view.Count(),
-		TagKeys:     prCountViewTags,
-	}
-	prTotalView = &view.View{
-		Description: prTotal.Description(),
-		Measure:     prTotal,
-		Aggregation: view.Count(),
-		TagKeys:     []tag.Key{statusTag},
-	}
-
-	runningPRsCountView = &view.View{
-		Description: runningPRsCount.Description(),
-		Measure:     runningPRsCount,
-		Aggregation: view.LastValue(),
-	}
-	runningPRsView = &view.View{
-		Description: runningPRs.Description(),
-		Measure:     runningPRs,
-		Aggregation: view.LastValue(),
-	}
-
-	runningPRsWaitingOnPipelineResolutionCountView = &view.View{
-		Description: runningPRsWaitingOnPipelineResolutionCount.Description(),
-		Measure:     runningPRsWaitingOnPipelineResolutionCount,
-		Aggregation: view.LastValue(),
-	}
-	runningPRsWaitingOnPipelineResolutionView = &view.View{
-		Description: runningPRsWaitingOnPipelineResolution.Description(),
-		Measure:     runningPRsWaitingOnPipelineResolution,
-		Aggregation: view.LastValue(),
-	}
-
-	runningPRsWaitingOnTaskResolutionCountView = &view.View{
-		Description: runningPRsWaitingOnTaskResolutionCount.Description(),
-		Measure:     runningPRsWaitingOnTaskResolutionCount,
-		Aggregation: view.LastValue(),
-	}
-	runningPRsWaitingOnTaskResolutionView = &view.View{
-		Description: runningPRsWaitingOnTaskResolution.Description(),
-		Measure:     runningPRsWaitingOnTaskResolution,
-		Aggregation: view.LastValue(),
-	}
-
-	return view.Register(
-		prDurationView,
-		prCountView,
-		prTotalView,
-		runningPRsCountView,
-		runningPRsView,
-		runningPRsWaitingOnPipelineResolutionCountView,
-		runningPRsWaitingOnPipelineResolutionView,
-		runningPRsWaitingOnTaskResolutionCountView,
-		runningPRsWaitingOnTaskResolutionView,
-	)
-}
-
-func viewUnregister() {
-	view.Unregister(prDurationView,
-		prCountView,
-		prTotalView,
-		runningPRsCountView,
-		runningPRsView,
-		runningPRsWaitingOnPipelineResolutionCountView,
-		runningPRsWaitingOnPipelineResolutionView,
-		runningPRsWaitingOnTaskResolutionCountView,
-		runningPRsWaitingOnTaskResolutionView)
-}
-
-// MetricsOnStore returns a function that checks if metrics are configured for a config.Store, and registers it if so
-func MetricsOnStore(logger *zap.SugaredLogger) func(name string,
-	value interface{}) {
-	return func(name string, value interface{}) {
-		if name == config.GetMetricsConfigName() {
-			cfg, ok := value.(*config.Metrics)
-			if !ok {
-				logger.Error("Failed to do type insertion for extracting metrics config")
-				return
-			}
-			viewUnregister()
-			err := viewRegister(cfg)
+	// Configure Duration Measure
+	if cfg.DurationPipelinerunType == config.DurationPipelinerunTypeLastValue {
+		if r.prDurationGauge == nil {
+			prDurationGauge, err := r.meter.Float64Gauge(
+				"tekton_pipelines_controller_pipelinerun_duration_seconds",
+				metric.WithDescription("The pipelinerun execution time in seconds"),
+				metric.WithUnit("s"),
+			)
 			if err != nil {
-				logger.Errorf("Failed to register View %v ", err)
-				return
+				return fmt.Errorf("failed to create pipelinerun duration gauge: %w", err)
 			}
+			r.prDurationGauge = prDurationGauge
 		}
-	}
-}
-
-func pipelinerunInsertTag(pipeline, pipelinerun string) []tag.Mutator {
-	return []tag.Mutator{tag.Insert(pipelineTag, pipeline),
-		tag.Insert(pipelinerunTag, pipelinerun)}
-}
-
-func pipelineInsertTag(pipeline, pipelinerun string) []tag.Mutator {
-	return []tag.Mutator{tag.Insert(pipelineTag, pipeline)}
-}
-
-func nilInsertTag(task, taskrun string) []tag.Mutator {
-	return []tag.Mutator{}
-}
-
-func getPipelineTagName(pr *v1.PipelineRun) string {
-	pipelineName := anonymous
-	switch {
-	case pr.Spec.PipelineRef != nil && pr.Spec.PipelineRef.Name != "":
-		pipelineName = pr.Spec.PipelineRef.Name
-	case pr.Spec.PipelineSpec != nil:
-	default:
-		if len(pr.Labels) > 0 {
-			pipelineLabel, hasPipelineLabel := pr.Labels[pipeline.PipelineLabelKey]
-			if hasPipelineLabel && len(pipelineLabel) > 0 {
-				pipelineName = pipelineLabel
+		r.prDurationHistogram = nil
+	} else {
+		if r.prDurationHistogram == nil {
+			prDurationHistogram, err := r.meter.Float64Histogram(
+				"tekton_pipelines_controller_pipelinerun_duration_seconds",
+				metric.WithDescription("The pipelinerun execution time in seconds"),
+				metric.WithUnit("s"),
+				metric.WithExplicitBucketBoundaries(10, 30, 60, 300, 900, 1800, 3600, 5400, 10800, 21600, 43200, 86400),
+			)
+			if err != nil {
+				return fmt.Errorf("failed to create pipelinerun duration histogram: %w", err)
 			}
+			r.prDurationHistogram = prDurationHistogram
 		}
+		r.prDurationGauge = nil
 	}
 
-	return pipelineName
+	prTotalCounter, err := r.meter.Int64Counter(
+		"tekton_pipelines_controller_pipelinerun_total",
+		metric.WithDescription("Number of pipelineruns"),
+	)
+	if err != nil {
+		return fmt.Errorf("failed to create pipelinerun total counter: %w", err)
+	}
+	r.prTotalCounter = prTotalCounter
+
+	runningPRsGauge, err := r.meter.Int64ObservableGauge(
+		"tekton_pipelines_controller_running_pipelineruns",
+		metric.WithDescription("Number of pipelineruns executing currently"),
+	)
+	if err != nil {
+		return fmt.Errorf("failed to create running pipelineruns gauge: %w", err)
+	}
+	r.runningPRsGauge = runningPRsGauge
+
+	runningPRsWaitingOnPipelineResolutionGauge, err := r.meter.Int64ObservableGauge(
+		"tekton_pipelines_controller_running_pipelineruns_waiting_on_pipeline_resolution",
+		metric.WithDescription("Number of pipelineruns executing currently that are waiting on resolution requests for their pipeline references."),
+	)
+	if err != nil {
+		return fmt.Errorf("failed to create running pipelineruns waiting on pipeline resolution gauge: %w", err)
+	}
+	r.runningPRsWaitingOnPipelineResolutionGauge = runningPRsWaitingOnPipelineResolutionGauge
+
+	runningPRsWaitingOnTaskResolutionGauge, err := r.meter.Int64ObservableGauge(
+		"tekton_pipelines_controller_running_pipelineruns_waiting_on_task_resolution",
+		metric.WithDescription("Number of pipelineruns executing currently that are waiting on resolution requests for the task references of their taskrun children."),
+	)
+	if err != nil {
+		return fmt.Errorf("failed to create running pipelineruns waiting on task resolution gauge: %w", err)
+	}
+	r.runningPRsWaitingOnTaskResolutionGauge = runningPRsWaitingOnTaskResolutionGauge
+
+	return nil
 }
 
 // DurationAndCount logs the duration of PipelineRun execution and
 // count for number of PipelineRuns succeed or failed
-// returns an error if its failed to log the metrics
-func (r *Recorder) DurationAndCount(pr *v1.PipelineRun, beforeCondition *apis.Condition) error {
+func (r *Recorder) DurationAndCount(ctx context.Context, pr *v1.PipelineRun, beforeCondition *apis.Condition) error {
 	if !r.initialized {
 		return fmt.Errorf("ignoring the metrics recording for %s , failed to initialize the metrics recorder", pr.Name)
 	}
 
 	afterCondition := pr.Status.GetCondition(apis.ConditionSucceeded)
-	// To avoid recount
 	if equality.Semantic.DeepEqual(beforeCondition, afterCondition) {
 		return nil
 	}
@@ -335,6 +198,8 @@ func (r *Recorder) DurationAndCount(pr *v1.PipelineRun, beforeCondition *apis.Co
 		}
 	}
 
+	pipelineName := getPipelineTagName(pr)
+
 	cond := pr.Status.GetCondition(apis.ConditionSucceeded)
 	status := "success"
 	if cond.Status == corev1.ConditionFalse {
@@ -345,90 +210,182 @@ func (r *Recorder) DurationAndCount(pr *v1.PipelineRun, beforeCondition *apis.Co
 	}
 	reason := cond.Reason
 
-	pipelineName := getPipelineTagName(pr)
-
-	ctx, err := tag.New(
-		context.Background(),
-		append([]tag.Mutator{tag.Insert(namespaceTag, pr.Namespace),
-			tag.Insert(statusTag, status), tag.Insert(reasonTag, reason)}, r.insertTag(pipelineName, pr.Name)...)...)
-	if err != nil {
-		return err
+	attrs := []attribute.KeyValue{
+		attribute.String("namespace", pr.Namespace),
+		attribute.String("status", status),
 	}
 
-	metrics.Record(ctx, prDuration.M(duration.Seconds()))
-	metrics.Record(ctx, prCount.M(1))
-	metrics.Record(ctx, prTotal.M(1))
+	if r.cfg.CountWithReason {
+		attrs = append(attrs, attribute.String("reason", reason))
+	}
+
+	if r.insertTag != nil {
+		attrs = append(attrs, r.insertTag(pipelineName, pr.Name)...)
+	}
+
+	if r.prDurationGauge != nil {
+		r.prDurationGauge.Record(ctx, duration.Seconds(), metric.WithAttributes(attrs...))
+	} else if r.prDurationHistogram != nil {
+		r.prDurationHistogram.Record(ctx, duration.Seconds(), metric.WithAttributes(attrs...))
+	}
+	r.prTotalCounter.Add(ctx, 1, metric.WithAttributes(attribute.String("status", status)))
 
 	return nil
 }
 
-// RunningPipelineRuns logs the number of PipelineRuns running right now
-// returns an error if its failed to log the metrics
-func (r *Recorder) RunningPipelineRuns(lister listers.PipelineRunLister) error {
-	r.mutex.Lock()
-	defer r.mutex.Unlock()
-
+// observeRunningPipelineRuns logs the number of PipelineRuns running right now
+func (r *Recorder) observeRunningPipelineRuns(ctx context.Context, o metric.Observer, lister listers.PipelineRunLister) error {
 	if !r.initialized {
 		return errors.New("ignoring the metrics recording, failed to initialize the metrics recorder")
 	}
 
+	r.mutex.Lock()
+	cfg := r.cfg
+	runningPRsGauge := r.runningPRsGauge
+	waitingOnPipelineGauge := r.runningPRsWaitingOnPipelineResolutionGauge
+	waitingOnTaskGauge := r.runningPRsWaitingOnTaskResolutionGauge
+	r.mutex.Unlock()
+
 	prs, err := lister.List(labels.Everything())
 	if err != nil {
-		return fmt.Errorf("failed to list pipelineruns while generating metrics : %w", err)
+		return fmt.Errorf("failed to list pipelineruns: %w", err)
 	}
 
-	var runningPipelineRuns int
-	var trsWaitResolvingTaskRef int
-	var prsWaitResolvingPipelineRef int
+	// This map holds the new counts for the current interval.
+	currentCounts := make(map[attribute.Set]int64)
+	var waitingOnPipelineCount int64
+	var waitingOnTaskCount int64
 
 	for _, pr := range prs {
-		if !pr.IsDone() {
-			runningPipelineRuns++
-			succeedCondition := pr.Status.GetCondition(apis.ConditionSucceeded)
-			if succeedCondition != nil && succeedCondition.Status == corev1.ConditionUnknown {
-				switch succeedCondition.Reason {
-				case v1.TaskRunReasonResolvingTaskRef:
-					trsWaitResolvingTaskRef++
-				case v1.PipelineRunReasonResolvingPipelineRef.String():
-					prsWaitResolvingPipelineRef++
-				}
-			}
+		succeedCondition := pr.Status.GetCondition(apis.ConditionSucceeded)
+		if succeedCondition == nil || !succeedCondition.IsUnknown() {
+			continue
 		}
+
+		// Handle waiting metrics (these are cluster-wide, no extra attributes).
+		switch succeedCondition.Reason {
+		case v1.PipelineRunReasonResolvingPipelineRef.String():
+			waitingOnPipelineCount++
+		case v1.TaskRunReasonResolvingTaskRef:
+			waitingOnTaskCount++
+		}
+
+		// Handle running_pipelineruns metric with per-level aggregation.
+		pipelineName := getPipelineTagName(pr)
+		var attrs []attribute.KeyValue
+
+		// Build attributes based on configured level.
+		switch cfg.RunningPipelinerunLevel {
+		case config.PipelinerunLevelAtPipelinerun:
+			attrs = append(attrs, attribute.String("pipelinerun", pr.Name))
+			fallthrough
+		case config.PipelinerunLevelAtPipeline:
+			attrs = append(attrs, attribute.String("pipeline", pipelineName))
+			fallthrough
+		case config.PipelinerunLevelAtNS:
+			attrs = append(attrs, attribute.String("namespace", pr.Namespace))
+		}
+
+		attrSet := attribute.NewSet(attrs...)
+		currentCounts[attrSet]++
 	}
 
-	ctx, err := tag.New(context.Background())
-	if err != nil {
-		return err
+	// Report running_pipelineruns.
+	// At cluster level the loop already emits the empty-attribute observation,
+	// so only emit the cluster-level total when per-level observations were made.
+	totalRunningPRs := int64(0)
+	for attrSet, value := range currentCounts {
+		o.ObserveInt64(runningPRsGauge, value, metric.WithAttributes(attrSet.ToSlice()...))
+		totalRunningPRs += value
 	}
-	metrics.Record(ctx, runningPRsWaitingOnPipelineResolutionCount.M(float64(prsWaitResolvingPipelineRef)))
-	metrics.Record(ctx, runningPRsWaitingOnPipelineResolution.M(float64(prsWaitResolvingPipelineRef)))
-	metrics.Record(ctx, runningPRsWaitingOnTaskResolutionCount.M(float64(trsWaitResolvingTaskRef)))
-	metrics.Record(ctx, runningPRsWaitingOnTaskResolution.M(float64(trsWaitResolvingTaskRef)))
-	metrics.Record(ctx, runningPRsCount.M(float64(runningPipelineRuns)))
-	metrics.Record(ctx, runningPRs.M(float64(runningPipelineRuns)))
+	if _, clusterAlreadyReported := currentCounts[attribute.NewSet()]; !clusterAlreadyReported {
+		o.ObserveInt64(runningPRsGauge, totalRunningPRs)
+	}
+
+	o.ObserveInt64(waitingOnPipelineGauge, waitingOnPipelineCount)
+	o.ObserveInt64(waitingOnTaskGauge, waitingOnTaskCount)
 
 	return nil
 }
 
-// ReportRunningPipelineRuns invokes RunningPipelineRuns on our configured PeriodSeconds
+// ReportRunningPipelineRuns invokes observeRunningPipelineRuns on our configured PeriodSeconds
 // until the context is cancelled.
 func (r *Recorder) ReportRunningPipelineRuns(ctx context.Context, lister listers.PipelineRunLister) {
 	logger := logging.FromContext(ctx)
 
-	for {
-		delay := time.NewTimer(r.ReportingPeriod)
-		select {
-		case <-ctx.Done():
-			// When the context is cancelled, stop reporting.
-			if !delay.Stop() {
-				<-delay.C
-			}
-			return
+	_, err := r.meter.RegisterCallback(func(ctx context.Context, o metric.Observer) error {
+		return r.observeRunningPipelineRuns(ctx, o, lister)
+	}, r.runningPRsGauge, r.runningPRsWaitingOnPipelineResolutionGauge, r.runningPRsWaitingOnTaskResolutionGauge)
+	if err != nil {
+		logger.Errorf("failed to register callback for running pipelineruns: %v", err)
+		return
+	}
 
-		case <-delay.C:
-			// Every 30s surface a metric for the number of running pipelines.
-			if err := r.RunningPipelineRuns(lister); err != nil {
-				logger.Warnf("Failed to log the metrics : %v", err)
+	<-ctx.Done()
+}
+
+// Helper functions for tag insertion
+func pipelinerunInsertTag(pipeline, pipelinerun string) []attribute.KeyValue {
+	return []attribute.KeyValue{
+		attribute.String("pipeline", pipeline),
+		attribute.String("pipelinerun", pipelinerun),
+	}
+}
+
+func pipelineInsertTag(pipeline, pipelinerun string) []attribute.KeyValue {
+	return []attribute.KeyValue{
+		attribute.String("pipeline", pipeline),
+	}
+}
+
+func nilInsertTag(pipeline, pipelinerun string) []attribute.KeyValue {
+	return []attribute.KeyValue{}
+}
+
+func getPipelineTagName(pr *v1.PipelineRun) string {
+	pipelineName := anonymous
+	switch {
+	case pr.Spec.PipelineRef != nil && pr.Spec.PipelineRef.Name != "":
+		pipelineName = pr.Spec.PipelineRef.Name
+	case pr.Spec.PipelineSpec != nil:
+		// anonymous — inline spec, no external pipeline name
+	default:
+		if label, ok := pr.Labels[pipeline.PipelineLabelKey]; ok && label != "" {
+			pipelineName = label
+		}
+	}
+	return pipelineName
+}
+
+// updateConfig atomically checks whether cfg differs from the current config and,
+// if so, commits it. It returns the committed cfg so the caller can pass the
+// exact same value to configure, eliminating the window between the two calls.
+// Returns nil when the config is unchanged.
+func (r *Recorder) updateConfig(cfg *config.Metrics) *config.Metrics {
+	r.mutex.Lock()
+	defer r.mutex.Unlock()
+
+	if equality.Semantic.DeepEqual(r.cfg, cfg) {
+		return nil
+	}
+	r.cfg = cfg
+	return cfg
+}
+
+// OnStore returns a function that can be passed to a configmap watcher for dynamic updates
+func OnStore(logger *zap.SugaredLogger, recorder *Recorder) func(name string, value interface{}) {
+	return func(name string, value interface{}) {
+		if name != config.GetMetricsConfigName() {
+			return
+		}
+		cfg, ok := value.(*config.Metrics)
+		if !ok {
+			logger.Errorw("failed to convert value to metrics config", "value", value)
+			return
+		}
+		if accepted := recorder.updateConfig(cfg); accepted != nil {
+			if err := recorder.configure(accepted); err != nil {
+				logger.Errorw("failed to configure recorder", "error", err)
 			}
 		}
 	}
