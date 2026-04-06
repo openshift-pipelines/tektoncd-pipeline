@@ -26,8 +26,11 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/tektoncd/pipeline/pkg/apis/config"
+	"github.com/tektoncd/pipeline/pkg/apis/pipeline"
+	v1 "github.com/tektoncd/pipeline/pkg/apis/pipeline/v1"
 	"github.com/tektoncd/pipeline/pkg/result"
 	"golang.org/x/sync/errgroup"
 	corev1 "k8s.io/api/core/v1"
@@ -35,13 +38,19 @@ import (
 )
 
 // ErrSizeExceeded indicates that the result exceeded its maximum allowed size
-var ErrSizeExceeded = errors.New("results size exceeds configured limit")
+var (
+	ErrSizeExceeded = errors.New("results size exceeds configured limit")
+	stepDir         = pipeline.StepsDir
+)
 
 type SidecarLogResultType string
 
 const (
-	taskResultType             SidecarLogResultType = "task"
-	stepResultType             SidecarLogResultType = "step"
+	taskResultType SidecarLogResultType = "task"
+	stepResultType SidecarLogResultType = "step"
+
+	stepArtifactType           SidecarLogResultType = "stepArtifact"
+	taskArtifactType           SidecarLogResultType = "taskArtifact"
 	sidecarResultNameSeparator string               = "."
 )
 
@@ -66,7 +75,7 @@ func encode(w io.Writer, v any) error {
 	return json.NewEncoder(w).Encode(v)
 }
 
-func waitForStepsToFinish(runDir string) error {
+func waitForStepsToFinish(runDir string, sleepInterval time.Duration) error {
 	steps := make(map[string]bool)
 	files, err := os.ReadDir(runDir)
 	if err != nil {
@@ -94,6 +103,9 @@ func waitForStepsToFinish(runDir string) error {
 			if exists, err = fileExists(stepFile + ".err"); exists || err != nil {
 				return err
 			}
+		}
+		if sleepInterval > 0 {
+			time.Sleep(sleepInterval)
 		}
 	}
 	return nil
@@ -135,14 +147,16 @@ func readResults(resultsDir, resultFile, stepName string, resultType SidecarLogR
 // in their results path and prints them in a structured way to its
 // stdout so that the reconciler can parse those logs.
 func LookForResults(w io.Writer, runDir string, resultsDir string, resultNames []string, stepResultsDir string, stepResults map[string][]string) error {
-	if err := waitForStepsToFinish(runDir); err != nil {
+	interval, err := getSidecarLogPollingInterval()
+	if err != nil {
+		return fmt.Errorf("error getting polling interval: %w", err)
+	}
+	if err := waitForStepsToFinish(runDir, interval); err != nil {
 		return fmt.Errorf("error while waiting for the steps to finish  %w", err)
 	}
 	results := make(chan SidecarLogResult)
 	g := new(errgroup.Group)
 	for _, resultFile := range resultNames {
-		resultFile := resultFile
-
 		g.Go(func() error {
 			newResult, err := readResults(resultsDir, resultFile, "", taskResultType)
 			if err != nil {
@@ -157,10 +171,7 @@ func LookForResults(w io.Writer, runDir string, resultsDir string, resultNames [
 	}
 
 	for sName, sresults := range stepResults {
-		sresults := sresults
-		sName := sName
 		for _, resultName := range sresults {
-			resultName := resultName
 			stepResultsDir := filepath.Join(stepResultsDir, sName, "results")
 
 			g.Go(func() error {
@@ -197,6 +208,41 @@ func LookForResults(w io.Writer, runDir string, resultsDir string, resultNames [
 	return nil
 }
 
+// LookForArtifacts searches for and processes artifacts within a specified run directory.
+// It looks for "provenance.json" files within the "artifacts" subdirectory of each named step.
+// If the provenance file exists, the function extracts artifact information, formats it into a
+// JSON string, and encodes it for output alongside relevant metadata (step name, artifact type).
+func LookForArtifacts(w io.Writer, names []string, runDir string) error {
+	interval, err := getSidecarLogPollingInterval()
+	if err != nil {
+		return fmt.Errorf("error getting polling interval: %w", err)
+	}
+	if err := waitForStepsToFinish(runDir, interval); err != nil {
+		return err
+	}
+
+	for _, name := range names {
+		p := filepath.Join(stepDir, name, "artifacts", "provenance.json")
+		if exist, err := fileExists(p); err != nil {
+			return err
+		} else if !exist {
+			continue
+		}
+		subRes, err := extractArtifactsFromFile(p)
+		if err != nil {
+			return err
+		}
+		values, err := json.Marshal(&subRes)
+		if err != nil {
+			return err
+		}
+		if err := encode(w, SidecarLogResult{Name: name, Value: string(values), Type: stepArtifactType}); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 // GetResultsFromSidecarLogs extracts results from the logs of the results sidecar
 func GetResultsFromSidecarLogs(ctx context.Context, clientset kubernetes.Interface, namespace string, name string, container string, podPhase corev1.PodPhase) ([]result.RunResult, error) {
 	sidecarLogResults := []result.RunResult{}
@@ -215,23 +261,44 @@ func GetResultsFromSidecarLogs(ctx context.Context, clientset kubernetes.Interfa
 }
 
 func extractResultsFromLogs(logs io.Reader, sidecarLogResults []result.RunResult, maxResultLimit int) ([]result.RunResult, error) {
-	scanner := bufio.NewScanner(logs)
-	buf := make([]byte, maxResultLimit)
-	scanner.Buffer(buf, maxResultLimit)
-	for scanner.Scan() {
-		result, err := parseResults(scanner.Bytes(), maxResultLimit)
+	reader := bufio.NewReader(logs)
+	for {
+		line, isPrefix, err := reader.ReadLine()
+		if err != nil {
+			if errors.Is(err, io.EOF) {
+				break
+			}
+			return nil, err
+		}
+
+		lineLength := len(line)
+		for isPrefix {
+			more, nextPrefix, err := reader.ReadLine()
+			if err != nil {
+				if errors.Is(err, io.EOF) {
+					break
+				}
+				return nil, err
+			}
+			lineLength += len(more)
+
+			if lineLength <= maxResultLimit {
+				line = append(line, more...)
+			}
+			isPrefix = nextPrefix
+		}
+
+		if lineLength > maxResultLimit {
+			return sidecarLogResults, fmt.Errorf("%d bytes %w of %d bytes", lineLength, ErrSizeExceeded, maxResultLimit)
+		}
+
+		result, err := parseResults(line, maxResultLimit)
 		if err != nil {
 			return nil, err
 		}
 		sidecarLogResults = append(sidecarLogResults, result)
 	}
 
-	if scanner.Err() != nil {
-		if errors.Is(scanner.Err(), bufio.ErrTooLong) {
-			return sidecarLogResults, ErrSizeExceeded
-		}
-		return nil, scanner.Err()
-	}
 	return sidecarLogResults, nil
 }
 
@@ -250,8 +317,12 @@ func parseResults(resultBytes []byte, maxResultLimit int) (result.RunResult, err
 		resultType = result.TaskRunResultType
 	case stepResultType:
 		resultType = result.StepResultType
+	case stepArtifactType:
+		resultType = result.StepArtifactsResultType
+	case taskArtifactType:
+		resultType = result.TaskRunArtifactsResultType
 	default:
-		return result.RunResult{}, fmt.Errorf("invalid sidecar result type %v. Must be %v or %v", res.Type, taskResultType, stepResultType)
+		return result.RunResult{}, fmt.Errorf("invalid sidecar result type %v. Must be %v or %v or %v", res.Type, taskResultType, stepResultType, stepArtifactType)
 	}
 	runResult = result.RunResult{
 		Key:        res.Name,
@@ -259,4 +330,35 @@ func parseResults(resultBytes []byte, maxResultLimit int) (result.RunResult, err
 		ResultType: resultType,
 	}
 	return runResult, nil
+}
+
+func parseArtifacts(fileContent []byte) (v1.Artifacts, error) {
+	var as v1.Artifacts
+	if err := json.Unmarshal(fileContent, &as); err != nil {
+		return as, fmt.Errorf("invalid artifacts : %w", err)
+	}
+	return as, nil
+}
+
+func extractArtifactsFromFile(filename string) (v1.Artifacts, error) {
+	b, err := os.ReadFile(filename)
+	if err != nil {
+		return v1.Artifacts{}, fmt.Errorf("error reading the results file %w", err)
+	}
+	return parseArtifacts(b)
+}
+
+// getSidecarLogPollingInterval reads the SIDECAR_LOG_POLLING_INTERVAL environment variable,
+// parses it as a time.Duration, and returns the result. If the variable is not set or is invalid,
+// it defaults to 100ms.
+func getSidecarLogPollingInterval() (time.Duration, error) {
+	intervalStr := os.Getenv("SIDECAR_LOG_POLLING_INTERVAL")
+	if intervalStr == "" {
+		intervalStr = "100ms"
+	}
+	interval, err := time.ParseDuration(intervalStr)
+	if err != nil {
+		return 100 * time.Millisecond, err
+	}
+	return interval, nil
 }

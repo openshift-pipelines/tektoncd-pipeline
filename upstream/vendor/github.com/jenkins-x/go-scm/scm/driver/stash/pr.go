@@ -51,7 +51,7 @@ func (s *pullService) List(ctx context.Context, repo string, opts *scm.PullReque
 
 func (s *pullService) ListChanges(ctx context.Context, repo string, number int, opts *scm.ListOptions) ([]*scm.Change, *scm.Response, error) {
 	namespace, name := scm.Split(repo)
-	path := fmt.Sprintf("rest/api/1.0/projects/%s/repos/%s/pull-requests/%d/changes", namespace, name, number)
+	path := fmt.Sprintf("rest/api/1.0/projects/%s/repos/%s/pull-requests/%d/changes?%s", namespace, name, number, encodeListOptions(opts))
 	out := new(diffstats)
 	res, err := s.client.do(ctx, "GET", path, nil, out)
 	if !out.pagination.LastPage.Bool {
@@ -100,7 +100,7 @@ func (s *pullService) ListComments(ctx context.Context, repo string, number int,
 
 	projectName, repoName := scm.Split(repo)
 	out := new(pullRequestActivities)
-	path := fmt.Sprintf("rest/api/1.0/projects/%s/repos/%s/pull-requests/%d/activities", projectName, repoName, number)
+	path := fmt.Sprintf("rest/api/1.0/projects/%s/repos/%s/pull-requests/%d/activities?%s", projectName, repoName, number, encodeListOptions(opts))
 	res, err := s.client.do(ctx, "GET", path, nil, out)
 	if !out.pagination.LastPage.Bool {
 		res.Page.First = 1
@@ -305,6 +305,21 @@ func (s *pullService) ClearMilestone(ctx context.Context, repo string, prID int)
 	return nil, scm.ErrNotSupported
 }
 
+func (s *pullService) DeletePullRequest(ctx context.Context, repo string, prID int) (*scm.Response, error) {
+	namespace, name := scm.Split(repo)
+	// in Bitbucket server (stash) to delete a pull request `version` of the pull request
+	// must be provided in body of the request so it's worth fetching pull request via rest api
+	// to get latest version of the pull request.
+	path := fmt.Sprintf("rest/api/1.0/projects/%s/repos/%s/pull-requests/%d", namespace, name, prID)
+	out := new(pullRequest)
+	_, err := s.client.do(ctx, http.MethodGet, path, nil, out)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get pull request. err: %v", err)
+	}
+	in := map[string]int{"version": out.Version}
+	return s.client.do(ctx, http.MethodDelete, path, &in, nil)
+}
+
 type createPRInput struct {
 	Title       string           `json:"title,omitempty"`
 	Description string           `json:"description,omitempty"`
@@ -413,6 +428,7 @@ func convertPullRequest(from *pullRequest) *scm.PullRequest {
 		Created:   time.Unix(from.CreatedDate/1000, 0),
 		Updated:   time.Unix(from.UpdatedDate/1000, 0),
 		Author: scm.User{
+			ID:     from.Author.User.ID,
 			Login:  from.Author.User.Slug,
 			Name:   from.Author.User.DisplayName,
 			Email:  from.Author.User.EmailAddress,
@@ -486,6 +502,7 @@ func convertPullRequestComment(from *pullRequestComment) *scm.Comment {
 		Created: time.Unix(from.CreatedDate/1000, 0),
 		Updated: time.Unix(from.UpdatedDate/1000, 0),
 		Author: scm.User{
+			ID:     from.Author.ID,
 			Login:  from.Author.Slug,
 			Name:   from.Author.DisplayName,
 			Email:  from.Author.EmailAddress,

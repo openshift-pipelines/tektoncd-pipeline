@@ -1,5 +1,4 @@
 //go:build e2e
-// +build e2e
 
 /*
 Copyright 2019 The Tekton Authors
@@ -40,6 +39,7 @@ const (
 // TestSidecarTaskSupport checks whether support for sidecars is working
 // as expected by running a Task with a Sidecar defined and confirming
 // that both the primary and sidecar containers terminate.
+// @test:execution=parallel
 func TestSidecarTaskSupport(t *testing.T) {
 	tests := []struct {
 		desc           string
@@ -57,12 +57,17 @@ func TestSidecarTaskSupport(t *testing.T) {
 		sidecarCommand: []string{"echo", "\"hello from sidecar\""},
 	}}
 
-	ctx := context.Background()
+	ctx := t.Context()
 	t.Parallel()
 
 	for _, test := range tests {
-		test := test
 		t.Run(test.desc, func(t *testing.T) {
+			// If Kubernetes Sidecar support is enabled the Pod will terminate and it gets caught as an error though it's expected
+			ff := getFeatureFlagsBaseOnAPIFlag(t)
+
+			if ff.EnableKubernetesSidecar {
+				t.SkipNow()
+			}
 			t.Parallel()
 
 			ctx, cancel := context.WithCancel(ctx)
@@ -80,11 +85,11 @@ metadata:
 spec:
   steps:
   - name: %s
-    image: busybox
+    image: mirror.gcr.io/busybox
     command: [%s]
   sidecars:
   - name: %s
-    image: busybox
+    image: mirror.gcr.io/busybox
     command: [%s]
 `, sidecarTaskName, namespace, primaryContainerName, stringSliceToYAMLArray(test.stepCommand), sidecarContainerName, stringSliceToYAMLArray(test.sidecarCommand)))
 

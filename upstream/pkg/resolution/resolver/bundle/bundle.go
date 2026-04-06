@@ -37,10 +37,12 @@ const (
 // RequestOptions are the options used to request a resource from
 // a remote bundle.
 type RequestOptions struct {
+	ServiceAccount  string
 	ImagePullSecret string
 	Bundle          string
 	EntryName       string
 	Kind            string
+	Cache           string
 }
 
 // ResolvedResource wraps the content of a matched entry in a bundle.
@@ -141,9 +143,17 @@ func retrieveImage(ctx context.Context, keychain authn.Keychain, ref string) (st
 	if err != nil {
 		return "", nil, fmt.Errorf("%s is an unparseable image reference: %w", ref, err)
 	}
+	customRetryBackoff, err := GetBundleResolverBackoff(ctx)
+	if err == nil {
+		img, err := remote.Image(imgRef, remote.WithAuthFromKeychain(keychain), remote.WithContext(ctx),
+			remote.WithRetryBackoff(customRetryBackoff))
 
-	img, err := remote.Image(imgRef, remote.WithAuthFromKeychain(keychain), remote.WithContext(ctx))
-	return imgRef.Context().Name(), img, err
+		return imgRef.Context().Name(), img, err
+	} else {
+		img, err := remote.Image(imgRef, remote.WithAuthFromKeychain(keychain), remote.WithContext(ctx))
+
+		return imgRef.Context().Name(), img, err
+	}
 }
 
 // checkImageCompliance will perform common checks to ensure the Tekton Bundle is compliant to our spec.

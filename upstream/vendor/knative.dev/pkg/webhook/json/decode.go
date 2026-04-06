@@ -19,6 +19,7 @@ package json
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"io"
 )
 
@@ -32,7 +33,7 @@ var (
 	// Unmarshal is an alias for json.Unmarshal
 	Unmarshal = json.Unmarshal
 
-	//Marshal is an alias for json.Marshal
+	// Marshal is an alias for json.Marshal
 	Marshal = json.Marshal
 )
 
@@ -95,18 +96,19 @@ func findMetadataOffsets(bites []byte) (start, end int64, err error) {
 
 	for {
 		t, err = dec.Token()
-		if err == io.EOF { //nolint
+		if errors.Is(err, io.EOF) {
 			break
 		}
 		if err != nil {
-			return
+			return start, end, err
 		}
 
 		switch v := t.(type) {
 		case json.Delim:
-			if v == '{' {
+			switch v {
+			case '{':
 				level++
-			} else if v == '}' {
+			case '}':
 				level--
 			}
 		case string:
@@ -119,7 +121,7 @@ func findMetadataOffsets(bites []byte) (start, end int64, err error) {
 				end = dec.InputOffset()
 
 				// we exit early to stop processing the rest of the object
-				return
+				return start, end, err
 			}
 		}
 	}

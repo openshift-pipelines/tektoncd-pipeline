@@ -24,6 +24,8 @@ weight: 204
     - [Mapping <code>ServiceAccount</code> credentials to <code>Tasks</code>](#mapping-serviceaccount-credentials-to-tasks)
     - [Specifying a <code>Pod</code> template](#specifying-a-pod-template)
     - [Specifying taskRunSpecs](#specifying-taskrunspecs)
+      - [Parameter Substitution in taskRunSpecs](#parameter-substitution-in-taskrunspecs)
+      - [Matrix Support with taskRunSpecs](#matrix-support-with-taskrunspecs)
     - [Specifying <code>Workspaces</code>](#specifying-workspaces)
       - [Propagated Workspaces](#propagated-workspaces)
         - [Referenced TaskRuns within Embedded PipelineRuns](#referenced-taskruns-within-embedded-pipelineruns)
@@ -33,6 +35,7 @@ weight: 204
     - [The <code>status</code> field](#the-status-field)
     - [Monitoring execution status](#monitoring-execution-status)
     - [Marking off user errors](#marking-off-user-errors)
+  - [Delegating reconciliation](#delegating-reconciliation)
   - [Cancelling a <code>PipelineRun</code>](#cancelling-a-pipelinerun)
   - [Gracefully cancelling a <code>PipelineRun</code>](#gracefully-cancelling-a-pipelinerun)
   - [Gracefully stopping a <code>PipelineRun</code>](#gracefully-stopping-a-pipelinerun)
@@ -73,11 +76,12 @@ A `PipelineRun` definition supports the following fields:
   - [`serviceAccountName`](#specifying-custom-serviceaccount-credentials) - Specifies a `ServiceAccount`
     object that supplies specific execution credentials for the `Pipeline`.
   - [`status`](#cancelling-a-pipelinerun) - Specifies options for cancelling a `PipelineRun`.
-  - [`taskRunSpecs`](#specifying-taskrunspecs) - Specifies a list of `PipelineRunTaskSpec` which allows for setting `ServiceAccountName`, [`Pod` template](./podtemplates.md), and `Metadata` for each task. This overrides the `Pod` template set for the entire `Pipeline`.
+  - [`taskRunSpecs`](#specifying-taskrunspecs) - Specifies a list of `PipelineTaskRunSpec` which allows for setting `ServiceAccountName`, [`Pod` template](./podtemplates.md), and `Metadata` for each task. This overrides the `Pod` template set for the entire `Pipeline`.
   - [`timeout`](#configuring-a-failure-timeout) - Specifies the timeout before the `PipelineRun` fails. `timeout` is deprecated and will eventually be removed, so consider using `timeouts` instead.
   - [`timeouts`](#configuring-a-failure-timeout) - Specifies the timeout before the `PipelineRun` fails. `timeouts` allows more granular timeout configuration, at the pipeline, tasks, and finally levels
   - [`podTemplate`](#specifying-a-pod-template) - Specifies a [`Pod` template](./podtemplates.md) to use as the basis for the configuration of the `Pod` that executes each `Task`.
   - [`workspaces`](#specifying-workspaces) - Specifies a set of workspace bindings which must match the names of workspaces declared in the pipeline being used.
+  - [`managedBy`](#delegating-reconciliation) - Specifies the controller responsible for managing this PipelineRun's lifecycle.
 
 [kubernetes-overview]:
   https://kubernetes.io/docs/concepts/overview/working-with-objects/kubernetes-objects/#required-fields
@@ -158,10 +162,6 @@ A `Tekton Bundle` is an OCI artifact that contains Tekton resources like `Tasks`
 
 You can reference a `Tekton bundle` in a `TaskRef` in both `v1` and `v1beta1` using [remote resolution](./bundle-resolver.md#pipeline-resolution). The example syntax shown below for `v1` uses remote resolution and requires enabling [beta features](./additional-configs.md#beta-features).
 
-In `v1beta1`, you can also reference a `Tekton bundle` using OCI bundle syntax, which has been deprecated in favor of remote resolution. The example shown below for `v1beta1` uses OCI bundle syntax, and requires enabling `enable-tekton-oci-bundles: "true"` feature flag.
-
-{{< tabs >}}
-{{% tab "v1 & v1beta1" %}}
 ```yaml
 spec:
   pipelineRef:
@@ -174,17 +174,6 @@ spec:
     - name: kind
       value: Pipeline
 ```
-{{% /tab %}}
-
-{{% tab "v1beta1" %}}
- ```yaml
- spec:
-   pipelineRef:
-     name: mypipeline
-     bundle: docker.io/myrepo/mycatalog:v1.0
- ```
-{{% /tab %}}
-{{< /tabs >}}
 
 The syntax and caveats are similar to using `Tekton Bundles` for  `Task` references
 in [Pipelines](pipelines.md#tekton-bundles) or [TaskRuns](taskruns.md#tekton-bundles).
@@ -230,6 +219,8 @@ metadata:
 spec:
   tasks:
     - name: task
+      taskRef:
+        name: task
 ---
 apiVersion: tekton.dev/v1 # or tekton.dev/v1beta1
 kind: PipelineRun
@@ -705,6 +696,10 @@ set for the target [`namespace`](https://kubernetes.io/docs/concepts/overview/wo
 
 For more information, see [`ServiceAccount`](auth.md).
 
+**Note**: When using [Affinity Assistants](affinityassistants.md), the Affinity Assistant pods automatically inherit
+the `serviceAccountName` specified here, ensuring proper permissions in security-restricted environments like OpenShift.
+See [Affinity Assistant ServiceAccount Configuration](affinityassistants.md#serviceaccount-configuration) for details.
+
 [`Custom tasks`](pipelines.md#using-custom-tasks) may or may not use a service account name.
 Consult the documentation of the custom task that you are using to determine whether it supports a service account name.
 
@@ -964,6 +959,7 @@ spec:
       podTemplate:
         nodeSelector:
           disktype: ssd
+      timeout: "1h30m"
 ```
 {{% /tab %}}
 
@@ -981,12 +977,16 @@ spec:
       taskPodTemplate:
         nodeSelector:
           disktype: ssd
+      timeout: "1h30m"
 ```
 {{% /tab %}}
 {{< /tabs >}}
 
 If used with this `Pipeline`,  `build-task` will use the task specific `PodTemplate` (where `nodeSelector` has `disktype` equal to `ssd`)
-along with `securityContext` from the `pipelineRun.spec.podTemplate`.
+along with `securityContext` from the `pipelineRun.spec.podTemplate`. The task will also have a specific timeout of 1 hour and 30 minutes. This overrides any existing timeout already defined by the pipelineTask as well, though the specified `pipelineRun.spec.timeouts.tasks` will still take precedence.
+
+For more details on timeout overrides, precedence rules, validation, and practical examples, see [Overriding Individual Task Timeouts](#overriding-individual-task-timeouts) in the failure timeout section.
+
 `PipelineTaskRunSpec` may also contain `StepSpecs` and `SidecarSpecs`; see
 [Overriding `Task` `Steps` and `Sidecars`](./taskruns.md#overriding-task-steps-and-sidecars) for more information.
 
@@ -1022,6 +1022,60 @@ spec:
 ```
 
 If a metadata key is present in different levels, the value that will be used in the `PipelineRun` is determined using this precedence order: `PipelineRun.spec.taskRunSpec.metadata` > `PipelineRun.metadata` > `Pipeline.spec.tasks.taskSpec.metadata`.
+
+#### Parameter Substitution in taskRunSpecs
+
+The `taskRunSpecs` supports parameter substitution in the `podTemplate` fields. This allows you to dynamically configure pod templates based on pipeline parameters, including those from Matrix tasks.
+
+For example, you can use parameter substitution to configure node selectors based on architecture parameters:
+
+```yaml
+spec:
+  taskRunSpecs:
+    - pipelineTaskName: build-task
+      podTemplate:
+        nodeSelector:
+          kubernetes.io/arch: $(params.arch)
+        tolerations:
+          - key: "environment"
+            operator: "Equal"
+            value: "$(params.env)"
+            effect: "NoSchedule"
+```
+
+#### Matrix Support with taskRunSpecs
+
+When using [`Matrix`](matrix.md) to fan out `PipelineTasks`, the `taskRunSpecs` can reference matrix parameters for dynamic pod template configuration. Each matrix combination will create a separate `TaskRun` with the appropriate parameter values substituted in the pod template.
+
+Here's an example showing how to use `taskRunSpecs` with matrix parameters:
+
+```yaml
+spec:
+  taskRunSpecs:
+    - pipelineTaskName: build-and-push-manifest
+      podTemplate:
+        nodeSelector:
+          kubernetes.io/arch: $(params.arch)
+  pipelineSpec:
+    tasks:
+      - name: build-and-push-manifest
+        matrix:
+          params:
+            - name: arch
+              value: ["amd64", "arm64"]
+        taskSpec:
+          params:
+            - name: arch
+          steps:
+            - name: build-and-push
+              image: ubuntu
+              script: |
+                echo "building on $(params.arch)"
+```
+
+In this example, the matrix will create two `TaskRuns` - one for `amd64` and one for `arm64`. Each will have its pod scheduled on the appropriate node architecture using the nodeSelector with the substituted parameter value.
+
+For a complete example, see [`pipelinerun-with-taskrunspecs-matrix-param-substitution.yaml`](../examples/v1/pipelineruns/pipelinerun-with-taskrunspecs-matrix-param-substitution.yaml).
 
 ### Specifying `Workspaces`
 
@@ -1373,6 +1427,36 @@ The global default timeout is set to 60 minutes when you first install Tekton. Y
 a different global default timeout value using the `default-timeout-minutes` field in
 [`config/config-defaults.yaml`](./../config/config-defaults.yaml).
 
+#### Overriding Individual Task Timeouts
+
+You can use `taskRunSpecs` to override individual task timeouts at runtime without modifying the Pipeline definition.
+
+**Timeout Precedence (highest to lowest):**
+1. `taskRunSpecs[].timeout` - runtime override per task
+2. `pipeline.spec.tasks[].timeout` - Pipeline spec timeout
+3. `timeouts.tasks` or `timeouts.pipeline` - PipelineRun constraints  
+4. Global default timeout
+
+```yaml
+apiVersion: tekton.dev/v1
+kind: PipelineRun
+spec:
+  timeouts:
+    pipeline: "10m"    # 3. PipelineRun constraint
+  pipelineSpec:
+    tasks:
+    - name: task-a
+      timeout: "8m"     # 2. Pipeline spec timeout
+      taskSpec: { ... }
+    - name: task-b  
+      taskSpec: { ... } # 4. Uses global default (60m)
+  taskRunSpecs:
+  - pipelineTaskName: task-a
+    timeout: "5m"       # 1. Highest priority - overrides 8m Pipeline timeout
+```
+
+**Note:** `taskRunSpecs` timeouts cannot exceed pipeline-level constraints and will fail validation if they do.
+
 Example timeouts usages are as follows:
 
 Combination 1: Set the timeout for the entire `pipeline` and reserve a portion of it for `tasks`.
@@ -1565,6 +1649,39 @@ status:
 NAME                      STARTED         DURATION   STATUS
 pipelinerun-with-params   5 seconds ago   0s         Failed(ParameterMissing)
 ```
+
+## Delegating reconciliation
+
+The `managedBy` field allows you to delegate the responsibility of managing a `PipelineRun`'s lifecycle to an external controller. When this field is set to a value other than `"tekton.dev/pipeline"`, the Tekton Pipeline controller will ignore the `PipelineRun`, allowing your external controller to take full control. This delegation enables several advanced use cases, such as implementing custom pipeline execution logic, integrating with external management tools, using advanced scheduling algorithms, or coordinating PipelineRuns across multiple clusters (like using [MultiKueue](https://kueue.sigs.k8s.io/docs/concepts/multikueue/)).
+
+### Example
+
+```yaml
+apiVersion: tekton.dev/v1
+kind: PipelineRun
+metadata:
+  name: externally-managed-pipeline
+spec:
+  pipelineRef:
+    name: my-pipeline
+  managedBy: "my-custom-controller"
+```
+
+### Behavior
+
+- **When `managedBy` is empty**: The Tekton Pipeline controller manages the PipelineRun normally
+- **When `managedBy` is set to `"tekton.dev/pipeline"`**: The Tekton Pipeline controller manages the PipelineRun normally
+- **When `managedBy` is set to any other value**: The Tekton Pipeline controller ignores the PipelineRun completely
+- **Immutability**: The `managedBy` field is immutable and cannot be changed after creation
+
+### External controller responsibilities
+
+When you set `managedBy` to a custom value, your external controller is responsible for:
+
+- Creating and managing TaskRuns
+- Updating PipelineRun status
+- Handling timeouts and cancellations
+- Managing retries and error handling
 
 ## Cancelling a `PipelineRun`
 

@@ -1,5 +1,4 @@
 //go:build e2e
-// +build e2e
 
 /*
 Copyright 2021 The Tekton Authors
@@ -33,8 +32,9 @@ import (
 	knativetest "knative.dev/pkg/test"
 )
 
+// @test:execution=parallel
 func TestFailingStepOnContinue(t *testing.T) {
-	ctx := context.Background()
+	ctx := t.Context()
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	c, namespace := setup(ctx, t)
@@ -53,7 +53,7 @@ spec:
     steps:
       - name: failing-step
         onError: continue
-        image: busybox
+        image: mirror.gcr.io/busybox
         script: 'echo -n 123 | tee $(results.result1.path); exit 1; echo -n 456 | tee $(results.result2.path)'
 `, taskRunName, namespace))
 

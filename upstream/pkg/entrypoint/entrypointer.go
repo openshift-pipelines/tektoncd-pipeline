@@ -21,6 +21,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
+
 	"log"
 	"os"
 	"os/exec"
@@ -31,16 +33,13 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/google/cel-go/cel"
 	"github.com/tektoncd/pipeline/internal/artifactref"
-	"github.com/tektoncd/pipeline/pkg/apis/config"
-	"github.com/tektoncd/pipeline/pkg/apis/pipeline"
-	v1 "github.com/tektoncd/pipeline/pkg/apis/pipeline/v1"
+	v1 "github.com/tektoncd/pipeline/pkg/apis/pipeline/v1/types"
+	"github.com/tektoncd/pipeline/pkg/entrypoint/pipeline"
 	"github.com/tektoncd/pipeline/pkg/internal/resultref"
-	"github.com/tektoncd/pipeline/pkg/pod"
 	"github.com/tektoncd/pipeline/pkg/result"
-	"github.com/tektoncd/pipeline/pkg/spire"
 	"github.com/tektoncd/pipeline/pkg/termination"
-	"go.uber.org/zap"
 )
 
 // RFC3339 with millisecond
@@ -48,6 +47,41 @@ const (
 	timeFormat      = "2006-01-02T15:04:05.000Z07:00"
 	ContinueOnError = "continue"
 	FailOnError     = "stopAndFail"
+)
+
+const (
+	breakpointExitSuffix                     = ".breakpointexit"
+	breakpointBeforeStepSuffix               = ".beforestepexit"
+	ResultExtractionMethodTerminationMessage = "termination-message"
+	TerminationReasonSkipped                 = "Skipped"
+	TerminationReasonCancelled               = "Cancelled"
+	TerminationReasonTimeoutExceeded         = "TimeoutExceeded"
+	// DownwardMountCancelFile is cancellation file mount to step, entrypoint will check this file to cancel the step.
+	downwardMountPoint      = "/tekton/downward"
+	downwardMountCancelFile = "cancel"
+	stepPrefix              = "step-"
+)
+const (
+	// CredsDir is the directory where credentials are placed to meet the legacy credentials
+	// helpers image (aka "creds-init") contract
+	CredsDir = "/tekton/creds" // #nosec
+)
+
+var DownwardMountCancelFile string
+
+func init() {
+	DownwardMountCancelFile = filepath.Join(downwardMountPoint, downwardMountCancelFile)
+}
+
+// DebugBeforeStepError is an error means mark before step breakpoint failure
+type DebugBeforeStepError string
+
+func (e DebugBeforeStepError) Error() string {
+	return string(e)
+}
+
+var (
+	errDebugBeforeStep = DebugBeforeStepError("before step breakpoint error file, user decided to skip the current step execution")
 )
 
 // ScriptDir for testing
@@ -120,6 +154,8 @@ type Entrypointer struct {
 	Timeout *time.Duration
 	// BreakpointOnFailure helps determine if entrypoint execution needs to adapt debugging requirements
 	BreakpointOnFailure bool
+	// DebugBeforeStep help user attach container before execution
+	DebugBeforeStep bool
 	// OnError defines exiting behavior of the entrypoint
 	// set it to "stopAndFail" to indicate the entrypoint to exit the taskRun if the container exits with non zero exit code
 	// set it to "continue" to indicate the entrypoint to continue executing the rest of the steps irrespective of the container exit code
@@ -127,11 +163,17 @@ type Entrypointer struct {
 	// StepMetadataDir is the directory for a step where the step related metadata can be stored
 	StepMetadataDir string
 	// SpireWorkloadAPI connects to spire and does obtains SVID based on taskrun
-	SpireWorkloadAPI spire.EntrypointerAPIClient
+	SpireWorkloadAPI EntrypointerAPIClient
 	// ResultsDirectory is the directory to find results, defaults to pipeline.DefaultResultPath
 	ResultsDirectory string
 	// ResultExtractionMethod is the method using which the controller extracts the results from the task pod.
 	ResultExtractionMethod string
+
+	// StepWhenExpressions     a list of when expression to decide if the step should be skipped
+	StepWhenExpressions v1.StepWhenExpressions
+
+	// ArtifactsDirectory is the directory to find artifacts, defaults to pipeline.ArtifactsDir
+	ArtifactsDirectory string
 }
 
 // Waiter encapsulates waiting for files to exist.
@@ -154,15 +196,11 @@ type PostWriter interface {
 // Go optionally waits for a file, runs the command, and writes a
 // post file.
 func (e Entrypointer) Go() error {
-	prod, _ := zap.NewProduction()
-	logger := prod.Sugar()
-
 	output := []result.RunResult{}
 	defer func() {
 		if wErr := termination.WriteMessage(e.TerminationPath, output); wErr != nil {
-			logger.Fatalf("Error while writing message: %s", wErr)
+			log.Fatalf("Error while writing message: %s", wErr)
 		}
-		_ = logger.Sync()
 	}()
 
 	if err := os.MkdirAll(filepath.Join(e.StepMetadataDir, "results"), os.ModePerm); err != nil {
@@ -186,11 +224,16 @@ func (e Entrypointer) Go() error {
 			})
 
 			if errors.Is(err, ErrSkipPreviousStepFailed) {
-				output = append(output, e.outputRunResult(pod.TerminationReasonSkipped))
+				output = append(output, e.outputRunResult(TerminationReasonSkipped))
 			}
 
 			return err
 		}
+	}
+
+	var err error
+	if e.DebugBeforeStep {
+		err = e.waitBeforeStepDebug()
 	}
 
 	output = append(output, result.RunResult{
@@ -199,7 +242,6 @@ func (e Entrypointer) Go() error {
 		ResultType: result.InternalTektonResultType,
 	})
 
-	var err error
 	if e.Timeout != nil && *e.Timeout < time.Duration(0) {
 		err = errors.New("negative timeout specified")
 	}
@@ -207,10 +249,10 @@ func (e Entrypointer) Go() error {
 	var cancel context.CancelFunc
 	if err == nil {
 		if err := e.applyStepResultSubstitutions(pipeline.StepsDir); err != nil {
-			logger.Error("Error while substituting step results: ", err)
+			slog.Error("Error while substituting step results:", slog.Any("error", err))
 		}
 		if err := e.applyStepArtifactSubstitutions(pipeline.StepsDir); err != nil {
-			logger.Error("Error while substituting step artifacts: ", err)
+			slog.Error("Error while substituting step artifacts:", slog.Any("error", err))
 		}
 
 		ctx, cancel = context.WithCancel(ctx)
@@ -221,24 +263,39 @@ func (e Entrypointer) Go() error {
 		// start a goroutine to listen for cancellation file
 		go func() {
 			if err := e.waitingCancellation(ctx, cancel); err != nil && (!IsContextCanceledError(err) && !IsContextDeadlineError(err)) {
-				logger.Error("Error while waiting for cancellation", zap.Error(err))
+				slog.Error("Error while waiting for cancellation", slog.Any("error", err))
 			}
 		}()
-		err = e.Runner.Run(ctx, e.Command...)
+		allowExec, err1 := e.allowExec()
+
+		switch {
+		case err1 != nil:
+			err = err1
+		case allowExec:
+			err = e.Runner.Run(ctx, e.Command...)
+		default:
+			slog.Info("Step was skipped due to when expressions were evaluated to false.")
+			output = append(output, e.outputRunResult(TerminationReasonSkipped))
+			e.WritePostFile(e.PostFile, nil)
+			e.WriteExitCodeFile(e.StepMetadataDir, "0")
+			return nil
+		}
 	}
 
 	var ee *exec.ExitError
 	switch {
+	case err != nil && errors.Is(err, errDebugBeforeStep):
+		e.WritePostFile(e.PostFile, err)
 	case err != nil && errors.Is(err, ErrContextCanceled):
-		logger.Info("Step was canceling")
-		output = append(output, e.outputRunResult(pod.TerminationReasonCancelled))
+		slog.Info("Step was canceling")
+		output = append(output, e.outputRunResult(TerminationReasonCancelled))
 		e.WritePostFile(e.PostFile, ErrContextCanceled)
 		e.WriteExitCodeFile(e.StepMetadataDir, syscall.SIGKILL.String())
 	case errors.Is(err, ErrContextDeadlineExceeded):
 		e.WritePostFile(e.PostFile, err)
-		output = append(output, e.outputRunResult(pod.TerminationReasonTimeoutExceeded))
+		output = append(output, e.outputRunResult(TerminationReasonTimeoutExceeded))
 	case err != nil && e.BreakpointOnFailure:
-		logger.Info("Skipping writing to PostFile")
+		slog.Info("Skipping writing to PostFile")
 	case e.OnError == ContinueOnError && errors.As(err, &ee):
 		// with continue on error and an ExitError, write non-zero exit code and a post file
 		exitCode := strconv.Itoa(ee.ExitCode())
@@ -266,7 +323,8 @@ func (e Entrypointer) Go() error {
 			resultPath = e.ResultsDirectory
 		}
 		if err := e.readResultsFromDisk(ctx, resultPath, result.TaskRunResultType); err != nil {
-			logger.Fatalf("Error while handling results: %s", err)
+			slog.Error("Error while substituting step artifacts:", slog.Any("error", err))
+			return err
 		}
 	}
 	if len(e.StepResults) >= 1 && e.StepResults[0] != "" {
@@ -275,24 +333,19 @@ func (e Entrypointer) Go() error {
 			stepResultPath = e.ResultsDirectory
 		}
 		if err := e.readResultsFromDisk(ctx, stepResultPath, result.StepResultType); err != nil {
-			logger.Fatalf("Error while handling step results: %s", err)
+			slog.Error("Error while substituting step artifacts:", slog.Any("error", err))
+			return err
 		}
 	}
 
-	if e.ResultExtractionMethod == config.ResultExtractionMethodTerminationMessage {
-		fp := filepath.Join(e.StepMetadataDir, "artifacts", "provenance.json")
-
-		artifacts, err := readArtifacts(fp)
-		if err != nil {
-			logger.Fatalf("Error while handling artifacts: %s", err)
-		}
-		output = append(output, artifacts...)
+	if e.ResultExtractionMethod == ResultExtractionMethodTerminationMessage {
+		e.appendArtifactOutputs(&output)
 	}
 
 	return err
 }
 
-func readArtifacts(fp string) ([]result.RunResult, error) {
+func readArtifacts(fp string, resultType result.ResultType) ([]result.RunResult, error) {
 	file, err := os.ReadFile(fp)
 	if os.IsNotExist(err) {
 		return []result.RunResult{}, nil
@@ -300,7 +353,85 @@ func readArtifacts(fp string) ([]result.RunResult, error) {
 	if err != nil {
 		return nil, err
 	}
-	return []result.RunResult{{Key: fp, Value: string(file), ResultType: result.ArtifactsResultType}}, nil
+	return []result.RunResult{{Key: fp, Value: string(file), ResultType: resultType}}, nil
+}
+
+func (e Entrypointer) appendArtifactOutputs(output *[]result.RunResult) {
+	// step artifacts
+	fp := filepath.Join(e.StepMetadataDir, "artifacts", "provenance.json")
+	artifacts, err := readArtifacts(fp, result.StepArtifactsResultType)
+	if err != nil {
+		log.Fatalf("Error while handling step artifacts: %s", err)
+	}
+	*output = append(*output, artifacts...)
+
+	artifactsDir := pipeline.ArtifactsDir
+	// task artifacts
+	if e.ArtifactsDirectory != "" {
+		artifactsDir = e.ArtifactsDirectory
+	}
+	fp = filepath.Join(artifactsDir, "provenance.json")
+	artifacts, err = readArtifacts(fp, result.TaskRunArtifactsResultType)
+	if err != nil {
+		log.Fatalf("Error while handling task artifacts: %s", err)
+	}
+	*output = append(*output, artifacts...)
+}
+
+func (e Entrypointer) allowExec() (bool, error) {
+	when := e.StepWhenExpressions
+	m := map[string]bool{}
+
+	for _, we := range when {
+		if we.CEL == "" {
+			continue
+		}
+		b, ok := m[we.CEL]
+		if ok && !b {
+			return false, nil
+		}
+
+		env, err := cel.NewEnv()
+		if err != nil {
+			return false, err
+		}
+		ast, iss := env.Compile(we.CEL)
+		if iss.Err() != nil {
+			return false, iss.Err()
+		}
+		// Generate an evaluable instance of the Ast within the environment
+		prg, err := env.Program(ast)
+		if err != nil {
+			return false, err
+		}
+		// Evaluate the CEL expression
+		out, _, err := prg.Eval(map[string]interface{}{})
+		if err != nil {
+			return false, err
+		}
+
+		b, ok = out.Value().(bool)
+		if !ok {
+			return false, fmt.Errorf("the CEL expression %s is not evaluated to a boolean", we.CEL)
+		}
+		if !b {
+			return false, err
+		}
+		m[we.CEL] = true
+	}
+	return when.AllowsExecution(m), nil
+}
+
+func (e Entrypointer) waitBeforeStepDebug() error {
+	log.Println(`debug before step breakpoint has taken effect, waiting for user's decision:
+1) continue, use cmd: /tekton/debug/scripts/debug-beforestep-continue
+2) fail-continue, use cmd: /tekton/debug/scripts/debug-beforestep-fail-continue`)
+	breakpointBeforeStepPostFile := e.PostFile + breakpointBeforeStepSuffix
+	if waitErr := e.Waiter.Wait(context.Background(), breakpointBeforeStepPostFile, false, false); waitErr != nil {
+		log.Println("error occurred while waiting for " + breakpointBeforeStepPostFile + " : " + errDebugBeforeStep.Error())
+		return errDebugBeforeStep
+	}
+	return nil
 }
 
 func (e Entrypointer) readResultsFromDisk(ctx context.Context, resultDir string, resultType result.ResultType) error {
@@ -327,16 +458,14 @@ func (e Entrypointer) readResultsFromDisk(ctx context.Context, resultDir string,
 		})
 	}
 
-	if e.SpireWorkloadAPI != nil {
-		signed, err := e.SpireWorkloadAPI.Sign(ctx, output)
-		if err != nil {
-			return err
-		}
-		output = append(output, signed...)
+	signed, err := signResults(ctx, e.SpireWorkloadAPI, output)
+	if err != nil {
+		return err
 	}
+	output = append(output, signed...)
 
 	// push output to termination path
-	if e.ResultExtractionMethod == config.ResultExtractionMethodTerminationMessage && len(output) != 0 {
+	if e.ResultExtractionMethod == ResultExtractionMethodTerminationMessage && len(output) != 0 {
 		if err := termination.WriteMessage(e.TerminationPath, output); err != nil {
 			return err
 		}
@@ -374,17 +503,44 @@ func (e Entrypointer) WriteExitCodeFile(stepPath, content string) {
 
 // waitingCancellation waiting cancellation file, if no error occurs, call cancelFunc to cancel the context
 func (e Entrypointer) waitingCancellation(ctx context.Context, cancel context.CancelFunc) error {
-	if err := e.Waiter.Wait(ctx, pod.DownwardMountCancelFile, true, false); err != nil {
+	if err := e.Waiter.Wait(ctx, DownwardMountCancelFile, true, false); err != nil {
 		return err
 	}
 	cancel()
 	return nil
 }
 
+// CheckForBreakpointOnFailure if step up breakpoint on failure
+// waiting breakpointExitPostFile to be written
+func (e Entrypointer) CheckForBreakpointOnFailure() {
+	if e.BreakpointOnFailure {
+		log.Println(`debug onFailure breakpoint has taken effect, waiting for user's decision:
+1) continue, use cmd: /tekton/debug/scripts/debug-continue
+2) fail-continue, use cmd: /tekton/debug/scripts/debug-fail-continue`)
+		breakpointExitPostFile := e.PostFile + breakpointExitSuffix
+		if waitErr := e.Waiter.Wait(context.Background(), breakpointExitPostFile, false, false); waitErr != nil {
+			log.Println("error occurred while waiting for " + breakpointExitPostFile + " : " + waitErr.Error())
+		}
+		// get exitcode from .breakpointexit
+		exitCode, readErr := e.BreakpointExitCode(breakpointExitPostFile)
+		// if readErr exists, the exitcode with default to 0 as we would like
+		// to encourage to continue running the next steps in the taskRun
+		if readErr != nil {
+			log.Println("error occurred while reading breakpoint exit code : " + readErr.Error())
+		}
+		os.Exit(exitCode)
+	}
+}
+
+// GetContainerName prefixes the input name with "step-"
+func GetContainerName(name string) string {
+	return fmt.Sprintf("%s%s", stepPrefix, name)
+}
+
 // loadStepResult reads the step result file and returns the string, array or object result value.
 func loadStepResult(stepDir string, stepName string, resultName string) (v1.ResultValue, error) {
 	v := v1.ResultValue{}
-	fp := getStepResultPath(stepDir, pod.GetContainerName(stepName), resultName)
+	fp := getStepResultPath(stepDir, GetContainerName(stepName), resultName)
 	fileContents, err := os.ReadFile(fp)
 	if err != nil {
 		return v, err
@@ -485,6 +641,13 @@ func (e *Entrypointer) applyStepResultSubstitutions(stepDir string) error {
 	if err := replaceEnv(stepDir); err != nil {
 		return err
 	}
+
+	// replace when
+	newWhen, err := replaceWhen(stepDir, e.StepWhenExpressions)
+	if err != nil {
+		return err
+	}
+	e.StepWhenExpressions = newWhen
 	// command + args
 	newCommand, err := replaceCommandAndArgs(e.Command, stepDir)
 	if err != nil {
@@ -492,6 +655,58 @@ func (e *Entrypointer) applyStepResultSubstitutions(stepDir string) error {
 	}
 	e.Command = newCommand
 	return nil
+}
+
+func replaceWhen(stepDir string, when v1.StepWhenExpressions) (v1.StepWhenExpressions, error) {
+	for i, w := range when {
+		var newValues []string
+	flag:
+		for _, v := range when[i].Values {
+			matches := resultref.StepResultRegex.FindAllStringSubmatch(v, -1)
+			newV := v
+			for _, m := range matches {
+				replaceWithString, replaceWithArray, err := findReplacement(stepDir, m[0])
+				if err != nil {
+					return v1.WhenExpressions{}, err
+				}
+				// replaceWithString and replaceWithArray are mutually exclusive
+				if len(replaceWithArray) > 0 {
+					if v != m[0] {
+						// it has to be exact in "$(steps.<step-name>.results.<result-name>[*])" format, without anything else in the original string
+						return nil, errors.New("value must be in \"$(steps.<step-name>.results.<result-name>[*])\" format, when using array results")
+					}
+					newValues = append(newValues, replaceWithArray...)
+					continue flag
+				}
+				newV = strings.ReplaceAll(newV, m[0], replaceWithString)
+			}
+			newValues = append(newValues, newV)
+		}
+		when[i].Values = newValues
+
+		matches := resultref.StepResultRegex.FindAllStringSubmatch(w.Input, -1)
+		v := when[i].Input
+		for _, m := range matches {
+			replaceWith, _, err := findReplacement(stepDir, m[0])
+			if err != nil {
+				return v1.StepWhenExpressions{}, err
+			}
+			v = strings.ReplaceAll(v, m[0], replaceWith)
+		}
+		when[i].Input = v
+
+		matches = resultref.StepResultRegex.FindAllStringSubmatch(w.CEL, -1)
+		c := when[i].CEL
+		for _, m := range matches {
+			replaceWith, _, err := findReplacement(stepDir, m[0])
+			if err != nil {
+				return v1.StepWhenExpressions{}, err
+			}
+			c = strings.ReplaceAll(c, m[0], replaceWith)
+		}
+		when[i].CEL = c
+	}
+	return when, nil
 }
 
 // outputRunResult returns the run reason for a termination
@@ -540,7 +755,6 @@ func getArtifactValues(dir string, template string) (string, error) {
 	}
 
 	// $(steps.stepName.outputs.artifactName) <- artifacts.Output[artifactName].Values
-	// $(steps.stepName.outputs) <- artifacts.Output[0].Values
 	var t []v1.Artifact
 	if artifactTemplate.Type == "outputs" {
 		t = artifacts.Outputs
@@ -548,13 +762,6 @@ func getArtifactValues(dir string, template string) (string, error) {
 		t = artifacts.Inputs
 	}
 
-	if artifactTemplate.ArtifactName == "" {
-		marshal, err := json.Marshal(t[0].Values)
-		if err != nil {
-			return "", err
-		}
-		return string(marshal), err
-	}
 	for _, ar := range t {
 		if ar.Name == artifactTemplate.ArtifactName {
 			marshal, err := json.Marshal(ar.Values)
@@ -568,8 +775,7 @@ func getArtifactValues(dir string, template string) (string, error) {
 }
 
 // parseArtifactTemplate parses an artifact template string and extracts relevant information into an ArtifactTemplate struct.
-//
-// The artifact template is expected to be in the format "$(steps.{step-name}.outputs.{artifact-name})" or "$(steps.{step-name}.outputs)".
+// The artifact template is expected to be in the format "$(steps.<step-name>.outputs.<artifact-category-name>)".
 func parseArtifactTemplate(template string) (ArtifactTemplate, error) {
 	if template == "" {
 		return ArtifactTemplate{}, errors.New("template is empty")
@@ -661,6 +867,7 @@ func writeToTempFile(v string) (*os.File, error) {
 	if err != nil {
 		return nil, err
 	}
+	// #nosec G703 -- no path traversal with that path that comes from CreateTemp()
 	err = os.Chmod(tmp.Name(), 0o755)
 	if err != nil {
 		return nil, err

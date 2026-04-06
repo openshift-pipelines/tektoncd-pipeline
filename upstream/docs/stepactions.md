@@ -18,12 +18,9 @@ weight: 201
   - [Declaring VolumeMounts](#declaring-volumemounts)
   - [Referencing a StepAction](#referencing-a-stepaction)
     - [Specifying Remote StepActions](#specifying-remote-stepactions)
-- [Known Limitations](#known-limitations)
-  - [Cannot pass Step Results between Steps](#cannot-pass-step-results-between-steps)
 
 ## Overview
-> :seedling: **`StepActions` is an [alpha](additional-configs.md#alpha-features) feature.**
-> The `enable-step-actions` feature flag must be set to `"true"` to specify a `StepAction` in a `Step`.
+> **`StepActions` is a stable feature.**
 
 A `StepAction` is the reusable and scriptable unit of work that is performed by a `Step`.
 
@@ -55,6 +52,7 @@ A `StepAction` definition supports the following fields:
   - [`workingDir`](#declaring-workingdir)
   - [`securityContext`](#declaring-securitycontext)
   - [`volumeMounts`](#declaring-volumemounts)
+  - [`description`](#declaring-description)
 
 [kubernetes-overview]:
   https://kubernetes.io/docs/concepts/overview/working-with-objects/kubernetes-objects/#required-fields
@@ -62,7 +60,7 @@ A `StepAction` definition supports the following fields:
 The example below demonstrates the use of most of the above-mentioned fields:
 
 ```yaml
-apiVersion: tekton.dev/v1alpha1
+apiVersion: tekton.dev/v1beta1
 kind: StepAction
 metadata:
   name: example-stepaction-name
@@ -82,7 +80,7 @@ Like with `Tasks`, a `StepAction` must declare all the parameters that it uses. 
  `Parameters` are passed to the `StepAction` from its corresponding `Step` referencing it.
 
 ```yaml
-apiVersion: tekton.dev/v1alpha1
+apiVersion: tekton.dev/v1beta1
 kind: StepAction
 metadata:
   name: stepaction-using-params
@@ -136,6 +134,22 @@ spec:
 ```
 
 **Note:** If a `Step` declares `params` for an `inlined Step`, it will also lead to a validation error. This is because an `inlined Step` gets its `params` from the `TaskRun`.
+
+#### Parameter Substitution Precedence
+
+When applying parameters to a StepAction, the substitutions are applied in the following order:
+
+1. TaskRun parameter values in step parameters
+2. Step-provided parameter values 
+3. Default values that reference other parameters
+4. Simple default values
+5. Step result references
+
+This order ensures that:
+- TaskRun parameters are available for step parameter substitution
+- Step-provided values take precedence over defaults
+- Parameter references in defaults are resolved before simple defaults
+- Step result references are resolved last to allow referencing results from previous steps
 
 ### Emitting Results
 
@@ -371,6 +385,22 @@ spec:
   script: ...
 ```
 
+### Declaring description
+
+The `description` field is an optional field that allows you to add a user-facing name to the step that may be used to populate a UI.
+
+```yaml
+apiVersion: tekton.dev/v1
+kind: StepAction
+metadata:
+  name: myStep
+spec:
+  description: my step
+  params: ...
+  volumeMounts: ...
+  image: ...
+  script: ...
+```
 
 ### Referencing a StepAction
 
@@ -403,7 +433,6 @@ status:
   podName: step-action-run-pod
   provenance:
     featureFlags:
-      EnableStepActions: true
       ...
   startTime: "2023-10-24T20:28:32Z"
   steps:

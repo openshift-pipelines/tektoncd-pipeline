@@ -265,11 +265,36 @@ func (s *repositoryService) IsCollaborator(ctx context.Context, repo, user strin
 		return false, resp, err
 	}
 	for k := range users {
-		if users[k].Name == user || users[k].Login == user {
-			return true, resp, err
+		if isRequestedUser(user, users[k].Name, users[k].Login) {
+			return true, resp, nil
 		}
 	}
-	return false, resp, err
+
+	namespace, name := scm.Split(repo)
+	opts := &scm.ListOptions{Size: 1000}
+	groups, err := getRepoGroups(ctx, namespace, name, s.client, opts)
+	if err != nil {
+		return false, resp, err
+	}
+	if isUserInGroups(ctx, user, groups, s.client, opts) {
+		return true, resp, nil
+	}
+
+	return false, resp, nil
+}
+
+func getRepoGroups(ctx context.Context, namespace, name string, client *wrapper, opts *scm.ListOptions) ([]*projGroup, error) {
+	path := fmt.Sprintf("rest/api/1.0/projects/%s/repos/%s/permissions/groups?%s", namespace, name, encodeListOptions(opts))
+	out := new(projGroups)
+	res, err := client.do(ctx, "GET", path, nil, out)
+	if err != nil {
+		return nil, err
+	}
+	if !out.pagination.LastPage.Bool {
+		res.Page.First = 1
+		res.Page.Next = opts.Page + 1
+	}
+	return out.Values, nil
 }
 
 func (s *repositoryService) ListCollaborators(ctx context.Context, repo string, opts *scm.ListOptions) ([]scm.User, *scm.Response, error) {
@@ -296,7 +321,17 @@ func (s *repositoryService) Find(ctx context.Context, repo string) (*scm.Reposit
 	path := fmt.Sprintf("rest/api/1.0/projects/%s/repos/%s", namespace, name)
 	out := new(repository)
 	res, err := s.client.do(ctx, "GET", path, nil, out)
-	return convertRepository(out), res, err
+	outputRepo := convertRepository(out)
+
+	// default value for repository.Branch is `master` but it may differ for other
+	// repositories as a repository can have `main` or `trunk` as default branch.
+	branch := new(branch)
+	pathBranch := fmt.Sprintf("rest/api/1.0/projects/%s/repos/%s/branches/default", namespace, name)
+	_, errBranch := s.client.do(ctx, "GET", pathBranch, nil, branch)
+	if errBranch == nil {
+		outputRepo.Branch = branch.DisplayID
+	}
+	return outputRepo, res, err
 }
 
 // FindHook returns a repository hook.
@@ -441,15 +476,15 @@ func (s *repositoryService) CreateStatus(ctx context.Context, repo, ref string, 
 		State: convertFromState(input.State),
 		Key:   input.Label,
 		Name:  input.Label,
-		URL:   input.Target,
+		URL:   input.Link,
 		Desc:  input.Desc,
 	}
 	res, err := s.client.do(ctx, "POST", path, in, nil)
 	return &scm.Status{
-		State:  input.State,
-		Label:  input.Label,
-		Desc:   input.Desc,
-		Target: input.Target,
+		State: input.State,
+		Label: input.Label,
+		Desc:  input.Desc,
+		Link:  input.Link,
 	}, res, err
 }
 
@@ -570,8 +605,14 @@ func convertFromState(from scm.State) string {
 		return "INPROGRESS"
 	case scm.StateSuccess:
 		return "SUCCESSFUL"
-	default:
+	case scm.StateFailure:
 		return "FAILED"
+	case scm.StateCanceled:
+		return "CANCELLED"
+	case scm.StateUnknown:
+		return "UNKNOWN"
+	default:
+		return "UNKNOWN"
 	}
 }
 

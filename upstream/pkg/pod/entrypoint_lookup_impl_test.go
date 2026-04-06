@@ -68,7 +68,7 @@ func (f *fakeHTTP) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	// Check auth if we've fetching the image.
-	if strings.HasPrefix(r.URL.Path, "/v2/task") && r.Method == "GET" {
+	if strings.HasPrefix(r.URL.Path, "/v2/task") && r.Method == http.MethodGet {
 		u, p, ok := r.BasicAuth()
 		if !ok || username != u || password != p {
 			w.WriteHeader(http.StatusUnauthorized)
@@ -98,7 +98,7 @@ func generateSecret(host string, username string, password string) *corev1.Secre
 }
 
 func TestGetImageWithImagePullSecrets(t *testing.T) {
-	ctx := context.Background()
+	ctx := t.Context()
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
@@ -114,9 +114,11 @@ func TestGetImageWithImagePullSecrets(t *testing.T) {
 	task := &pipelinev1.Task{
 		TypeMeta: metav1.TypeMeta{
 			APIVersion: "tekton.dev/v1",
-			Kind:       "Task"},
+			Kind:       "Task",
+		},
 		ObjectMeta: metav1.ObjectMeta{
-			Name: "test-create-image"},
+			Name: "test-create-image",
+		},
 	}
 
 	ref, err := remotetest.CreateImageWithAnnotations(u.Host+"/task/test-create-image", remotetest.DefaultObjectAnnotationMapper, task)
