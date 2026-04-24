@@ -10,7 +10,6 @@ import (
 	"crypto/tls"
 	"encoding/base64"
 	"encoding/hex"
-	"encoding/json"
 	"fmt"
 	"net"
 	"net/http"
@@ -42,7 +41,6 @@ const (
 	EnvVaultClientCert       = "VAULT_CLIENT_CERT"
 	EnvVaultClientKey        = "VAULT_CLIENT_KEY"
 	EnvVaultClientTimeout    = "VAULT_CLIENT_TIMEOUT"
-	EnvVaultHeaders          = "VAULT_HEADERS"
 	EnvVaultSRVLookup        = "VAULT_SRV_LOOKUP"
 	EnvVaultSkipVerify       = "VAULT_SKIP_VERIFY"
 	EnvVaultNamespace        = "VAULT_NAMESPACE"
@@ -69,9 +67,6 @@ const (
 	// RequestHeaderName is the name of the header used by the Agent for
 	// SSRF protection.
 	RequestHeaderName = "X-Vault-Request"
-
-	SnapshotHeaderName          = "X-Vault-Recover-Snapshot-Id"
-	RecoverSourcePathHeaderName = "X-Vault-Recover-Source-Path"
 
 	TLSErrorString = "This error usually means that the server is running with TLS disabled\n" +
 		"but the client is configured to use TLS. Please either enable TLS\n" +
@@ -261,7 +256,7 @@ func DefaultConfig() *Config {
 		MinRetryWait: time.Millisecond * 1000,
 		MaxRetryWait: time.Millisecond * 1500,
 		MaxRetries:   2,
-		Backoff:      retryablehttp.RateLimitLinearJitterBackoff,
+		Backoff:      retryablehttp.LinearJitterBackoff,
 	}
 
 	transport := config.HttpClient.Transport.(*http.Transport)
@@ -670,30 +665,6 @@ func NewClient(c *Config) (*Client, error) {
 		client.setNamespace(namespace)
 	}
 
-	if envHeaders := os.Getenv(EnvVaultHeaders); envHeaders != "" {
-		var result map[string]any
-		err := json.Unmarshal([]byte(envHeaders), &result)
-		if err != nil {
-			return nil, fmt.Errorf("could not unmarshal environment-supplied headers")
-		}
-		var forbiddenHeaders []string
-		for key, value := range result {
-			if strings.HasPrefix(key, "X-Vault-") {
-				forbiddenHeaders = append(forbiddenHeaders, key)
-				continue
-			}
-
-			value, ok := value.(string)
-			if !ok {
-				return nil, fmt.Errorf("environment-supplied headers include non-string values")
-			}
-			client.AddHeader(key, value)
-		}
-		if len(forbiddenHeaders) > 0 {
-			return nil, fmt.Errorf("failed to setup Headers[%s]: Header starting by 'X-Vault-' are for internal usage only", strings.Join(forbiddenHeaders, ", "))
-		}
-	}
-
 	return client, nil
 }
 
@@ -734,7 +705,7 @@ func (c *Client) SetAddress(addr string) error {
 
 	parsedAddr, err := c.config.ParseAddress(addr)
 	if err != nil {
-		return fmt.Errorf("failed to set address: %w", err)
+		return errwrap.Wrapf("failed to set address: {{err}}", err)
 	}
 
 	c.addr = parsedAddr
@@ -1470,12 +1441,6 @@ START:
 	}
 
 	if outputCurlString {
-		// Note that although we're building this up here and returning it as an error object, the Error()
-		// interface method on it only gets called in a context where the actual string returned from that
-		// method is irrelevant, because it gets swallowed by an error buffer that's never output to the user.
-		// That's on purpose, not a bug, because in this case, OutputStringError is not really an _error_, per se.
-		// It's just a way of aborting the control flow so that requests don't actually execute, and instead,
-		// we can detect what's happened back in the CLI machinery and show the actual curl string to the user.
 		LastOutputStringError = &OutputStringError{
 			Request:       req,
 			TLSSkipVerify: c.config.HttpClient.Transport.(*http.Transport).TLSClientConfig.InsecureSkipVerify,

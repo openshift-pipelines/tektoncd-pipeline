@@ -55,14 +55,14 @@ func (m *SigningMethodECDSA) Alg() string {
 
 // Verify implements token verification for the SigningMethod.
 // For this verify method, key must be an ecdsa.PublicKey struct
-func (m *SigningMethodECDSA) Verify(signingString string, sig []byte, key any) error {
+func (m *SigningMethodECDSA) Verify(signingString string, sig []byte, key interface{}) error {
 	// Get the key
 	var ecdsaKey *ecdsa.PublicKey
 	switch k := key.(type) {
 	case *ecdsa.PublicKey:
 		ecdsaKey = k
 	default:
-		return newError("ECDSA verify expects *ecdsa.PublicKey", ErrInvalidKeyType)
+		return newError("ECDSA verify expects *ecsda.PublicKey", ErrInvalidKeyType)
 	}
 
 	if len(sig) != 2*m.KeySize {
@@ -89,14 +89,14 @@ func (m *SigningMethodECDSA) Verify(signingString string, sig []byte, key any) e
 
 // Sign implements token signing for the SigningMethod.
 // For this signing method, key must be an ecdsa.PrivateKey struct
-func (m *SigningMethodECDSA) Sign(signingString string, key any) ([]byte, error) {
+func (m *SigningMethodECDSA) Sign(signingString string, key interface{}) ([]byte, error) {
 	// Get the key
 	var ecdsaKey *ecdsa.PrivateKey
 	switch k := key.(type) {
 	case *ecdsa.PrivateKey:
 		ecdsaKey = k
 	default:
-		return nil, newError("ECDSA sign expects *ecdsa.PrivateKey", ErrInvalidKeyType)
+		return nil, newError("ECDSA sign expects *ecsda.PrivateKey", ErrInvalidKeyType)
 	}
 
 	// Create the hasher

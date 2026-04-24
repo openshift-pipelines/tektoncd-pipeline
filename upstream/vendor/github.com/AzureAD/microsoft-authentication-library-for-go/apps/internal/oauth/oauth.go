@@ -10,8 +10,6 @@ import (
 	"io"
 	"time"
 
-	"github.com/google/uuid"
-
 	"github.com/AzureAD/microsoft-authentication-library-for-go/apps/errors"
 	"github.com/AzureAD/microsoft-authentication-library-for-go/apps/internal/exported"
 	internalTime "github.com/AzureAD/microsoft-authentication-library-for-go/apps/internal/json/types/time"
@@ -20,6 +18,7 @@ import (
 	"github.com/AzureAD/microsoft-authentication-library-for-go/apps/internal/oauth/ops/authority"
 	"github.com/AzureAD/microsoft-authentication-library-for-go/apps/internal/oauth/ops/wstrust"
 	"github.com/AzureAD/microsoft-authentication-library-for-go/apps/internal/oauth/ops/wstrust/defs"
+	"github.com/google/uuid"
 )
 
 // ResolveEndpointer contains the methods for resolving authority endpoints.
@@ -111,7 +110,7 @@ func (t *Client) Credential(ctx context.Context, authParams authority.AuthParams
 			Scopes:        scopes,
 			TenantID:      authParams.AuthorityInfo.Tenant,
 		}
-		pr, err := cred.TokenProvider(ctx, params)
+		tr, err := cred.TokenProvider(ctx, params)
 		if err != nil {
 			if len(scopes) == 0 {
 				err = fmt.Errorf("token request had an empty authority.AuthParams.Scopes, which may cause the following error: %w", err)
@@ -119,18 +118,14 @@ func (t *Client) Credential(ctx context.Context, authParams authority.AuthParams
 			}
 			return accesstokens.TokenResponse{}, err
 		}
-		tr := accesstokens.TokenResponse{
-			TokenType:     authParams.AuthnScheme.AccessTokenType(),
-			AccessToken:   pr.AccessToken,
-			ExpiresOn:     now.Add(time.Duration(pr.ExpiresInSeconds) * time.Second),
+		return accesstokens.TokenResponse{
+			TokenType:   authParams.AuthnScheme.AccessTokenType(),
+			AccessToken: tr.AccessToken,
+			ExpiresOn: internalTime.DurationTime{
+				T: now.Add(time.Duration(tr.ExpiresInSeconds) * time.Second),
+			},
 			GrantedScopes: accesstokens.Scopes{Slice: authParams.Scopes},
-		}
-		if pr.RefreshInSeconds > 0 {
-			tr.RefreshOn = internalTime.DurationTime{
-				T: now.Add(time.Duration(pr.RefreshInSeconds) * time.Second),
-			}
-		}
-		return tr, nil
+		}, nil
 	}
 
 	if err := t.resolveEndpoint(ctx, &authParams, ""); err != nil {
@@ -336,7 +331,7 @@ func (t *Client) DeviceCode(ctx context.Context, authParams authority.AuthParams
 func (t *Client) resolveEndpoint(ctx context.Context, authParams *authority.AuthParams, userPrincipalName string) error {
 	endpoints, err := t.Resolver.ResolveEndpoints(ctx, authParams.AuthorityInfo, userPrincipalName)
 	if err != nil {
-		return fmt.Errorf("unable to resolve an endpoint: %w", err)
+		return fmt.Errorf("unable to resolve an endpoint: %s", err)
 	}
 	authParams.Endpoints = endpoints
 	return nil

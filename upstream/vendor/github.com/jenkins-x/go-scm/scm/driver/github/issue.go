@@ -266,7 +266,7 @@ type issue struct {
 	UpdatedAt time.Time `json:"updated_at"`
 
 	// This will be non-nil if it is a pull request.
-	PullRequest *pr `json:"pull_request,omitempty"`
+	PullRequest pr `json:"pull_request,omitempty"`
 }
 
 type issueInput struct {
@@ -349,13 +349,6 @@ func convertIssue(from *issue) *scm.Issue {
 			Avatar: from.ClosedBy.AvatarURL,
 		}
 	}
-	var pullRequest *scm.PullRequest
-	if from.PullRequest != nil {
-		pullRequest = &scm.PullRequest{
-			DiffLink: from.PullRequest.DiffURL,
-			Link:     from.PullRequest.HTMLURL,
-		}
-	}
 	return &scm.Issue{
 		Number: from.Number,
 		Title:  from.Title,
@@ -369,11 +362,14 @@ func convertIssue(from *issue) *scm.Issue {
 			Login:  from.User.Login,
 			Avatar: from.User.AvatarURL,
 		},
-		ClosedBy:    closedBy,
-		Assignees:   convertUsers(from.Assignees),
-		PullRequest: pullRequest,
-		Created:     from.CreatedAt,
-		Updated:     from.UpdatedAt,
+		ClosedBy:  closedBy,
+		Assignees: convertUsers(from.Assignees),
+		PullRequest: &scm.PullRequest{
+			DiffLink: from.PullRequest.DiffURL,
+			Link:     from.PullRequest.HTMLURL,
+		},
+		Created: from.CreatedAt,
+		Updated: from.UpdatedAt,
 	}
 }
 

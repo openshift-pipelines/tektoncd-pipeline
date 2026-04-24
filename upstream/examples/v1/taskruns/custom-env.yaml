@@ -5,7 +5,7 @@ metadata:
 spec:
   taskSpec:
     steps:
-    - image: mirror.gcr.io/ubuntu
+    - image: ubuntu
       script: |
         #!/usr/bin/env bash
         [[ $MY_VAR1 == foo ]]

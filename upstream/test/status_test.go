@@ -1,4 +1,5 @@
 //go:build e2e
+// +build e2e
 
 /*
 Copyright 2019 The Tekton Authors
@@ -42,9 +43,8 @@ var (
 // TestTaskRunPipelineRunStatus is an integration test that will
 // verify a very simple "hello world" TaskRun and PipelineRun failure
 // execution lead to the correct TaskRun status.
-// @test:execution=parallel
 func TestTaskRunPipelineRunStatus(t *testing.T) {
-	ctx := t.Context()
+	ctx := context.Background()
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	c, namespace := setup(ctx, t)
@@ -60,7 +60,7 @@ metadata:
 spec:
   steps:
   - name: foo
-    image: mirror.gcr.io/busybox
+    image: busybox
     command: ['ls', '-la']`, helpers.ObjectNameForTest(t)))
 	if _, err := c.V1TaskClient.Create(ctx, task, metav1.CreateOptions{}); err != nil {
 		t.Fatalf("Failed to create Task: %s", err)
@@ -119,9 +119,8 @@ spec:
 // [Expectation]: PipelineRun status should contain the provenance about the remote pipeline
 // i.e. refSource info, and the child TaskRun status should contain the provnenace
 // about the remote task i.e. refSource info .
-// @test:execution=parallel
 func TestProvenanceFieldInPipelineRunTaskRunStatus(t *testing.T) {
-	ctx := t.Context()
+	ctx := context.Background()
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	c, namespace := setup(ctx, t, requireAnyGate(map[string]string{"enable-api-fields": "beta"}))
@@ -235,7 +234,7 @@ spec:
   - name: HELLO
     default: "hello world!"
   steps:
-  - image: mirror.gcr.io/ubuntu
+  - image: ubuntu
     script: |
       #!/usr/bin/env bash
       echo "$(params.HELLO)"

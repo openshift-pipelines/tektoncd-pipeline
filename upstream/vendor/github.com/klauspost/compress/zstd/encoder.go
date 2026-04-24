@@ -6,7 +6,6 @@ package zstd
 
 import (
 	"crypto/rand"
-	"errors"
 	"fmt"
 	"io"
 	"math"
@@ -131,22 +130,6 @@ func (e *Encoder) Reset(w io.Writer) {
 	s.frameContentSize = 0
 }
 
-// ResetWithOptions will re-initialize the writer and apply the given options
-// as a new, independent stream.
-// Options are applied on top of the existing options.
-// Some options cannot be changed on reset and will return an error.
-func (e *Encoder) ResetWithOptions(w io.Writer, opts ...EOption) error {
-	e.o.resetOpt = true
-	defer func() { e.o.resetOpt = false }()
-	for _, o := range opts {
-		if err := o(&e.o); err != nil {
-			return err
-		}
-	}
-	e.Reset(w)
-	return nil
-}
-
 // ResetContentSize will reset and set a content size for the next stream.
 // If the bytes written does not match the size given an error will be returned
 // when calling Close().
@@ -166,9 +149,6 @@ func (e *Encoder) ResetContentSize(w io.Writer, size int64) {
 // and write CRC if requested.
 func (e *Encoder) Write(p []byte) (n int, err error) {
 	s := &e.state
-	if s.eofWritten {
-		return 0, ErrEncoderClosed
-	}
 	for len(p) > 0 {
 		if len(p)+len(s.filling) < e.o.blockSize {
 			if e.o.crc {
@@ -222,7 +202,7 @@ func (e *Encoder) nextBlock(final bool) error {
 			return nil
 		}
 		if final && len(s.filling) > 0 {
-			s.current = e.encodeAll(s.encoder, s.filling, s.current[:0])
+			s.current = e.EncodeAll(s.filling, s.current[:0])
 			var n2 int
 			n2, s.err = s.w.Write(s.current)
 			if s.err != nil {
@@ -247,7 +227,10 @@ func (e *Encoder) nextBlock(final bool) error {
 			DictID:        e.o.dict.ID(),
 		}
 
-		dst := fh.appendTo(tmp[:0])
+		dst, err := fh.appendTo(tmp[:0])
+		if err != nil {
+			return err
+		}
 		s.headerWritten = true
 		s.wWg.Wait()
 		var n2 int
@@ -308,9 +291,6 @@ func (e *Encoder) nextBlock(final bool) error {
 	s.filling, s.current, s.previous = s.previous[:0], s.filling, s.current
 	s.nInput += int64(len(s.current))
 	s.wg.Add(1)
-	if final {
-		s.eofWritten = true
-	}
 	go func(src []byte) {
 		if debugEncoder {
 			println("Adding block,", len(src), "bytes, final:", final)
@@ -326,6 +306,9 @@ func (e *Encoder) nextBlock(final bool) error {
 		blk := enc.Block()
 		enc.Encode(blk, src)
 		blk.last = final
+		if final {
+			s.eofWritten = true
+		}
 		// Wait for pending writes.
 		s.wWg.Wait()
 		if s.writeErr != nil {
@@ -421,20 +404,12 @@ func (e *Encoder) Flush() error {
 	if len(s.filling) > 0 {
 		err := e.nextBlock(false)
 		if err != nil {
-			// Ignore Flush after Close.
-			if errors.Is(s.err, ErrEncoderClosed) {
-				return nil
-			}
 			return err
 		}
 	}
 	s.wg.Wait()
 	s.wWg.Wait()
 	if s.err != nil {
-		// Ignore Flush after Close.
-		if errors.Is(s.err, ErrEncoderClosed) {
-			return nil
-		}
 		return s.err
 	}
 	return s.writeErr
@@ -450,9 +425,6 @@ func (e *Encoder) Close() error {
 	}
 	err := e.nextBlock(true)
 	if err != nil {
-		if errors.Is(s.err, ErrEncoderClosed) {
-			return nil
-		}
 		return err
 	}
 	if s.frameContentSize > 0 {
@@ -490,11 +462,6 @@ func (e *Encoder) Close() error {
 		}
 		_, s.err = s.w.Write(frame)
 	}
-	if s.err == nil {
-		s.err = ErrEncoderClosed
-		return nil
-	}
-
 	return s.err
 }
 
@@ -505,15 +472,6 @@ func (e *Encoder) Close() error {
 // Data compressed with EncodeAll can be decoded with the Decoder,
 // using either a stream or DecodeAll.
 func (e *Encoder) EncodeAll(src, dst []byte) []byte {
-	e.init.Do(e.initialize)
-	enc := <-e.encoders
-	defer func() {
-		e.encoders <- enc
-	}()
-	return e.encodeAll(enc, src, dst)
-}
-
-func (e *Encoder) encodeAll(enc encoder, src, dst []byte) []byte {
 	if len(src) == 0 {
 		if e.o.fullZero {
 			// Add frame header.
@@ -525,7 +483,7 @@ func (e *Encoder) encodeAll(enc encoder, src, dst []byte) []byte {
 				Checksum: false,
 				DictID:   0,
 			}
-			dst = fh.appendTo(dst)
+			dst, _ = fh.appendTo(dst)
 
 			// Write raw block as last one only.
 			var blk blockHeader
@@ -536,7 +494,13 @@ func (e *Encoder) encodeAll(enc encoder, src, dst []byte) []byte {
 		}
 		return dst
 	}
-
+	e.init.Do(e.initialize)
+	enc := <-e.encoders
+	defer func() {
+		// Release encoder reference to last block.
+		// If a non-single block is needed the encoder will reset again.
+		e.encoders <- enc
+	}()
 	// Use single segments when above minimum window and below window size.
 	single := len(src) <= e.o.windowSize && len(src) > MinWindowSize
 	if e.o.single != nil {
@@ -554,7 +518,10 @@ func (e *Encoder) encodeAll(enc encoder, src, dst []byte) []byte {
 	if len(dst) == 0 && cap(dst) == 0 && len(src) < 1<<20 && !e.o.lowMem {
 		dst = make([]byte, 0, len(src))
 	}
-	dst = fh.appendTo(dst)
+	dst, err := fh.appendTo(dst)
+	if err != nil {
+		panic(err)
+	}
 
 	// If we can do everything in one block, prefer that.
 	if len(src) <= e.o.blockSize {
@@ -614,7 +581,6 @@ func (e *Encoder) encodeAll(enc encoder, src, dst []byte) []byte {
 	// Add padding with content from crypto/rand.Reader
 	if e.o.pad > 0 {
 		add := calcSkippableFrame(int64(len(dst)), int64(e.o.pad))
-		var err error
 		dst, err = skippableFrame(dst, add, rand.Reader)
 		if err != nil {
 			panic(err)

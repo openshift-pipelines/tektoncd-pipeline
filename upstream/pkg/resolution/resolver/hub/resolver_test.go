@@ -29,7 +29,7 @@ import (
 
 	"github.com/google/go-cmp/cmp"
 	pipelinev1 "github.com/tektoncd/pipeline/pkg/apis/pipeline/v1"
-	common "github.com/tektoncd/pipeline/pkg/resolution/common"
+	resolutioncommon "github.com/tektoncd/pipeline/pkg/resolution/common"
 	"github.com/tektoncd/pipeline/pkg/resolution/resolver/framework"
 	frtesting "github.com/tektoncd/pipeline/pkg/resolution/resolver/framework/testing"
 	"github.com/tektoncd/pipeline/test/diff"
@@ -37,8 +37,8 @@ import (
 
 func TestGetSelector(t *testing.T) {
 	resolver := Resolver{}
-	sel := resolver.GetSelector(t.Context())
-	if typ, has := sel[common.LabelKeyResolverType]; !has {
+	sel := resolver.GetSelector(context.Background())
+	if typ, has := sel[resolutioncommon.LabelKeyResolverType]; !has {
 		t.Fatalf("unexpected selector: %v", sel)
 	} else if typ != LabelValueHubResolverType {
 		t.Fatalf("unexpected type: %q", typ)
@@ -62,16 +62,7 @@ func TestValidateParams(t *testing.T) {
 			version:      "bar",
 			catalog:      "baz",
 			hubType:      ArtifactHubType,
-		},
-		{
-			testName:     "stepaction validation",
-			kind:         "stepaction",
-			resourceName: "foo",
-			version:      "bar",
-			catalog:      "baz",
-			hubType:      ArtifactHubType,
-		},
-		{
+		}, {
 			testName:     "tekton type validation",
 			kind:         "task",
 			resourceName: "foo",
@@ -157,7 +148,7 @@ func TestValidateParamsConflictingKindName(t *testing.T) {
 		hubType string
 	}{
 		{
-			kind:    "not-taskpipelineorstepaction",
+			kind:    "not-taskpipeline",
 			name:    "foo",
 			version: "bar",
 			catalog: "baz",
@@ -355,7 +346,7 @@ func TestResolveConstraint(t *testing.T) {
 					ret = tt.resultTask
 				}
 				output, _ := json.Marshal(ret)
-				fmt.Fprint(w, string(output))
+				fmt.Fprintf(w, string(output))
 			}))
 
 			resolver := &Resolver{
@@ -591,7 +582,7 @@ func TestResolve(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			svr := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				fmt.Fprint(w, tc.input)
+				fmt.Fprintf(w, tc.input)
 			}))
 
 			resolver := &Resolver{

@@ -50,7 +50,7 @@ func TestWorkspaceBindingValidateValid(t *testing.T) {
 				},
 				Spec: corev1.PersistentVolumeClaimSpec{
 					AccessModes: []corev1.PersistentVolumeAccessMode{corev1.ReadWriteOnce},
-					Resources: corev1.VolumeResourceRequirements{
+					Resources: corev1.ResourceRequirements{
 						Requests: corev1.ResourceList{
 							"storage": resource.MustParse("1Gi"),
 						},
@@ -112,7 +112,7 @@ func TestWorkspaceBindingValidateValid(t *testing.T) {
 		},
 	}} {
 		t.Run(tc.name, func(t *testing.T) {
-			ctx := t.Context()
+			ctx := context.Background()
 			if tc.wc != nil {
 				ctx = tc.wc(ctx)
 			}
@@ -181,7 +181,7 @@ func TestWorkspaceBindingValidateInvalid(t *testing.T) {
 		wc: cfgtesting.EnableBetaAPIFields,
 	}} {
 		t.Run(tc.name, func(t *testing.T) {
-			ctx := t.Context()
+			ctx := context.Background()
 			if tc.wc != nil {
 				ctx = tc.wc(ctx)
 			}

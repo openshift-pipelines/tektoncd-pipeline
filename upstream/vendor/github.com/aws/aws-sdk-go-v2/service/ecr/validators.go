@@ -670,26 +670,6 @@ func (m *validateOpUntagResource) HandleInitialize(ctx context.Context, in middl
 	return next.HandleInitialize(ctx, in)
 }
 
-type validateOpUpdatePullThroughCacheRule struct {
-}
-
-func (*validateOpUpdatePullThroughCacheRule) ID() string {
-	return "OperationInputValidation"
-}
-
-func (m *validateOpUpdatePullThroughCacheRule) HandleInitialize(ctx context.Context, in middleware.InitializeInput, next middleware.InitializeHandler) (
-	out middleware.InitializeOutput, metadata middleware.Metadata, err error,
-) {
-	input, ok := in.Parameters.(*UpdatePullThroughCacheRuleInput)
-	if !ok {
-		return out, metadata, fmt.Errorf("unknown input parameters type %T", in.Parameters)
-	}
-	if err := validateOpUpdatePullThroughCacheRuleInput(input); err != nil {
-		return out, metadata, err
-	}
-	return next.HandleInitialize(ctx, in)
-}
-
 type validateOpUploadLayerPart struct {
 }
 
@@ -705,26 +685,6 @@ func (m *validateOpUploadLayerPart) HandleInitialize(ctx context.Context, in mid
 		return out, metadata, fmt.Errorf("unknown input parameters type %T", in.Parameters)
 	}
 	if err := validateOpUploadLayerPartInput(input); err != nil {
-		return out, metadata, err
-	}
-	return next.HandleInitialize(ctx, in)
-}
-
-type validateOpValidatePullThroughCacheRule struct {
-}
-
-func (*validateOpValidatePullThroughCacheRule) ID() string {
-	return "OperationInputValidation"
-}
-
-func (m *validateOpValidatePullThroughCacheRule) HandleInitialize(ctx context.Context, in middleware.InitializeInput, next middleware.InitializeHandler) (
-	out middleware.InitializeOutput, metadata middleware.Metadata, err error,
-) {
-	input, ok := in.Parameters.(*ValidatePullThroughCacheRuleInput)
-	if !ok {
-		return out, metadata, fmt.Errorf("unknown input parameters type %T", in.Parameters)
-	}
-	if err := validateOpValidatePullThroughCacheRuleInput(input); err != nil {
 		return out, metadata, err
 	}
 	return next.HandleInitialize(ctx, in)
@@ -862,16 +822,8 @@ func addOpUntagResourceValidationMiddleware(stack *middleware.Stack) error {
 	return stack.Initialize.Add(&validateOpUntagResource{}, middleware.After)
 }
 
-func addOpUpdatePullThroughCacheRuleValidationMiddleware(stack *middleware.Stack) error {
-	return stack.Initialize.Add(&validateOpUpdatePullThroughCacheRule{}, middleware.After)
-}
-
 func addOpUploadLayerPartValidationMiddleware(stack *middleware.Stack) error {
 	return stack.Initialize.Add(&validateOpUploadLayerPart{}, middleware.After)
-}
-
-func addOpValidatePullThroughCacheRuleValidationMiddleware(stack *middleware.Stack) error {
-	return stack.Initialize.Add(&validateOpValidatePullThroughCacheRule{}, middleware.After)
 }
 
 func validateEncryptionConfiguration(v *types.EncryptionConfiguration) error {
@@ -1093,41 +1045,6 @@ func validateScanningRepositoryFilterList(v []types.ScanningRepositoryFilter) er
 	}
 }
 
-func validateTag(v *types.Tag) error {
-	if v == nil {
-		return nil
-	}
-	invalidParams := smithy.InvalidParamsError{Context: "Tag"}
-	if v.Key == nil {
-		invalidParams.Add(smithy.NewErrParamRequired("Key"))
-	}
-	if v.Value == nil {
-		invalidParams.Add(smithy.NewErrParamRequired("Value"))
-	}
-	if invalidParams.Len() > 0 {
-		return invalidParams
-	} else {
-		return nil
-	}
-}
-
-func validateTagList(v []types.Tag) error {
-	if v == nil {
-		return nil
-	}
-	invalidParams := smithy.InvalidParamsError{Context: "TagList"}
-	for i := range v {
-		if err := validateTag(&v[i]); err != nil {
-			invalidParams.AddNested(fmt.Sprintf("[%d]", i), err.(smithy.InvalidParamsError))
-		}
-	}
-	if invalidParams.Len() > 0 {
-		return invalidParams
-	} else {
-		return nil
-	}
-}
-
 func validateOpBatchCheckLayerAvailabilityInput(v *BatchCheckLayerAvailabilityInput) error {
 	if v == nil {
 		return nil
@@ -1243,11 +1160,6 @@ func validateOpCreateRepositoryInput(v *CreateRepositoryInput) error {
 	invalidParams := smithy.InvalidParamsError{Context: "CreateRepositoryInput"}
 	if v.RepositoryName == nil {
 		invalidParams.Add(smithy.NewErrParamRequired("RepositoryName"))
-	}
-	if v.Tags != nil {
-		if err := validateTagList(v.Tags); err != nil {
-			invalidParams.AddNested("Tags", err.(smithy.InvalidParamsError))
-		}
 	}
 	if v.EncryptionConfiguration != nil {
 		if err := validateEncryptionConfiguration(v.EncryptionConfiguration); err != nil {
@@ -1664,10 +1576,6 @@ func validateOpTagResourceInput(v *TagResourceInput) error {
 	}
 	if v.Tags == nil {
 		invalidParams.Add(smithy.NewErrParamRequired("Tags"))
-	} else if v.Tags != nil {
-		if err := validateTagList(v.Tags); err != nil {
-			invalidParams.AddNested("Tags", err.(smithy.InvalidParamsError))
-		}
 	}
 	if invalidParams.Len() > 0 {
 		return invalidParams
@@ -1686,24 +1594,6 @@ func validateOpUntagResourceInput(v *UntagResourceInput) error {
 	}
 	if v.TagKeys == nil {
 		invalidParams.Add(smithy.NewErrParamRequired("TagKeys"))
-	}
-	if invalidParams.Len() > 0 {
-		return invalidParams
-	} else {
-		return nil
-	}
-}
-
-func validateOpUpdatePullThroughCacheRuleInput(v *UpdatePullThroughCacheRuleInput) error {
-	if v == nil {
-		return nil
-	}
-	invalidParams := smithy.InvalidParamsError{Context: "UpdatePullThroughCacheRuleInput"}
-	if v.EcrRepositoryPrefix == nil {
-		invalidParams.Add(smithy.NewErrParamRequired("EcrRepositoryPrefix"))
-	}
-	if v.CredentialArn == nil {
-		invalidParams.Add(smithy.NewErrParamRequired("CredentialArn"))
 	}
 	if invalidParams.Len() > 0 {
 		return invalidParams
@@ -1731,21 +1621,6 @@ func validateOpUploadLayerPartInput(v *UploadLayerPartInput) error {
 	}
 	if v.LayerPartBlob == nil {
 		invalidParams.Add(smithy.NewErrParamRequired("LayerPartBlob"))
-	}
-	if invalidParams.Len() > 0 {
-		return invalidParams
-	} else {
-		return nil
-	}
-}
-
-func validateOpValidatePullThroughCacheRuleInput(v *ValidatePullThroughCacheRuleInput) error {
-	if v == nil {
-		return nil
-	}
-	invalidParams := smithy.InvalidParamsError{Context: "ValidatePullThroughCacheRuleInput"}
-	if v.EcrRepositoryPrefix == nil {
-		invalidParams.Add(smithy.NewErrParamRequired("EcrRepositoryPrefix"))
 	}
 	if invalidParams.Len() > 0 {
 		return invalidParams

@@ -52,6 +52,7 @@ var azureSupportedAlgorithms = []string{
 // SignerVerifier creates and verifies digital signatures over a message using Azure KMS service
 type SignerVerifier struct {
 	defaultCtx context.Context
+	hashFunc   crypto.Hash
 	client     *azureVaultClient
 }
 
@@ -87,14 +88,12 @@ func LoadSignerVerifier(defaultCtx context.Context, referenceStr string) (*Signe
 // All other options are ignored if specified.
 func (a *SignerVerifier) SignMessage(message io.Reader, opts ...signature.SignOption) ([]byte, error) {
 	var digest []byte
-	ctx := a.defaultCtx
 
 	for _, opt := range opts {
-		opt.ApplyContext(&ctx)
 		opt.ApplyDigest(&digest)
 	}
 
-	hashFunc, _, err := a.client.getKeyVaultHashFunc(ctx)
+	hashFunc, _, err := a.client.getKeyVaultHashFunc(a.defaultCtx)
 	if err != nil {
 		return nil, err
 	}
@@ -104,7 +103,7 @@ func (a *SignerVerifier) SignMessage(message io.Reader, opts ...signature.SignOp
 		return nil, err
 	}
 
-	rawSig, err := a.client.sign(ctx, digest)
+	rawSig, err := a.client.sign(a.defaultCtx, digest)
 	if err != nil {
 		return nil, err
 	}

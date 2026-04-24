@@ -10,8 +10,6 @@ import (
 	"net/url"
 	"strings"
 
-	"fortio.org/safecast"
-
 	"github.com/jenkins-x/go-scm/scm"
 )
 
@@ -225,8 +223,8 @@ func convertRepositoryList(from *repositories, options *scm.ListOptions) []*scm.
 	var to []*scm.Repository
 
 	paging := options.Size > 0
-	start := safecast.MustConvert[uint64](options.Page * options.Size)
-	end := start + safecast.MustConvert[uint64](options.Size)
+	start := uint64(options.Page * options.Size)
+	end := start + uint64(options.Size)
 
 	var curr uint64
 	for _, v := range from.Value {

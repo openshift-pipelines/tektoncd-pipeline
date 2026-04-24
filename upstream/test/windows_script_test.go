@@ -1,4 +1,5 @@
 //go:build e2e && windows_e2e
+// +build e2e,windows_e2e
 
 /*
 Copyright 2021 The Tekton Authors
@@ -29,9 +30,8 @@ import (
 	"knative.dev/pkg/test/helpers"
 )
 
-// @test:execution=parallel
 func TestWindowsScript(t *testing.T) {
-	ctx := t.Context()
+	ctx := context.Background()
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
@@ -101,9 +101,8 @@ spec:
 	}
 }
 
-// @test:execution=parallel
 func TestWindowsScriptFailure(t *testing.T) {
-	ctx := t.Context()
+	ctx := context.Background()
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
