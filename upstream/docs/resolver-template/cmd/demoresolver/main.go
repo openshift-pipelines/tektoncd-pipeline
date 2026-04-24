@@ -32,7 +32,6 @@ func main() {
 	)
 }
 
-// Deprecated
 type resolver struct{}
 
 // Initialize sets up any dependencies needed by the resolver. None atm.

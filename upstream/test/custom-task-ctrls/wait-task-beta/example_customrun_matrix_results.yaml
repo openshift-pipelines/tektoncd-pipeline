@@ -11,7 +11,7 @@ spec:
     - name: duration
   steps:
     - name: echo
-      image: mirror.gcr.io/alpine
+      image: alpine
       script: |
         echo "$(params.duration)"
 ---
@@ -25,7 +25,7 @@ spec:
       type: array
   steps:
     - name: produce-a-list-of-durations
-      image: mirror.gcr.io/bash
+      image: bash:latest
       script: |
         #!/usr/bin/env bash
         echo -n "[\"10s\",\"2s\",\"5s\"]" | tee $(results.durations.path)

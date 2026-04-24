@@ -11,7 +11,7 @@ spec:
     - name: DOCKERFILE
   steps:
     - name: echo
-      image: mirror.gcr.io/alpine
+      image: alpine
       script: |
         echo "$(params.IMAGE) and $(params.DOCKERFILE)"
 ---

@@ -17,6 +17,7 @@ limitations under the License.
 package v1beta1_test
 
 import (
+	"context"
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
@@ -32,11 +33,11 @@ import (
 func TestTaskConversionBadType(t *testing.T) {
 	good, bad := &v1beta1.Task{}, &v1beta1.Pipeline{}
 
-	if err := good.ConvertTo(t.Context(), bad); err == nil {
+	if err := good.ConvertTo(context.Background(), bad); err == nil {
 		t.Errorf("ConvertTo() = %#v, wanted error", bad)
 	}
 
-	if err := good.ConvertFrom(t.Context(), bad); err == nil {
+	if err := good.ConvertFrom(context.Background(), bad); err == nil {
 		t.Errorf("ConvertFrom() = %#v, wanted error", bad)
 	}
 }
@@ -52,7 +53,6 @@ spec:
   description: test
   steps:
   - image: foo
-  - displayName: "step-display-name"
   params:
   - name: param-1
     type: string
@@ -95,22 +95,6 @@ spec:
         properties:
           key:
             type: string
-`
-	stepWhenTaskYAML := `
-metadata:
-  name: foo
-  namespace: bar
-spec:
-  displayName: "task-step-when"
-  description: test
-  steps:
-    - image: foo
-      name: should-execute
-      image: bash:latest
-      when:
-       - input: "$(workspaces.custom.bound)"
-         operator: in
-         values: ["true"]
 `
 	stepActionTaskYAML := `
 metadata:
@@ -346,9 +330,6 @@ spec:
 	stepResultTaskV1beta1 := parse.MustParseV1beta1Task(t, stepResultTaskYAML)
 	stepResultTaskV1 := parse.MustParseV1Task(t, stepResultTaskYAML)
 
-	stepWhenTaskV1beta1 := parse.MustParseV1beta1Task(t, stepWhenTaskYAML)
-	stepWhenTaskV1 := parse.MustParseV1Task(t, stepWhenTaskYAML)
-
 	stepActionTaskV1beta1 := parse.MustParseV1beta1Task(t, stepActionTaskYAML)
 	stepActionTaskV1 := parse.MustParseV1Task(t, stepActionTaskYAML)
 
@@ -395,10 +376,6 @@ spec:
 		v1beta1Task: stepResultTaskV1beta1,
 		v1Task:      stepResultTaskV1,
 	}, {
-		name:        "step when in task",
-		v1beta1Task: stepWhenTaskV1beta1,
-		v1Task:      stepWhenTaskV1,
-	}, {
 		name:        "step action in task",
 		v1beta1Task: stepActionTaskV1beta1,
 		v1Task:      stepActionTaskV1,
@@ -425,7 +402,7 @@ spec:
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			v1Task := &v1.Task{}
-			if err := test.v1beta1Task.ConvertTo(t.Context(), v1Task); err != nil {
+			if err := test.v1beta1Task.ConvertTo(context.Background(), v1Task); err != nil {
 				t.Errorf("ConvertTo() = %v", err)
 				return
 			}
@@ -434,7 +411,7 @@ spec:
 				t.Errorf("expected v1Task is different from what's converted: %s", d)
 			}
 			gotV1beta1 := &v1beta1.Task{}
-			if err := gotV1beta1.ConvertFrom(t.Context(), v1Task); err != nil {
+			if err := gotV1beta1.ConvertFrom(context.Background(), v1Task); err != nil {
 				t.Errorf("ConvertFrom() = %v", err)
 			}
 			t.Logf("ConvertFrom() = %#v", gotV1beta1)
@@ -506,12 +483,12 @@ func TestTaskConversionFromDeprecated(t *testing.T) {
 		for _, version := range versions {
 			t.Run(test.name, func(t *testing.T) {
 				ver := version
-				if err := test.in.ConvertTo(t.Context(), ver); err != nil {
+				if err := test.in.ConvertTo(context.Background(), ver); err != nil {
 					t.Errorf("ConvertTo() = %v", err)
 				}
 				t.Logf("ConvertTo() = %#v", ver)
 				got := &v1beta1.Task{}
-				if err := got.ConvertFrom(t.Context(), ver); err != nil {
+				if err := got.ConvertFrom(context.Background(), ver); err != nil {
 					t.Errorf("ConvertFrom() = %v", err)
 				}
 				t.Logf("ConvertFrom() = %#v", got)

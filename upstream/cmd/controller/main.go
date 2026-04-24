@@ -21,7 +21,6 @@ import (
 	"log"
 	"net/http"
 	"os"
-	"strconv"
 
 	"github.com/tektoncd/pipeline/pkg/apis/pipeline"
 	"github.com/tektoncd/pipeline/pkg/apis/pipeline/v1beta1"
@@ -44,13 +43,6 @@ const (
 )
 
 func main() {
-	if val, ok := os.LookupEnv("THREADS_PER_CONTROLLER"); ok {
-		threadsPerController, err := strconv.Atoi(val)
-		if err != nil {
-			log.Fatalf("failed to parse value %q of THREADS_PER_CONTROLLER: %v\n", val, err)
-		}
-		controller.DefaultThreadsPerController = threadsPerController
-	}
 	flag.IntVar(&controller.DefaultThreadsPerController, "threads-per-controller", controller.DefaultThreadsPerController, "Threads (goroutines) to create per controller")
 	namespace := flag.String("namespace", corev1.NamespaceAll, "Namespace to restrict informer to. Optional, defaults to all namespaces.")
 	disableHighAvailability := flag.Bool("disable-ha", false, "Whether to disable high-availability functionality for this component.  This flag will be deprecated "+
@@ -64,7 +56,6 @@ func main() {
 	flag.StringVar(&opts.Images.ShellImage, "shell-image", "", "The container image containing a shell")
 	flag.StringVar(&opts.Images.ShellImageWin, "shell-image-win", "", "The container image containing a windows shell")
 	flag.StringVar(&opts.Images.WorkingDirInitImage, "workingdirinit-image", "", "The container image containing our working dir init binary.")
-	flag.DurationVar(&opts.ResyncPeriod, "resync-period", controller.DefaultResyncPeriod, "The period between two resync run (going through all objects)")
 
 	// This parses flags.
 	cfg := injection.ParseAndGetRESTConfigOrDie()
@@ -107,8 +98,6 @@ func main() {
 	}()
 
 	ctx = filteredinformerfactory.WithSelectors(ctx, v1beta1.ManagedByLabelKey)
-	ctx = controller.WithResyncPeriod(ctx, opts.ResyncPeriod)
-
 	sharedmain.MainWithConfig(ctx, ControllerLogKey, cfg,
 		taskrun.NewController(opts, clock.RealClock{}),
 		pipelinerun.NewController(opts, clock.RealClock{}),

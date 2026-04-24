@@ -86,7 +86,7 @@ func TestPipelineTask_OnError(t *testing.T) {
 			OnError: PipelineTaskContinue,
 			TaskRef: &TaskRef{Name: "foo"},
 		},
-		wc: cfgtesting.EnableBetaAPIFields,
+		wc: cfgtesting.EnableAlphaAPIFields,
 	}, {
 		name: "valid PipelineTask with onError:stopAndFail",
 		p: PipelineTask{
@@ -94,7 +94,7 @@ func TestPipelineTask_OnError(t *testing.T) {
 			OnError: PipelineTaskStopAndFail,
 			TaskRef: &TaskRef{Name: "foo"},
 		},
-		wc: cfgtesting.EnableBetaAPIFields,
+		wc: cfgtesting.EnableAlphaAPIFields,
 	}, {
 		name: "invalid OnError value",
 		p: PipelineTask{
@@ -103,7 +103,7 @@ func TestPipelineTask_OnError(t *testing.T) {
 			TaskRef: &TaskRef{Name: "foo"},
 		},
 		expectedError: apis.ErrInvalidValue("invalid-val", "OnError", "PipelineTask OnError must be either \"continue\" or \"stopAndFail\""),
-		wc:            cfgtesting.EnableBetaAPIFields,
+		wc:            cfgtesting.EnableAlphaAPIFields,
 	}, {
 		name: "OnError:stopAndFail and retries coexist - success",
 		p: PipelineTask{
@@ -112,7 +112,7 @@ func TestPipelineTask_OnError(t *testing.T) {
 			Retries: 1,
 			TaskRef: &TaskRef{Name: "foo"},
 		},
-		wc: cfgtesting.EnableBetaAPIFields,
+		wc: cfgtesting.EnableAlphaAPIFields,
 	}, {
 		name: "OnError:continue and retries coexists - failure",
 		p: PipelineTask{
@@ -122,6 +122,15 @@ func TestPipelineTask_OnError(t *testing.T) {
 			TaskRef: &TaskRef{Name: "foo"},
 		},
 		expectedError: apis.ErrGeneric("PipelineTask OnError cannot be set to \"continue\" when Retries is greater than 0"),
+		wc:            cfgtesting.EnableAlphaAPIFields,
+	}, {
+		name: "setting OnError in beta API version - failure",
+		p: PipelineTask{
+			Name:    "foo",
+			OnError: PipelineTaskContinue,
+			TaskRef: &TaskRef{Name: "foo"},
+		},
+		expectedError: apis.ErrGeneric("OnError requires \"enable-api-fields\" feature gate to be \"alpha\" but it is \"beta\""),
 		wc:            cfgtesting.EnableBetaAPIFields,
 	}, {
 		name: "setting OnError in stable API version - failure",
@@ -130,12 +139,12 @@ func TestPipelineTask_OnError(t *testing.T) {
 			OnError: PipelineTaskContinue,
 			TaskRef: &TaskRef{Name: "foo"},
 		},
-		expectedError: apis.ErrGeneric("OnError requires \"enable-api-fields\" feature gate to be \"alpha\" or \"beta\" but it is \"stable\""),
+		expectedError: apis.ErrGeneric("OnError requires \"enable-api-fields\" feature gate to be \"alpha\" but it is \"stable\""),
 		wc:            cfgtesting.EnableStableAPIFields,
 	}}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			ctx := t.Context()
+			ctx := context.Background()
 			if tt.wc != nil {
 				ctx = tt.wc(ctx)
 			}
@@ -347,7 +356,7 @@ func TestPipelineTask_ValidateRefOrSpec(t *testing.T) {
 	}}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			ctx := t.Context()
+			ctx := context.Background()
 			if tt.wc != nil {
 				ctx = tt.wc(ctx)
 			}
@@ -422,7 +431,7 @@ func TestPipelineTask_ValidateRefOrSpec_APIVersionsCompatibility(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			ctx := t.Context()
+			ctx := context.Background()
 			if test.wc != nil {
 				ctx = test.wc(ctx)
 			}
@@ -447,7 +456,7 @@ func TestPipelineTask_ValidateCustomTask(t *testing.T) {
 		expectedError apis.FieldError
 	}{{
 		name: "custom task - taskRef without kind",
-		task: PipelineTask{Name: "foo", TaskRef: &TaskRef{APIVersion: "example/v0", Kind: "", Name: ""}},
+		task: PipelineTask{Name: "foo", TaskRef: &TaskRef{APIVersion: "example.dev/v0", Kind: "", Name: ""}},
 		expectedError: apis.FieldError{
 			Message: `invalid value: custom task ref must specify kind`,
 			Paths:   []string{"taskRef.kind"},
@@ -456,7 +465,7 @@ func TestPipelineTask_ValidateCustomTask(t *testing.T) {
 		name: "custom task - taskSpec without kind",
 		task: PipelineTask{Name: "foo", TaskSpec: &EmbeddedTask{
 			TypeMeta: runtime.TypeMeta{
-				APIVersion: "example/v0",
+				APIVersion: "example.dev/v0",
 				Kind:       "",
 			},
 		}},
@@ -483,39 +492,6 @@ func TestPipelineTask_ValidateCustomTask(t *testing.T) {
 			Message: `invalid value: custom task ref must specify apiVersion`,
 			Paths:   []string{"taskRef.apiVersion"},
 		},
-	}, {
-		name: "custom task - taskRef with invalid apiVersion format",
-		task: PipelineTask{Name: "foo", TaskRef: &TaskRef{APIVersion: "invalid-api-version", Kind: "some-kind", Name: ""}},
-		expectedError: apis.FieldError{
-			Message: `invalid value: invalid apiVersion format "invalid-api-version", must be in the format "group/version"`,
-			Paths:   []string{"taskRef.apiVersion"},
-		},
-	}, {
-		name: "custom task - taskSpec with invalid apiVersion format",
-		task: PipelineTask{Name: "foo", TaskSpec: &EmbeddedTask{
-			TypeMeta: runtime.TypeMeta{
-				APIVersion: "no-slash-no-dot",
-				Kind:       "some-kind",
-			},
-		}},
-		expectedError: apis.FieldError{
-			Message: `invalid value: invalid apiVersion format "no-slash-no-dot", must be in the format "group/version"`,
-			Paths:   []string{"taskSpec.apiVersion"},
-		},
-	}, {
-		name: "custom task - taskRef with empty group in apiVersion",
-		task: PipelineTask{Name: "foo", TaskRef: &TaskRef{APIVersion: "/v1", Kind: "some-kind", Name: ""}},
-		expectedError: apis.FieldError{
-			Message: `invalid value: invalid apiVersion format "/v1", must be in the format "group/version"`,
-			Paths:   []string{"taskRef.apiVersion"},
-		},
-	}, {
-		name: "custom task - taskRef with empty version in apiVersion",
-		task: PipelineTask{Name: "foo", TaskRef: &TaskRef{APIVersion: "example/", Kind: "some-kind", Name: ""}},
-		expectedError: apis.FieldError{
-			Message: `invalid value: invalid apiVersion format "example/", must be in the format "group/version"`,
-			Paths:   []string{"taskRef.apiVersion"},
-		},
 	}}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -530,33 +506,34 @@ func TestPipelineTask_ValidateCustomTask(t *testing.T) {
 	}
 }
 
-func TestPipelineTask_ValidateCustomTask_ValidAPIVersion(t *testing.T) {
+func TestPipelineTask_ValidateBundle_Failure(t *testing.T) {
 	tests := []struct {
-		name string
-		task PipelineTask
+		name          string
+		p             PipelineTask
+		expectedError apis.FieldError
 	}{{
-		name: "custom task - valid apiVersion with group/version",
-		task: PipelineTask{Name: "foo", TaskRef: &TaskRef{APIVersion: "example.dev/v1", Kind: "Example", Name: "example"}},
+		name: "bundle - invalid reference",
+		p: PipelineTask{
+			Name:    "foo",
+			TaskRef: &TaskRef{Name: "bar", Bundle: "invalid reference"},
+		},
+		expectedError: *apis.ErrInvalidValue("invalid bundle reference (could not parse reference: invalid reference)", "taskRef.bundle"),
 	}, {
-		name: "custom task - valid apiVersion with multi-level group",
-		task: PipelineTask{Name: "foo", TaskRef: &TaskRef{APIVersion: "custom.tekton.dev/v1beta1", Kind: "Custom", Name: "custom"}},
-	}, {
-		name: "custom task - valid apiVersion without dots in group",
-		task: PipelineTask{Name: "foo", TaskRef: &TaskRef{APIVersion: "example/v1", Kind: "Example", Name: "example"}},
-	}, {
-		name: "custom task - valid apiVersion in taskSpec",
-		task: PipelineTask{Name: "foo", TaskSpec: &EmbeddedTask{
-			TypeMeta: runtime.TypeMeta{
-				APIVersion: "example.io/v2",
-				Kind:       "CustomTask",
-			},
-		}},
+		name: "bundle - missing taskRef name",
+		p: PipelineTask{
+			Name:    "foo",
+			TaskRef: &TaskRef{Bundle: "valid-bundle"},
+		},
+		expectedError: *apis.ErrMissingField("taskRef.name"),
 	}}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			err := tt.task.validateCustomTask()
-			if err != nil {
-				t.Errorf("PipelineTask.validateCustomTask() returned unexpected error: %v", err)
+			err := tt.p.validateBundle()
+			if err == nil {
+				t.Error("PipelineTask.ValidateBundles() did not return error for invalid bundle in a pipelineTask")
+			}
+			if d := cmp.Diff(tt.expectedError.Error(), err.Error(), cmpopts.IgnoreUnexported(apis.FieldError{})); d != "" {
+				t.Errorf("Pipeline.ValidateBundles() errors diff %s", diff.PrintWantGot(d))
 			}
 		})
 	}
@@ -616,10 +593,17 @@ func TestPipelineTask_ValidateRegularTask_Success(t *testing.T) {
 			TaskRef: &TaskRef{ResolverRef: ResolverRef{Resolver: "bar", Params: Params{}}},
 		},
 		configMap: map[string]string{"enable-api-fields": "beta"},
+	}, {
+		name: "pipeline task - use of bundle with the feature flag set",
+		tasks: PipelineTask{
+			Name:    "foo",
+			TaskRef: &TaskRef{Name: "bar", Bundle: "docker.io/foo"},
+		},
+		configMap: map[string]string{"enable-tekton-oci-bundles": "true"},
 	}}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			ctx := cfgtesting.SetFeatureFlags(t.Context(), t, tt.configMap)
+			ctx := cfgtesting.SetFeatureFlags(context.Background(), t, tt.configMap)
 			err := tt.tasks.validateTask(ctx)
 			if err != nil {
 				t.Errorf("PipelineTask.validateTask() returned error for valid pipeline task: %v", err)
@@ -633,7 +617,6 @@ func TestPipelineTask_ValidateRegularTask_Failure(t *testing.T) {
 		name          string
 		task          PipelineTask
 		expectedError apis.FieldError
-		configMap     map[string]string
 	}{{
 		name: "pipeline task - invalid taskSpec",
 		task: PipelineTask{
@@ -665,58 +648,22 @@ func TestPipelineTask_ValidateRegularTask_Failure(t *testing.T) {
 			Paths:   []string{"taskRef.name"},
 		},
 	}, {
-		name: "pipeline task - taskRef with resolver and k8s style name",
+		name: "pipeline task - use of bundle without the feature flag set",
+		task: PipelineTask{
+			Name:    "foo",
+			TaskRef: &TaskRef{Name: "bar", Bundle: "docker.io/foo"},
+		},
+		expectedError: *apis.ErrGeneric("bundle requires \"enable-tekton-oci-bundles\" feature gate to be true but it is false"),
+	}, {
+		name: "pipeline task - taskRef with resolver and name",
 		task: PipelineTask{
 			Name:    "foo",
 			TaskRef: &TaskRef{Name: "foo", ResolverRef: ResolverRef{Resolver: "git"}},
 		},
 		expectedError: apis.FieldError{
-			Message: `invalid value: invalid URI for request`,
-			Paths:   []string{"taskRef.name"},
-		},
-		configMap: map[string]string{"enable-concise-resolver-syntax": "true"},
-	}, {
-		name: "pipeline task - taskRef with url-like name without enable-concise-resolver-syntax",
-		task: PipelineTask{
-			Name:    "foo",
-			TaskRef: &TaskRef{Name: "https://foo.com/bar"},
-		},
-		expectedError: *apis.ErrMissingField("taskRef.resolver").Also(&apis.FieldError{
-			Message: `feature flag enable-concise-resolver-syntax should be set to true to use concise resolver syntax`,
-			Paths:   []string{"taskRef"},
-		}),
-	}, {
-		name: "pipeline task - taskRef without enable-concise-resolver-syntax",
-		task: PipelineTask{
-			Name:    "foo",
-			TaskRef: &TaskRef{Name: "https://foo.com/bar", ResolverRef: ResolverRef{Resolver: "git"}},
-		},
-		expectedError: apis.FieldError{
-			Message: `feature flag enable-concise-resolver-syntax should be set to true to use concise resolver syntax`,
-			Paths:   []string{"taskRef"},
-		},
-	}, {
-		name: "pipeline task - taskRef with url-like name without resolver",
-		task: PipelineTask{
-			Name:    "foo",
-			TaskRef: &TaskRef{Name: "https://foo.com/bar"},
-		},
-		expectedError: apis.FieldError{
-			Message: `missing field(s)`,
-			Paths:   []string{"taskRef.resolver"},
-		},
-		configMap: map[string]string{"enable-concise-resolver-syntax": "true"},
-	}, {
-		name: "pipeline task - taskRef with name and params",
-		task: PipelineTask{
-			Name:    "foo",
-			TaskRef: &TaskRef{Name: "https://foo/bar", ResolverRef: ResolverRef{Resolver: "git", Params: Params{{Name: "foo", Value: ParamValue{StringVal: "bar"}}}}},
-		},
-		expectedError: apis.FieldError{
 			Message: `expected exactly one, got both`,
-			Paths:   []string{"taskRef.name", "taskRef.params"},
+			Paths:   []string{"taskRef.name", "taskRef.resolver"},
 		},
-		configMap: map[string]string{"enable-concise-resolver-syntax": "true"},
 	}, {
 		name: "pipeline task - taskRef with resolver params but no resolver",
 		task: PipelineTask{
@@ -730,8 +677,7 @@ func TestPipelineTask_ValidateRegularTask_Failure(t *testing.T) {
 	}}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			ctx := cfgtesting.SetFeatureFlags(t.Context(), t, tt.configMap)
-			err := tt.task.validateTask(ctx)
+			err := tt.task.validateTask(context.Background())
 			if err == nil {
 				t.Error("PipelineTask.validateTask() did not return error for invalid pipeline task")
 			}
@@ -752,7 +698,7 @@ func TestPipelineTask_Validate_Failure(t *testing.T) {
 		name: "custom task reference in taskref missing apiversion Kind",
 		p: PipelineTask{
 			Name:    "invalid-custom-task",
-			TaskRef: &TaskRef{APIVersion: "example.com/v1"},
+			TaskRef: &TaskRef{APIVersion: "example.com"},
 		},
 		expectedError: apis.FieldError{
 			Message: `invalid value: custom task ref must specify kind`,
@@ -762,9 +708,8 @@ func TestPipelineTask_Validate_Failure(t *testing.T) {
 		name: "custom task reference in taskspec missing kind",
 		p: PipelineTask{Name: "foo", TaskSpec: &EmbeddedTask{
 			TypeMeta: runtime.TypeMeta{
-				APIVersion: "example.com/v1",
-			},
-		}},
+				APIVersion: "example.com",
+			}}},
 		expectedError: *apis.ErrInvalidValue("custom task spec must specify kind", "taskSpec.kind"),
 	}, {
 		name:          "custom task reference in taskref missing apiversion",
@@ -775,13 +720,23 @@ func TestPipelineTask_Validate_Failure(t *testing.T) {
 		p: PipelineTask{Name: "foo", TaskSpec: &EmbeddedTask{
 			TypeMeta: runtime.TypeMeta{
 				Kind: "Example",
-			},
-		}},
+			}}},
 		expectedError: *apis.ErrInvalidValue("custom task spec must specify apiVersion", "taskSpec.apiVersion"),
+	}, {
+		name: "invalid bundle without bundle name",
+		p: PipelineTask{
+			Name:    "invalid-bundle",
+			TaskRef: &TaskRef{Bundle: "bundle"},
+		},
+		expectedError: apis.FieldError{
+			Message: `missing field(s)`,
+			Paths:   []string{"taskRef.name"},
+		},
+		wc: enableFeatures(t, []string{"enable-tekton-oci-bundles"}),
 	}}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			ctx := t.Context()
+			ctx := context.Background()
 			if tt.wc != nil {
 				ctx = tt.wc(ctx)
 			}
@@ -833,44 +788,35 @@ func TestPipelineTaskList_Deps(t *testing.T) {
 		},
 	}, {
 		name: "valid pipeline with Task Results deps",
-		tasks: []PipelineTask{
-			{
-				Name: "task-1",
-			}, {
-				Name: "task-2",
-				Params: Params{
-					{
-						Value: ParamValue{
-							Type:      "string",
-							StringVal: "$(tasks.task-1.results.result)",
-						},
-					},
-				},
-			},
+		tasks: []PipelineTask{{
+			Name: "task-1",
+		}, {
+			Name: "task-2",
+			Params: Params{{
+				Value: ParamValue{
+					Type:      "string",
+					StringVal: "$(tasks.task-1.results.result)",
+				}},
+			}},
 		},
 		expectedDeps: map[string][]string{
 			"task-2": {"task-1"},
 		},
 	}, {
 		name: "valid pipeline with Task Results in Matrix deps",
-		tasks: []PipelineTask{
-			{
-				Name: "task-1",
-			}, {
-				Name: "task-2",
-				Matrix: &Matrix{
-					Params: Params{
-						{
-							Value: ParamValue{
-								Type: ParamTypeArray,
-								ArrayVal: []string{
-									"$(tasks.task-1.results.result)",
-								},
-							},
+		tasks: []PipelineTask{{
+			Name: "task-1",
+		}, {
+			Name: "task-2",
+			Matrix: &Matrix{
+				Params: Params{{
+					Value: ParamValue{
+						Type: ParamTypeArray,
+						ArrayVal: []string{
+							"$(tasks.task-1.results.result)",
 						},
-					},
-				},
-			},
+					}},
+				}}},
 		},
 		expectedDeps: map[string][]string{
 			"task-2": {"task-1"},
@@ -908,42 +854,71 @@ func TestPipelineTaskList_Validate(t *testing.T) {
 		expectedError *apis.FieldError
 		wc            func(context.Context) context.Context
 	}{{
-		name: "validate all valid custom task, and regular task",
+		name: "validate all three valid custom task, bundle, and regular task",
 		tasks: PipelineTaskList{{
 			Name:    "valid-custom-task",
-			TaskRef: &TaskRef{APIVersion: "example.com/v1", Kind: "custom"},
+			TaskRef: &TaskRef{APIVersion: "example.com", Kind: "custom"},
+		}, {
+			Name:    "valid-bundle",
+			TaskRef: &TaskRef{Bundle: "bundle", Name: "bundle"},
 		}, {
 			Name:    "valid-task",
 			TaskRef: &TaskRef{Name: "task"},
 		}},
 		path: "tasks",
+		wc:   enableFeatures(t, []string{"enable-tekton-oci-bundles"}),
 	}, {
-		name: "validate list of tasks with valid custom task and invalid regular task",
+		name: "validate list of tasks with valid custom task and bundle but invalid regular task",
 		tasks: PipelineTaskList{{
 			Name:    "valid-custom-task",
-			TaskRef: &TaskRef{APIVersion: "example.com/v1", Kind: "custom"},
+			TaskRef: &TaskRef{APIVersion: "example.com", Kind: "custom"},
+		}, {
+			Name:    "valid-bundle",
+			TaskRef: &TaskRef{Bundle: "bundle", Name: "bundle"},
 		}, {
 			Name:    "invalid-task-without-name",
 			TaskRef: &TaskRef{Name: ""},
 		}},
 		path:          "tasks",
-		expectedError: apis.ErrGeneric(`missing field(s)`, "tasks[1].taskRef.name"),
+		expectedError: apis.ErrGeneric(`missing field(s)`, "tasks[2].taskRef.name"),
+		wc:            enableFeatures(t, []string{"enable-tekton-oci-bundles"}),
 	}, {
-		name: "validate all invalid tasks - custom task and regular task",
+		name: "validate list of tasks with valid custom task but invalid bundle and invalid regular task",
+		tasks: PipelineTaskList{{
+			Name:    "valid-custom-task",
+			TaskRef: &TaskRef{APIVersion: "example.com", Kind: "custom"},
+		}, {
+			Name:    "invalid-bundle",
+			TaskRef: &TaskRef{Bundle: "bundle"},
+		}, {
+			Name:    "invalid-task-without-name",
+			TaskRef: &TaskRef{Name: ""},
+		}},
+		path: "tasks",
+		expectedError: apis.ErrGeneric(`missing field(s)`, "tasks[2].taskRef.name").Also(
+			apis.ErrGeneric(`missing field(s)`, "tasks[1].taskRef.name")),
+		wc: enableFeatures(t, []string{"enable-tekton-oci-bundles"}),
+	}, {
+		name: "validate all three invalid tasks - custom task, bundle and regular task",
 		tasks: PipelineTaskList{{
 			Name:    "invalid-custom-task",
-			TaskRef: &TaskRef{APIVersion: "example.com/v1"},
+			TaskRef: &TaskRef{APIVersion: "example.com"},
+		}, {
+			Name:    "invalid-bundle",
+			TaskRef: &TaskRef{Bundle: "bundle"},
 		}, {
 			Name:    "invalid-task",
 			TaskRef: &TaskRef{Name: ""},
 		}},
 		path: "tasks",
-		expectedError: apis.ErrGeneric(`missing field(s)`, "tasks[1].taskRef.name").Also(
+		expectedError: apis.ErrGeneric(`missing field(s)`, "tasks[2].taskRef.name").Also(
+			apis.ErrGeneric(`missing field(s)`, "tasks[1].taskRef.name")).Also(
 			apis.ErrGeneric(`invalid value: custom task ref must specify kind`, "tasks[0].taskRef.kind")),
+		wc: enableFeatures(t, []string{"enable-tekton-oci-bundles"}),
 	}}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			ctx := t.Context()
+			ctx := context.Background()
 			if tt.wc != nil {
 				ctx = tt.wc(ctx)
 			}
@@ -972,8 +947,7 @@ func TestPipelineTask_ValidateMatrix(t *testing.T) {
 			Matrix: &Matrix{
 				Params: Params{{
 					Name: "foobar", Value: ParamValue{Type: ParamTypeArray, ArrayVal: []string{"foo", "bar"}},
-				}},
-			},
+				}}},
 			Params: Params{{
 				Name: "foobar", Value: ParamValue{Type: ParamTypeArray, ArrayVal: []string{"foo", "bar"}},
 			}},
@@ -984,15 +958,12 @@ func TestPipelineTask_ValidateMatrix(t *testing.T) {
 		pt: &PipelineTask{
 			Name: "task",
 			Matrix: &Matrix{
-				Include: IncludeParamsList{
-					{
-						Name: "duplicate-param",
-						Params: Params{{
-							Name: "duplicate", Value: ParamValue{Type: ParamTypeString, StringVal: "foo"},
-						}},
-					},
-				},
-			},
+				Include: IncludeParamsList{{
+					Name: "duplicate-param",
+					Params: Params{{
+						Name: "duplicate", Value: ParamValue{Type: ParamTypeString, StringVal: "foo"},
+					}}},
+				}},
 			Params: Params{{
 				Name: "duplicate", Value: ParamValue{Type: ParamTypeArray, ArrayVal: []string{"foo", "bar"}},
 			}},
@@ -1007,8 +978,7 @@ func TestPipelineTask_ValidateMatrix(t *testing.T) {
 					Name: "foobar", Value: ParamValue{Type: ParamTypeArray, ArrayVal: []string{"foo", "bar"}},
 				}, {
 					Name: "foobar", Value: ParamValue{Type: ParamTypeArray, ArrayVal: []string{"foo-1", "bar-1"}},
-				}},
-			},
+				}}},
 		},
 		wantErrs: &apis.FieldError{
 			Message: `parameter names must be unique, the parameter "foobar" is also defined at`,
@@ -1021,8 +991,7 @@ func TestPipelineTask_ValidateMatrix(t *testing.T) {
 			Matrix: &Matrix{
 				Params: Params{{
 					Name: "foobar", Value: ParamValue{Type: ParamTypeArray, ArrayVal: []string{"foo", "bar"}},
-				}},
-			},
+				}}},
 			Params: Params{{
 				Name: "barfoo", Value: ParamValue{Type: ParamTypeArray, ArrayVal: []string{"bar", "foo"}},
 			}},
@@ -1032,17 +1001,14 @@ func TestPipelineTask_ValidateMatrix(t *testing.T) {
 		pt: &PipelineTask{
 			Name: "task",
 			Matrix: &Matrix{
-				Include: IncludeParamsList{
-					{
-						Name: "invalid-include",
-						Params: Params{{
-							Name: "foobar", Value: ParamValue{Type: ParamTypeString, StringVal: "foo"},
-						}, {
-							Name: "foobar", Value: ParamValue{Type: ParamTypeString, StringVal: "foo-1"},
-						}},
-					},
-				},
-			},
+				Include: IncludeParamsList{{
+					Name: "invalid-include",
+					Params: Params{{
+						Name: "foobar", Value: ParamValue{Type: ParamTypeString, StringVal: "foo"},
+					}, {
+						Name: "foobar", Value: ParamValue{Type: ParamTypeString, StringVal: "foo-1"},
+					}}},
+				}},
 		},
 		wantErrs: &apis.FieldError{
 			Message: `parameter names must be unique, the parameter "foobar" is also defined at`,
@@ -1062,8 +1028,7 @@ func TestPipelineTask_ValidateMatrix(t *testing.T) {
 					Name: "foo", Value: ParamValue{Type: ParamTypeString, StringVal: "$(params.foobar[*])"},
 				}, {
 					Name: "bar", Value: ParamValue{Type: ParamTypeString, StringVal: "$(params.barfoo[*])"},
-				}},
-			},
+				}}},
 		},
 	}, {
 		name: "parameters in matrix contain result references",
@@ -1072,8 +1037,7 @@ func TestPipelineTask_ValidateMatrix(t *testing.T) {
 			Matrix: &Matrix{
 				Params: Params{{
 					Name: "a-param", Value: ParamValue{Type: ParamTypeArray, ArrayVal: []string{"$(tasks.foo-task.results.a-result)"}},
-				}},
-			},
+				}}},
 		},
 	}, {
 		name: "count of combinations of parameters in the matrix exceeds the maximum",
@@ -1084,8 +1048,7 @@ func TestPipelineTask_ValidateMatrix(t *testing.T) {
 					Name: "platform", Value: ParamValue{Type: ParamTypeArray, ArrayVal: []string{"linux", "mac", "windows"}},
 				}, {
 					Name: "browser", Value: ParamValue{Type: ParamTypeArray, ArrayVal: []string{"chrome", "firefox", "safari"}},
-				}},
-			},
+				}}},
 		},
 		wantErrs: &apis.FieldError{
 			Message: "expected 0 <= 9 <= 4",
@@ -1100,8 +1063,7 @@ func TestPipelineTask_ValidateMatrix(t *testing.T) {
 					Name: "platform", Value: ParamValue{Type: ParamTypeArray, ArrayVal: []string{"linux", "mac"}},
 				}, {
 					Name: "browser", Value: ParamValue{Type: ParamTypeArray, ArrayVal: []string{"chrome", "firefox"}},
-				}},
-			},
+				}}},
 		},
 	}, {
 		name: "valid matrix emitting string results consumed in aggregate by another pipelineTask",
@@ -1148,7 +1110,7 @@ func TestPipelineTask_ValidateMatrix(t *testing.T) {
 				FeatureFlags: featureFlags,
 				Defaults:     defaults,
 			}
-			ctx := config.ToContext(t.Context(), cfg)
+			ctx := config.ToContext(context.Background(), cfg)
 			if d := cmp.Diff(tt.wantErrs.Error(), tt.pt.validateMatrix(ctx).Error()); d != "" {
 				t.Errorf("PipelineTask.validateMatrix() errors diff %s", diff.PrintWantGot(d))
 			}
@@ -1180,19 +1142,6 @@ func TestPipelineTask_ValidateEmbeddedOrType(t *testing.T) {
 						Steps: []Step{{
 							Name:  "foo",
 							Image: "bar",
-						}},
-					},
-				},
-			},
-		}, {
-			name: "just steps with DisplayName",
-			pt: PipelineTask{
-				TaskSpec: &EmbeddedTask{
-					TaskSpec: TaskSpec{
-						Steps: []Step{{
-							Name:        "foo",
-							DisplayName: "step DisplayName",
-							Image:       "bar",
 						}},
 					},
 				},
@@ -1287,8 +1236,7 @@ func TestPipelineTask_IsMatrixed(t *testing.T) {
 				},
 			},
 			expected: true,
-		},
-		{
+		}, {
 			name: "matrixed with include",
 			arg: arg{
 				Matrix: &Matrix{
@@ -1297,14 +1245,12 @@ func TestPipelineTask_IsMatrixed(t *testing.T) {
 						Params: Params{{
 							Name: "IMAGE", Value: ParamValue{Type: ParamTypeString, StringVal: "image-1"},
 						}, {
-							Name: "DOCKERFILE", Value: ParamValue{Type: ParamTypeString, StringVal: "path/to/Dockerfile1"},
-						}},
+							Name: "DOCKERFILE", Value: ParamValue{Type: ParamTypeString, StringVal: "path/to/Dockerfile1"}}},
 					}},
 				},
 			},
 			expected: true,
-		},
-		{
+		}, {
 			name: "matrixed with params and include",
 			arg: arg{
 				Matrix: &Matrix{
@@ -1314,8 +1260,7 @@ func TestPipelineTask_IsMatrixed(t *testing.T) {
 					Include: IncludeParamsList{{
 						Name: "common-package",
 						Params: Params{{
-							Name: "package", Value: ParamValue{Type: ParamTypeString, StringVal: "path/to/common/package/"},
-						}},
+							Name: "package", Value: ParamValue{Type: ParamTypeString, StringVal: "path/to/common/package/"}}},
 					}},
 				},
 			},
@@ -1340,37 +1285,36 @@ func TestEmbeddedTask_IsCustomTask(t *testing.T) {
 		name string
 		et   *EmbeddedTask
 		want bool
-	}{
-		{
-			name: "not a custom task - APIVersion and Kind are not set",
-			et:   &EmbeddedTask{},
-			want: false,
-		}, {
-			name: "not a custom task - APIVersion is not set",
-			et: &EmbeddedTask{
-				TypeMeta: runtime.TypeMeta{
-					Kind: "Example",
-				},
+	}{{
+		name: "not a custom task - APIVersion and Kind are not set",
+		et:   &EmbeddedTask{},
+		want: false,
+	}, {
+		name: "not a custom task - APIVersion is not set",
+		et: &EmbeddedTask{
+			TypeMeta: runtime.TypeMeta{
+				Kind: "Example",
 			},
-			want: false,
-		}, {
-			name: "not a custom task - Kind is not set",
-			et: &EmbeddedTask{
-				TypeMeta: runtime.TypeMeta{
-					APIVersion: "example/v0",
-				},
-			},
-			want: false,
-		}, {
-			name: "custom task - APIVersion and Kind are set",
-			et: &EmbeddedTask{
-				TypeMeta: runtime.TypeMeta{
-					Kind:       "Example",
-					APIVersion: "example/v0",
-				},
-			},
-			want: true,
 		},
+		want: false,
+	}, {
+		name: "not a custom task - Kind is not set",
+		et: &EmbeddedTask{
+			TypeMeta: runtime.TypeMeta{
+				APIVersion: "example/v0",
+			},
+		},
+		want: false,
+	}, {
+		name: "custom task - APIVersion and Kind are set",
+		et: &EmbeddedTask{
+			TypeMeta: runtime.TypeMeta{
+				Kind:       "Example",
+				APIVersion: "example/v0",
+			},
+		},
+		want: true,
+	},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -1390,8 +1334,7 @@ func TestPipelineChecksum(t *testing.T) {
 		pipeline: &Pipeline{
 			TypeMeta: metav1.TypeMeta{
 				APIVersion: "tekton.dev/v1beta1",
-				Kind:       "Pipeline",
-			},
+				Kind:       "Pipeline"},
 			ObjectMeta: metav1.ObjectMeta{
 				Name:        "pipeline",
 				Namespace:   "pipeline-ns",
@@ -1406,8 +1349,7 @@ func TestPipelineChecksum(t *testing.T) {
 		pipeline: &Pipeline{
 			TypeMeta: metav1.TypeMeta{
 				APIVersion: "tekton.dev/v1beta1",
-				Kind:       "Pipeline",
-			},
+				Kind:       "Pipeline"},
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      "pipeline",
 				Namespace: "pipeline-ns",
@@ -1429,7 +1371,7 @@ func TestPipelineChecksum(t *testing.T) {
 				t.Fatalf("Error computing checksum: %v", err)
 			}
 
-			if d := cmp.Diff("60b813bc50e40f00fed27a3985ff0b0771838278f905ef5017ce8f03146957cb", hex.EncodeToString(sha)); d != "" {
+			if d := cmp.Diff("ef400089e645c69a588e71fe629ce2a989743e303c058073b0829c6c6338ab8a", hex.EncodeToString(sha)); d != "" {
 				t.Error(diff.PrintWantGot(d))
 			}
 		})

@@ -284,10 +284,6 @@ func (s *pullService) UnrequestReview(ctx context.Context, repo string, number i
 	return nil, scm.ErrNotSupported
 }
 
-func (s *pullService) DeletePullRequest(ctx context.Context, repo string, prID int) (*scm.Response, error) {
-	return nil, scm.ErrNotSupported
-}
-
 type prSource struct {
 	Commit struct {
 		Type   string `json:"type"`

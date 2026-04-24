@@ -27,7 +27,7 @@ spec:
   - name: secret-password
   steps:
   - name: fetch-csi
-    image: mirror.gcr.io/ubuntu
+    image: ubuntu
     script: cat $(workspaces.secret-password.path)/db-password
 ---
 apiVersion: tekton.dev/v1

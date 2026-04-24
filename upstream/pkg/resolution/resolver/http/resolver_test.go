@@ -19,7 +19,6 @@ package http
 import (
 	"context"
 	"crypto/sha256"
-	"crypto/sha512"
 	"encoding/base64"
 	"encoding/hex"
 	"errors"
@@ -27,7 +26,6 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"regexp"
-	"strings"
 	"testing"
 	"time"
 
@@ -35,16 +33,15 @@ import (
 	resolverconfig "github.com/tektoncd/pipeline/pkg/apis/config/resolver"
 	pipelinev1 "github.com/tektoncd/pipeline/pkg/apis/pipeline/v1"
 	"github.com/tektoncd/pipeline/pkg/apis/resolution/v1beta1"
-	"github.com/tektoncd/pipeline/pkg/internal/resolution"
 	ttesting "github.com/tektoncd/pipeline/pkg/reconciler/testing"
-	common "github.com/tektoncd/pipeline/pkg/resolution/common"
+	resolutioncommon "github.com/tektoncd/pipeline/pkg/resolution/common"
 	"github.com/tektoncd/pipeline/pkg/resolution/resolver/framework"
 	frtesting "github.com/tektoncd/pipeline/pkg/resolution/resolver/framework/testing"
+	"github.com/tektoncd/pipeline/pkg/resolution/resolver/internal"
 	"github.com/tektoncd/pipeline/test"
 	"github.com/tektoncd/pipeline/test/diff"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"knative.dev/pkg/logging"
 	"knative.dev/pkg/system"
 	_ "knative.dev/pkg/system/testing"
 )
@@ -70,8 +67,8 @@ const emptyStr = "empty"
 
 func TestGetSelector(t *testing.T) {
 	resolver := Resolver{}
-	sel := resolver.GetSelector(t.Context())
-	if typ, has := sel[common.LabelKeyResolverType]; !has {
+	sel := resolver.GetSelector(context.Background())
+	if typ, has := sel[resolutioncommon.LabelKeyResolverType]; !has {
 		t.Fatalf("unexpected selector: %v", sel)
 	} else if typ != LabelValueHttpResolverType {
 		t.Fatalf("unexpected type: %q", typ)
@@ -107,7 +104,7 @@ func TestValidateParams(t *testing.T) {
 			resolver := Resolver{}
 			params := map[string]string{}
 			if tc.url != "nourl" {
-				params[UrlParam] = tc.url
+				params[urlParam] = tc.url
 			}
 			err := resolver.ValidateParams(contextWithConfig(defaultHttpTimeoutValue), toParams(params))
 			if tc.expectedErr != nil {
@@ -184,12 +181,12 @@ func TestResolve(t *testing.T) {
 				if tc.expectedStatus != 0 {
 					w.WriteHeader(tc.expectedStatus)
 				}
-				fmt.Fprint(w, tc.input)
+				fmt.Fprintf(w, tc.input)
 			}))
 			params := []pipelinev1.Param{}
 			if tc.paramSet {
 				params = append(params, pipelinev1.Param{
-					Name:  UrlParam,
+					Name:  urlParam,
 					Value: *pipelinev1.NewStructuredValues(svr.URL),
 				})
 			}
@@ -256,12 +253,12 @@ func createRequest(params *params) *v1beta1.ResolutionRequest {
 			Namespace:         "foo",
 			CreationTimestamp: metav1.Time{Time: time.Now()},
 			Labels: map[string]string{
-				common.LabelKeyResolverType: LabelValueHttpResolverType,
+				resolutioncommon.LabelKeyResolverType: LabelValueHttpResolverType,
 			},
 		},
 		Spec: v1beta1.ResolutionRequestSpec{
 			Params: []pipelinev1.Param{{
-				Name:  UrlParam,
+				Name:  urlParam,
 				Value: *pipelinev1.NewStructuredValues(params.url),
 			}},
 		},
@@ -272,7 +269,7 @@ func createRequest(params *params) *v1beta1.ResolutionRequest {
 			s = ""
 		}
 		rr.Spec.Params = append(rr.Spec.Params, pipelinev1.Param{
-			Name:  HttpBasicAuthSecret,
+			Name:  httpBasicAuthSecret,
 			Value: *pipelinev1.NewStructuredValues(s),
 		})
 	}
@@ -283,14 +280,14 @@ func createRequest(params *params) *v1beta1.ResolutionRequest {
 			s = ""
 		}
 		rr.Spec.Params = append(rr.Spec.Params, pipelinev1.Param{
-			Name:  HttpBasicAuthUsername,
+			Name:  httpBasicAuthUsername,
 			Value: *pipelinev1.NewStructuredValues(s),
 		})
 	}
 
 	if params.authSecretKey != "" {
 		rr.Spec.Params = append(rr.Spec.Params, pipelinev1.Param{
-			Name:  HttpBasicAuthSecretKey,
+			Name:  httpBasicAuthSecretKey,
 			Value: *pipelinev1.NewStructuredValues(params.authSecretKey),
 		})
 	}
@@ -312,12 +309,12 @@ func TestResolverReconcileBasicAuth(t *testing.T) {
 		{
 			name:           "good/URL Resolution",
 			taskContent:    sampleTask,
-			expectedStatus: resolution.CreateResolutionRequestStatusWithData([]byte(sampleTask)),
+			expectedStatus: internal.CreateResolutionRequestStatusWithData([]byte(sampleTask)),
 		},
 		{
 			name:           "good/URL Resolution with custom basic auth, and custom secret key",
 			taskContent:    sampleTask,
-			expectedStatus: resolution.CreateResolutionRequestStatusWithData([]byte(sampleTask)),
+			expectedStatus: internal.CreateResolutionRequestStatusWithData([]byte(sampleTask)),
 			params: &params{
 				authSecret:        "auth-secret",
 				authUsername:      "auth",
@@ -328,7 +325,7 @@ func TestResolverReconcileBasicAuth(t *testing.T) {
 		{
 			name:           "good/URL Resolution with custom basic auth no custom secret key",
 			taskContent:    sampleTask,
-			expectedStatus: resolution.CreateResolutionRequestStatusWithData([]byte(sampleTask)),
+			expectedStatus: internal.CreateResolutionRequestStatusWithData([]byte(sampleTask)),
 			params: &params{
 				authSecret:        "auth-secret",
 				authUsername:      "auth",
@@ -399,7 +396,7 @@ func TestResolverReconcileBasicAuth(t *testing.T) {
 			resolver := &Resolver{}
 			ctx, _ := ttesting.SetupFakeContext(t)
 			svr := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				fmt.Fprint(w, tt.taskContent)
+				fmt.Fprintf(w, tt.taskContent)
 			}))
 			p := tt.params
 			if p == nil {
@@ -484,7 +481,7 @@ func TestResolverReconcileBasicAuth(t *testing.T) {
 
 func TestGetName(t *testing.T) {
 	resolver := Resolver{}
-	ctx := t.Context()
+	ctx := context.Background()
 
 	if d := cmp.Diff(httpResolverName, resolver.GetName(ctx)); d != "" {
 		t.Errorf("invalid name: %s", diff.PrintWantGot(d))
@@ -513,7 +510,7 @@ func toParams(m map[string]string) []pipelinev1.Param {
 
 func contextWithConfig(timeout string) context.Context {
 	config := map[string]string{
-		TimeoutKey: timeout,
+		timeoutKey: timeout,
 	}
 	return framework.InjectResolverConfigToContext(context.Background(), config)
 }
@@ -525,128 +522,5 @@ func checkExpectedErr(t *testing.T, expectedErr, actualErr error) {
 	}
 	if d := cmp.Diff(expectedErr.Error(), actualErr.Error()); d != "" {
 		t.Fatalf("expected err '%v' but got '%v'", expectedErr, actualErr)
-	}
-}
-
-func TestCompareSHA(t *testing.T) {
-	tests := []struct {
-		name        string
-		expectedSHA string
-		computedSHA []byte
-		expectedErr string
-	}{
-		{
-			name:        "valid/match",
-			expectedSHA: "666f6f", // hex for "foo"
-			computedSHA: []byte("foo"),
-		},
-		{
-			name:        "valid/mismatch",
-			expectedSHA: "666f6f", // hex for "foo"
-			computedSHA: []byte("bar"),
-			expectedErr: "SHA mismatch, expected 666f6f, got 626172",
-		},
-		{
-			name:        "invalid/expected hex",
-			expectedSHA: "not-hex",
-			computedSHA: []byte("foo"),
-			expectedErr: "error decoding expected SHA string",
-		},
-	}
-
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
-			err := compareSHA(tc.expectedSHA, tc.computedSHA)
-			if tc.expectedErr != "" {
-				if err == nil {
-					t.Fatalf("expected error '%v' but got nil", tc.expectedErr)
-				}
-				re := regexp.MustCompile(tc.expectedErr)
-				if !re.MatchString(err.Error()) {
-					t.Fatalf("expected error to match '%v' but got '%v'", tc.expectedErr, err)
-				}
-			} else if err != nil {
-				t.Fatalf("unexpected error: %v", err)
-			}
-		})
-	}
-}
-
-func TestValidateDigest(t *testing.T) {
-	ctx, _ := ttesting.SetupFakeContext(t)
-	logger := logging.FromContext(ctx)
-	content := []byte("some content")
-
-	// Calculate valid hashes
-	s256 := sha256.Sum256(content)
-	hex256 := hex.EncodeToString(s256[:])
-
-	s512 := sha512.Sum512(content)
-	hex512 := hex.EncodeToString(s512[:])
-
-	tests := []struct {
-		name        string
-		digest      string
-		expectedErr string
-	}{
-		{
-			name:   "valid/sha256",
-			digest: "sha256:" + hex256,
-		},
-		{
-			name:   "valid/sha512",
-			digest: "sha512:" + hex512,
-		},
-		{
-			name:        "invalid/format_no_separator",
-			digest:      "sha256" + hex256,
-			expectedErr: "invalid digest format",
-		},
-		{
-			name:        "invalid/format_empty",
-			digest:      "",
-			expectedErr: "invalid digest format",
-		},
-		{
-			name:        "invalid/algorithm",
-			digest:      "sha1:" + hex256,
-			expectedErr: "invalid digest algorithm: sha1",
-		},
-		{
-			name:        "invalid/mismatch_sha256",
-			digest:      "sha256:deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef",
-			expectedErr: "SHA mismatch",
-		},
-		{
-			name:        "invalid/mismatch_sha512",
-			digest:      "sha512:deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef",
-			expectedErr: "SHA mismatch",
-		},
-		{
-			name:        "invalid/length_sha256",
-			digest:      "sha256:deadbeef",
-			expectedErr: "invalid sha256 digest value, expected length: 64, got: 8",
-		},
-		{
-			name:        "invalid/length_sha512",
-			digest:      "sha512:deadbeef",
-			expectedErr: "invalid sha512 digest value, expected length: 128, got: 8",
-		},
-	}
-
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
-			err := validateDigest(tc.digest, content, logger)
-			if tc.expectedErr != "" {
-				if err == nil {
-					t.Fatalf("expected error '%v' but got nil", tc.expectedErr)
-				}
-				if !strings.Contains(err.Error(), tc.expectedErr) {
-					t.Fatalf("expected error to contain '%v' but got '%v'", tc.expectedErr, err)
-				}
-			} else if err != nil {
-				t.Fatalf("unexpected error: %v", err)
-			}
-		})
 	}
 }

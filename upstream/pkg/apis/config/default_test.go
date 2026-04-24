@@ -45,9 +45,6 @@ func TestNewDefaultsFromConfigMap(t *testing.T) {
 				DefaultMaxMatrixCombinationsCount: 256,
 				DefaultResolverType:               "git",
 				DefaultImagePullBackOffTimeout:    time.Duration(5) * time.Second,
-				DefaultMaximumResolutionTimeout:   1 * time.Minute,
-				DefaultSidecarLogPollingInterval:  100 * time.Millisecond,
-				DefaultStepRefConcurrencyLimit:    5,
 			},
 			fileName: config.GetDefaultsConfigName(),
 		},
@@ -68,9 +65,6 @@ func TestNewDefaultsFromConfigMap(t *testing.T) {
 				},
 				DefaultMaxMatrixCombinationsCount: 256,
 				DefaultImagePullBackOffTimeout:    0,
-				DefaultMaximumResolutionTimeout:   1 * time.Minute,
-				DefaultSidecarLogPollingInterval:  100 * time.Millisecond,
-				DefaultStepRefConcurrencyLimit:    5,
 			},
 			fileName: "config-defaults-with-pod-template",
 		},
@@ -94,9 +88,6 @@ func TestNewDefaultsFromConfigMap(t *testing.T) {
 				DefaultPodTemplate:                &pod.Template{},
 				DefaultMaxMatrixCombinationsCount: 256,
 				DefaultImagePullBackOffTimeout:    0,
-				DefaultMaximumResolutionTimeout:   1 * time.Minute,
-				DefaultSidecarLogPollingInterval:  100 * time.Millisecond,
-				DefaultStepRefConcurrencyLimit:    5,
 			},
 		},
 		{
@@ -109,9 +100,6 @@ func TestNewDefaultsFromConfigMap(t *testing.T) {
 				DefaultAAPodTemplate:              &pod.AffinityAssistantTemplate{},
 				DefaultMaxMatrixCombinationsCount: 256,
 				DefaultImagePullBackOffTimeout:    0,
-				DefaultMaximumResolutionTimeout:   1 * time.Minute,
-				DefaultSidecarLogPollingInterval:  100 * time.Millisecond,
-				DefaultStepRefConcurrencyLimit:    5,
 			},
 		},
 		{
@@ -127,9 +115,6 @@ func TestNewDefaultsFromConfigMap(t *testing.T) {
 				DefaultServiceAccount:             "default",
 				DefaultManagedByLabelValue:        config.DefaultManagedByLabelValue,
 				DefaultImagePullBackOffTimeout:    0,
-				DefaultMaximumResolutionTimeout:   1 * time.Minute,
-				DefaultSidecarLogPollingInterval:  100 * time.Millisecond,
-				DefaultStepRefConcurrencyLimit:    5,
 			},
 		},
 		{
@@ -142,9 +127,6 @@ func TestNewDefaultsFromConfigMap(t *testing.T) {
 				DefaultManagedByLabelValue:        "tekton-pipelines",
 				DefaultForbiddenEnv:               []string{"TEKTON_POWER_MODE", "TEST_ENV", "TEST_TEKTON"},
 				DefaultImagePullBackOffTimeout:    time.Duration(15) * time.Second,
-				DefaultMaximumResolutionTimeout:   1 * time.Minute,
-				DefaultSidecarLogPollingInterval:  100 * time.Millisecond,
-				DefaultStepRefConcurrencyLimit:    5,
 			},
 		},
 		{
@@ -157,9 +139,6 @@ func TestNewDefaultsFromConfigMap(t *testing.T) {
 				DefaultMaxMatrixCombinationsCount:    256,
 				DefaultContainerResourceRequirements: map[string]corev1.ResourceRequirements{},
 				DefaultImagePullBackOffTimeout:       0,
-				DefaultMaximumResolutionTimeout:      1 * time.Minute,
-				DefaultSidecarLogPollingInterval:     100 * time.Millisecond,
-				DefaultStepRefConcurrencyLimit:       5,
 			},
 		},
 		{
@@ -175,8 +154,6 @@ func TestNewDefaultsFromConfigMap(t *testing.T) {
 				DefaultManagedByLabelValue:        "tekton-pipelines",
 				DefaultMaxMatrixCombinationsCount: 256,
 				DefaultImagePullBackOffTimeout:    0,
-				DefaultMaximumResolutionTimeout:   1 * time.Minute,
-				DefaultSidecarLogPollingInterval:  100 * time.Millisecond,
 				DefaultContainerResourceRequirements: map[string]corev1.ResourceRequirements{
 					config.ResourceRequirementDefaultContainerKey: {
 						Requests: corev1.ResourceList{
@@ -210,25 +187,6 @@ func TestNewDefaultsFromConfigMap(t *testing.T) {
 					},
 					"test": {},
 				},
-				DefaultStepRefConcurrencyLimit: 5,
-			},
-		},
-		{
-			expectedError: true,
-			fileName:      "config-defaults-step-ref-concurrency-limit-err",
-		},
-		{
-			expectedError: false,
-			fileName:      "config-defaults-step-ref-concurrency-limit",
-			expectedConfig: &config.Defaults{
-				DefaultStepRefConcurrencyLimit:    10,
-				DefaultTimeoutMinutes:             60,
-				DefaultServiceAccount:             "default",
-				DefaultManagedByLabelValue:        config.DefaultManagedByLabelValue,
-				DefaultMaxMatrixCombinationsCount: 256,
-				DefaultImagePullBackOffTimeout:    0,
-				DefaultMaximumResolutionTimeout:   1 * time.Minute,
-				DefaultSidecarLogPollingInterval:  100 * time.Millisecond,
 			},
 		},
 	}
@@ -252,9 +210,6 @@ func TestNewDefaultsFromEmptyConfigMap(t *testing.T) {
 		DefaultServiceAccount:             "default",
 		DefaultMaxMatrixCombinationsCount: 256,
 		DefaultImagePullBackOffTimeout:    0,
-		DefaultMaximumResolutionTimeout:   1 * time.Minute,
-		DefaultSidecarLogPollingInterval:  100 * time.Millisecond,
-		DefaultStepRefConcurrencyLimit:    5,
 	}
 	verifyConfigFileWithExpectedConfig(t, DefaultsConfigEmptyName, expectedConfig)
 }
@@ -422,44 +377,6 @@ func TestEquals(t *testing.T) {
 			},
 			expected: true,
 		},
-		{
-			name: "different default maximum resolution timeout",
-			left: &config.Defaults{
-				DefaultMaximumResolutionTimeout: 10 * time.Minute,
-			},
-			right: &config.Defaults{
-				DefaultMaximumResolutionTimeout: 20 * time.Minute,
-			},
-			expected: false,
-		}, {
-			name: "same default maximum resolution timeout",
-			left: &config.Defaults{
-				DefaultMaximumResolutionTimeout: 10 * time.Minute,
-			},
-			right: &config.Defaults{
-				DefaultMaximumResolutionTimeout: 10 * time.Minute,
-			},
-			expected: true,
-		},
-		{
-			name: "different default step ref concurrency limit",
-			left: &config.Defaults{
-				DefaultStepRefConcurrencyLimit: 5,
-			},
-			right: &config.Defaults{
-				DefaultStepRefConcurrencyLimit: 10,
-			},
-			expected: false,
-		}, {
-			name: "same default step ref concurrency limit",
-			left: &config.Defaults{
-				DefaultStepRefConcurrencyLimit: 5,
-			},
-			right: &config.Defaults{
-				DefaultStepRefConcurrencyLimit: 5,
-			},
-			expected: true,
-		},
 	}
 
 	for _, tc := range testCases {
@@ -467,51 +384,6 @@ func TestEquals(t *testing.T) {
 			actual := tc.left.Equals(tc.right)
 			if actual != tc.expected {
 				t.Errorf("Comparison failed expected: %t, actual: %t", tc.expected, actual)
-			}
-		})
-	}
-}
-
-func TestSidecarLogPollingIntervalParsing(t *testing.T) {
-	cases := []struct {
-		name     string
-		data     map[string]string
-		expected time.Duration
-		wantErr  bool
-	}{
-		{
-			name:     "valid interval",
-			data:     map[string]string{"default-sidecar-log-polling-interval": "42ms"},
-			expected: 42 * time.Millisecond,
-			wantErr:  false,
-		},
-		{
-			name:     "invalid interval",
-			data:     map[string]string{"default-sidecar-log-polling-interval": "notaduration"},
-			expected: 0,
-			wantErr:  true,
-		},
-		{
-			name:     "not set (default)",
-			data:     map[string]string{},
-			expected: 100 * time.Millisecond,
-			wantErr:  false,
-		},
-	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			cfg, err := config.NewDefaultsFromMap(tc.data)
-			if tc.wantErr {
-				if err == nil {
-					t.Errorf("expected error, got nil")
-				}
-				return
-			}
-			if err != nil {
-				t.Fatalf("unexpected error: %v", err)
-			}
-			if cfg.DefaultSidecarLogPollingInterval != tc.expected {
-				t.Errorf("got %v, want %v", cfg.DefaultSidecarLogPollingInterval, tc.expected)
 			}
 		})
 	}

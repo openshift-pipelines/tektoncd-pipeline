@@ -9,7 +9,7 @@ spec:
     default: "Hello World"
   steps:
     - name: echo
-      image: mirror.gcr.io/ubuntu
+      image: ubuntu
       command:
         - echo
       args:

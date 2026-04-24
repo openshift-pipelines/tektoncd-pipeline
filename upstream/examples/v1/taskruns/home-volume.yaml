@@ -6,13 +6,13 @@ spec:
   taskSpec:
     steps:
     - name: write
-      image: mirror.gcr.io/ubuntu
+      image: ubuntu
       script: echo some stuff > /tekton/home/stuff
     - name: read
-      image: mirror.gcr.io/ubuntu
+      image: ubuntu
       script: cat /tekton/home/stuff
     - name: override-homevol
-      image: mirror.gcr.io/ubuntu
+      image: ubuntu
       # /tekton/home/stuff *doesn't* exist, because the specified volumeMount
       # conflicts with it, and the user's explicit declaration wins the tie.
       script: |
