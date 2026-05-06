@@ -35,18 +35,13 @@ import (
 )
 
 // TestReconcileRunObject runs reconcile with a cloud event sink configured
-// and ensures that the event logic is correctly invoked for all supported types
+// and ensures that the event logic is correctly invoked for all supported types.
 func TestReconcileRunObject(t *testing.T) {
 	cms := []*corev1.ConfigMap{
 		{
 			ObjectMeta: metav1.ObjectMeta{Name: config.GetEventsConfigName(), Namespace: system.Namespace()},
 			Data: map[string]string{
 				"sink": "http://synk:8080",
-			},
-		}, {
-			ObjectMeta: metav1.ObjectMeta{Name: config.GetFeatureFlagsConfigName(), Namespace: system.Namespace()},
-			Data: map[string]string{
-				"send-cloudevents-for-runs": "true",
 			},
 		},
 	}
@@ -155,21 +150,12 @@ func TestReconcileRunObject(t *testing.T) {
 }
 
 func TestReconcileRunObject_Disabled(t *testing.T) {
-	cmSinkOn := &corev1.ConfigMap{
-		ObjectMeta: metav1.ObjectMeta{Name: config.GetEventsConfigName(), Namespace: system.Namespace()},
-		Data:       map[string]string{"sink": "http://synk:8080"},
-	}
+	// ReconcileRunObject only skips events when no sink is configured.
+	// The send-cloudevents-for-runs flag gate (deprecated) is enforced by
+	// individual reconcilers before calling ReconcileRunObject.
 	cmSinkOff := &corev1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{Name: config.GetEventsConfigName(), Namespace: system.Namespace()},
 		Data:       map[string]string{"sink": ""},
-	}
-	cmRunsOn := &corev1.ConfigMap{
-		ObjectMeta: metav1.ObjectMeta{Name: config.GetFeatureFlagsConfigName(), Namespace: system.Namespace()},
-		Data:       map[string]string{"send-cloudevents-for-runs": "true"},
-	}
-	cmRunsOff := &corev1.ConfigMap{
-		ObjectMeta: metav1.ObjectMeta{Name: config.GetFeatureFlagsConfigName(), Namespace: system.Namespace()},
-		Data:       map[string]string{"send-cloudevents-for-runs": "false"},
 	}
 
 	for _, tc := range []struct {
@@ -177,10 +163,7 @@ func TestReconcileRunObject_Disabled(t *testing.T) {
 		cms  []*corev1.ConfigMap
 	}{{
 		name: "No sink",
-		cms:  []*corev1.ConfigMap{cmSinkOff, cmRunsOn},
-	}, {
-		name: "CustomRuns Disabled",
-		cms:  []*corev1.ConfigMap{cmSinkOn, cmRunsOff},
+		cms:  []*corev1.ConfigMap{cmSinkOff},
 	}} {
 		t.Run(tc.name, func(t *testing.T) {
 			customRun := &v1beta1.CustomRun{
