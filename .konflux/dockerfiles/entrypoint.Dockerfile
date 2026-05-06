@@ -26,14 +26,14 @@ COPY --from=builder /tmp/entrypoint /ko-app/entrypoint
 COPY head ${KO_DATA_PATH}/HEAD
 
 LABEL \
-    com.redhat.component="openshift-pipelines-entrypoint-rhel9-container" \
+    com.redhat.component="openshift-pipelines-entrypoint-rhel8-container" \
     cpe="cpe:/a:redhat:openshift_pipelines:1.15::el9" \
     description="Red Hat OpenShift Pipelines tektoncd-pipeline entrypoint" \
     io.k8s.description="Red Hat OpenShift Pipelines tektoncd-pipeline entrypoint" \
     io.k8s.display-name="Red Hat OpenShift Pipelines tektoncd-pipeline entrypoint" \
     io.openshift.tags="tekton,openshift,tektoncd-pipeline,entrypoint" \
     maintainer="pipelines-extcomm@redhat.com" \
-    name="openshift-pipelines/pipelines-entrypoint-rhel9" \
+    name="openshift-pipelines/pipelines-entrypoint-rhel8" \
     summary="Red Hat OpenShift Pipelines tektoncd-pipeline entrypoint" \
     version="v1.15.5"
 

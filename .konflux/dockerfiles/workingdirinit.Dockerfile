@@ -24,14 +24,14 @@ COPY --from=builder /tmp/workingdirinit /ko-app/workingdirinit
 COPY head ${KO_DATA_PATH}/HEAD
 
 LABEL \
-    com.redhat.component="openshift-pipelines-workingdirinit-rhel9-container" \
+    com.redhat.component="openshift-pipelines-workingdirinit-rhel8-container" \
     cpe="cpe:/a:redhat:openshift_pipelines:1.15::el9" \
     description="Red Hat OpenShift Pipelines tektoncd-pipeline workingdirinit" \
     io.k8s.description="Red Hat OpenShift Pipelines tektoncd-pipeline workingdirinit" \
     io.k8s.display-name="Red Hat OpenShift Pipelines tektoncd-pipeline workingdirinit" \
     io.openshift.tags="tekton,openshift,tektoncd-pipeline,workingdirinit" \
     maintainer="pipelines-extcomm@redhat.com" \
-    name="openshift-pipelines/pipelines-workingdirinit-rhel9" \
+    name="openshift-pipelines/pipelines-workingdirinit-rhel8" \
     summary="Red Hat OpenShift Pipelines tektoncd-pipeline workingdirinit" \
     version="v1.15.5"
 

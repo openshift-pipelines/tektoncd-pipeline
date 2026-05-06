@@ -24,14 +24,14 @@ COPY --from=builder /tmp/sidecarlogresults /ko-app/sidecarlogresults
 COPY head ${KO_DATA_PATH}/HEAD
 
 LABEL \
-    com.redhat.component="openshift-pipelines-sidecarlogresults-rhel9-container" \
+    com.redhat.component="openshift-pipelines-sidecarlogresults-rhel8-container" \
     cpe="cpe:/a:redhat:openshift_pipelines:1.15::el9" \
     description="Red Hat OpenShift Pipelines tektoncd-pipeline sidecarlogresults" \
     io.k8s.description="Red Hat OpenShift Pipelines tektoncd-pipeline sidecarlogresults" \
     io.k8s.display-name="Red Hat OpenShift Pipelines tektoncd-pipeline sidecarlogresults" \
     io.openshift.tags="tekton,openshift,tektoncd-pipeline,sidecarlogresults" \
     maintainer="pipelines-extcomm@redhat.com" \
-    name="openshift-pipelines/pipelines-sidecarlogresults-rhel9" \
+    name="openshift-pipelines/pipelines-sidecarlogresults-rhel8" \
     summary="Red Hat OpenShift Pipelines tektoncd-pipeline sidecarlogresults" \
     version="v1.15.5"
 
