@@ -24,14 +24,14 @@ COPY --from=builder /tmp/resolvers /ko-app/resolvers
 COPY head ${KO_DATA_PATH}/HEAD
 
 LABEL \
-    com.redhat.component="openshift-pipelines-resolvers-rhel8-container" \
+    com.redhat.component="openshift-pipelines-resolvers-rhel9-container" \
     cpe="cpe:/a:redhat:openshift_pipelines:1.15::el9" \
     description="Red Hat OpenShift Pipelines tektoncd-pipeline resolvers" \
     io.k8s.description="Red Hat OpenShift Pipelines tektoncd-pipeline resolvers" \
     io.k8s.display-name="Red Hat OpenShift Pipelines tektoncd-pipeline resolvers" \
     io.openshift.tags="tekton,openshift,tektoncd-pipeline,resolvers" \
     maintainer="pipelines-extcomm@redhat.com" \
-    name="openshift-pipelines/pipelines-resolvers-rhel8" \
+    name="openshift-pipelines/pipelines-resolvers-rhel9" \
     summary="Red Hat OpenShift Pipelines tektoncd-pipeline resolvers" \
     version="v1.15.5"
 
