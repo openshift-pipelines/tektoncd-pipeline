@@ -5,8 +5,7 @@ packages:
   - cmake
   - gcc
   - git
-  - git-lfs
-  - glibc-devel
+
 arches:
   # The list of architectures
   - aarch64
