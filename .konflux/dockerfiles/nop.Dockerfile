@@ -1,5 +1,5 @@
 # Rebuild trigger: 1.15.4 release 2026-01-19
-ARG GO_BUILDER=registry.access.redhat.com/ubi9/go-toolset:1.25
+ARG GO_BUILDER=registry.access.redhat.com/ubi8/go-toolset:latest
 ARG RUNTIME=scratch
 
 FROM $GO_BUILDER AS builder
@@ -24,7 +24,7 @@ COPY --from=builder /tmp/nop /ko-app/nop
 COPY head ${KO_DATA_PATH}/HEAD
 
 LABEL \
-    com.redhat.component="openshift-pipelines-nop-rhel9-container" \
+    com.redhat.component="openshift-pipelines-nop-rhel8-container" \
     cpe="cpe:/a:redhat:openshift_pipelines:1.15::el9" \
     description="Red Hat OpenShift Pipelines tektoncd-pipeline nop" \
     distribution-scope="public" \
@@ -32,7 +32,7 @@ LABEL \
     io.k8s.display-name="Red Hat OpenShift Pipelines tektoncd-pipeline nop" \
     io.openshift.tags="tekton,openshift,tektoncd-pipeline,nop" \
     maintainer="pipelines-extcomm@redhat.com" \
-    name="openshift-pipelines/pipelines-nop-rhel9" \
+    name="openshift-pipelines/pipelines-nop-rhel8" \
     release="1227.1725849298" \
     summary="Red Hat OpenShift Pipelines tektoncd-pipeline nop" \
     url="https://access.redhat.com/containers/#/registry.access.redhat.com/ubi9-minimal/images/9.4-1227.1725849298" \
