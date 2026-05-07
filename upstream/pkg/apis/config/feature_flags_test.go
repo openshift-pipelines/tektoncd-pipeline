@@ -151,7 +151,6 @@ func TestNewFeatureFlagsFromConfigMap(t *testing.T) {
 		{
 			expectedConfig: &config.FeatureFlags{
 				EnableAPIFields:                  config.DefaultEnableAPIFields,
-				SendCloudEventsForRuns:           config.DefaultSendCloudEventsForRuns,
 				EnforceNonfalsifiability:         config.EnforceNonfalsifiabilityWithSpire,
 				VerificationNoMatchPolicy:        config.DefaultNoMatchPolicyConfig,
 				RunningInEnvWithInjectedSidecars: config.DefaultRunningInEnvWithInjectedSidecars,
@@ -171,7 +170,6 @@ func TestNewFeatureFlagsFromConfigMap(t *testing.T) {
 		{
 			expectedConfig: &config.FeatureFlags{
 				EnableAPIFields:                  config.DefaultEnableAPIFields,
-				SendCloudEventsForRuns:           config.DefaultSendCloudEventsForRuns,
 				EnforceNonfalsifiability:         config.DefaultEnforceNonfalsifiability,
 				VerificationNoMatchPolicy:        config.DefaultNoMatchPolicyConfig,
 				RunningInEnvWithInjectedSidecars: config.DefaultRunningInEnvWithInjectedSidecars,

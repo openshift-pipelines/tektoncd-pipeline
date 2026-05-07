@@ -21,8 +21,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"maps"
 	"path/filepath"
+	"reflect"
 	"regexp"
 	"sort"
 	"strings"
@@ -47,6 +47,7 @@ import (
 	tknreconciler "github.com/tektoncd/pipeline/pkg/reconciler"
 	"github.com/tektoncd/pipeline/pkg/reconciler/apiserver"
 	"github.com/tektoncd/pipeline/pkg/reconciler/events"
+	"github.com/tektoncd/pipeline/pkg/reconciler/events/cloudevent"
 	"github.com/tektoncd/pipeline/pkg/reconciler/pipeline/dag"
 	rprp "github.com/tektoncd/pipeline/pkg/reconciler/pipelinerun/pipelinespec"
 	"github.com/tektoncd/pipeline/pkg/reconciler/pipelinerun/resources"
@@ -165,6 +166,7 @@ type Reconciler struct {
 	taskRunLister            listers.TaskRunLister
 	customRunLister          beta1listers.CustomRunLister
 	verificationPolicyLister alpha1listers.VerificationPolicyLister
+	cloudEventClient         cloudevent.CEClient
 	metrics                  *pipelinerunmetrics.Recorder
 	pvcHandler               volumeclaim.PvcHandler
 	resolutionRequester      resolution.Requester
@@ -182,6 +184,7 @@ var (
 // resource with the current status of the resource.
 func (c *Reconciler) ReconcileKind(ctx context.Context, pr *v1.PipelineRun) pkgreconciler.Event {
 	logger := logging.FromContext(ctx)
+	ctx = cloudevent.ToContext(ctx, c.cloudEventClient)
 	ctx = initTracing(ctx, c.tracerProvider, pr)
 	ctx, span := c.tracerProvider.Tracer(TracerName).Start(ctx, "PipelineRun:ReconcileKind")
 	defer span.End()
@@ -208,18 +211,6 @@ func (c *Reconciler) ReconcileKind(ctx context.Context, pr *v1.PipelineRun) pkgr
 			return err
 		}
 		return controller.NewPermanentError(errors.New("PipelineRun has timed out for a long time"))
-	}
-
-	// If the PipelineRun is already done on entry, perform only the lightweight
-	// post-completion work: cleanup and return. This avoids expensive operations
-	// like listing VerificationPolicies, resolving Pipeline references, and
-	// calling SetDefaults on every resync of a completed run.
-	if pr.IsDone() {
-		err := c.cleanupAffinityAssistantsAndPVCs(ctx, pr)
-		if err != nil {
-			logger.Errorf("Failed to delete StatefulSet or PVC for PipelineRun %s: %v", pr.Name, err)
-		}
-		return c.finishReconcileUpdateEmitEvents(ctx, pr, before, err)
 	}
 
 	if !pr.HasStarted() && !pr.IsPending() {
@@ -249,6 +240,15 @@ func (c *Reconciler) ReconcileKind(ctx context.Context, pr *v1.PipelineRun) pkgr
 	}
 	getPipelineFunc := resources.GetPipelineFunc(ctx, c.KubeClientSet, c.PipelineClientSet, c.resolutionRequester, pr, vp)
 
+	if pr.IsDone() {
+		pr.SetDefaults(ctx)
+		err := c.cleanupAffinityAssistantsAndPVCs(ctx, pr)
+		if err != nil {
+			logger.Errorf("Failed to delete StatefulSet or PVC for PipelineRun %s: %v", pr.Name, err)
+		}
+		return c.finishReconcileUpdateEmitEvents(ctx, pr, before, err)
+	}
+
 	if err := propagatePipelineNameLabelToPipelineRun(pr); err != nil {
 		logger.Errorf("Failed to propagate pipeline name label to pipelinerun %s: %v", pr.Name, err)
 		return c.finishReconcileUpdateEmitEvents(ctx, pr, before, err)
@@ -272,15 +272,6 @@ func (c *Reconciler) ReconcileKind(ctx context.Context, pr *v1.PipelineRun) pkgr
 	// updates regardless of whether the reconciliation errored out.
 	if err = c.reconcile(ctx, pr, getPipelineFunc); err != nil {
 		logger.Errorf("Reconcile error: %v", err.Error())
-	}
-
-	// If the PipelineRun just transitioned to done during this reconcile,
-	// perform cleanup eagerly so subsequent reconciles find nothing to do.
-	if pr.IsDone() {
-		if cleanupErr := c.cleanupAffinityAssistantsAndPVCs(ctx, pr); cleanupErr != nil {
-			logger.Errorf("Failed to delete StatefulSet or PVC for PipelineRun %s: %v", pr.Name, cleanupErr)
-			err = errors.Join(err, cleanupErr)
-		}
 	}
 
 	if err = c.finishReconcileUpdateEmitEvents(ctx, pr, before, err); err != nil {
@@ -355,28 +346,17 @@ func (c *Reconciler) finishReconcileUpdateEmitEvents(ctx context.Context, pr *v1
 
 	afterCondition := pr.Status.GetCondition(apis.ConditionSucceeded)
 	events.Emit(ctx, beforeCondition, afterCondition, pr)
-
-	errs := []error{previousError}
-
-	// If the PipelineRun was already completed before and remains completed,
-	// there is no need to update labels and annotations — they can't have
-	// changed. This avoids an unnecessary API read+write on every resync of
-	// a done PipelineRun (ported from the TaskRun reconciler).
-	skipUpdateLabelsAndAnnotations := !afterCondition.IsUnknown() && !beforeCondition.IsUnknown()
-	if !skipUpdateLabelsAndAnnotations {
-		_, err := c.updateLabelsAndAnnotations(ctx, pr)
-		if err != nil {
-			logger.Warn("Failed to update PipelineRun labels/annotations", zap.Error(err))
-			events.EmitError(controller.GetEventRecorder(ctx), err, pr)
-			errs = append(errs, err)
-		}
+	_, err := c.updateLabelsAndAnnotations(ctx, pr)
+	if err != nil {
+		logger.Warn("Failed to update PipelineRun labels/annotations", zap.Error(err))
+		events.EmitError(controller.GetEventRecorder(ctx), err, pr)
 	}
 
-	joinedErr := errors.Join(errs...)
+	errs := errors.Join(previousError, err)
 	if controller.IsPermanentError(previousError) {
-		return controller.NewPermanentError(joinedErr)
+		return controller.NewPermanentError(errs)
 	}
-	return joinedErr
+	return errs
 }
 
 // resolvePipelineState will attempt to resolve each referenced pipeline task in the pipeline's spec and all of the resources
@@ -943,27 +923,14 @@ func (c *Reconciler) runNextSchedulableTask(ctx context.Context, pr *v1.Pipeline
 		// added to the validationFailedTask list
 		err := resources.CheckMissingResultReferences(pipelineRunFacts.State, rpt)
 		if err != nil {
-			// Use Errorf when a task succeeded but didn't emit a result (surprising),
-			// Infof when the referenced task failed (expected that results are missing).
-			var missingResultErr *resources.MissingResultFromCompletedTaskError
-			if errors.As(err, &missingResultErr) {
-				logger.Errorf("Failed to resolve task result reference for %q with error %v", pr.Name, err)
-			} else {
-				logger.Infof("Failed to resolve task result reference for %q with error %v", pr.Name, err)
-			}
+			logger.Infof("Failed to resolve task result reference for %q with error %v", pr.Name, err)
 			// If there is an error encountered, no new task
 			// will be scheduled, hence nextRpts should be empty
 			// If finally tasks are found, then those tasks will
 			// be added to the nextRpts
 			nextRpts = nil
-			logger.Infof("Adding the task %q to the validation failed list", rpt.PipelineTask.Name)
+			logger.Infof("Adding the task %q to the validation failed list", rpt.ResolvedTask)
 			pipelineRunFacts.ValidationFailedTask = append(pipelineRunFacts.ValidationFailedTask, rpt)
-			if pipelineRunFacts.ValidationFailedErrors == nil {
-				pipelineRunFacts.ValidationFailedErrors = make(map[string]string)
-			}
-			pipelineRunFacts.ValidationFailedErrors[rpt.PipelineTask.Name] = err.Error()
-			recorder.Eventf(pr, corev1.EventTypeWarning, "ResultValidationFailed",
-				"Task %q failed result validation: %v", rpt.PipelineTask.Name, err)
 		}
 	}
 	// GetFinalTasks only returns final tasks when a DAG is complete
@@ -1731,7 +1698,7 @@ func (c *Reconciler) updateLabelsAndAnnotations(ctx context.Context, pr *v1.Pipe
 	if err != nil {
 		return nil, fmt.Errorf("error getting PipelineRun %s when updating labels/annotations: %w", pr.Name, err)
 	}
-	if !maps.Equal(pr.ObjectMeta.Labels, newPr.ObjectMeta.Labels) || !maps.Equal(pr.ObjectMeta.Annotations, newPr.ObjectMeta.Annotations) {
+	if !reflect.DeepEqual(pr.ObjectMeta.Labels, newPr.ObjectMeta.Labels) || !reflect.DeepEqual(pr.ObjectMeta.Annotations, newPr.ObjectMeta.Annotations) {
 		// Note that this uses Update vs. Patch because the former is significantly easier to test.
 		// If we want to switch this to Patch, then we will need to teach the utilities in test/controller.go
 		// to deal with Patch (setting resourceVersion, and optimistic concurrency checks).

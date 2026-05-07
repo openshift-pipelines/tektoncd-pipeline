@@ -14,11 +14,9 @@ import (
 // Checks the availability of one or more image layers that are within a
 // repository in a public registry. When an image is pushed to a repository, each
 // image layer is checked to verify if it has been uploaded before. If it has been
-// uploaded, then the image layer is skipped.
-//
-// This operation is used by the Amazon ECR proxy and is not generally used by
-// customers for pulling and pushing images. In most cases, you should use the
-// docker CLI to pull, tag, and push images.
+// uploaded, then the image layer is skipped. This operation is used by the Amazon
+// ECR proxy and is not generally used by customers for pulling and pushing images.
+// In most cases, you should use the docker CLI to pull, tag, and push images.
 func (c *Client) BatchCheckLayerAvailability(ctx context.Context, params *BatchCheckLayerAvailabilityInput, optFns ...func(*Options)) (*BatchCheckLayerAvailabilityOutput, error) {
 	if params == nil {
 		params = &BatchCheckLayerAvailabilityInput{}
@@ -112,9 +110,6 @@ func (c *Client) addOperationBatchCheckLayerAvailabilityMiddlewares(stack *middl
 	if err = addRecordResponseTiming(stack); err != nil {
 		return err
 	}
-	if err = addSpanRetryLoop(stack, options); err != nil {
-		return err
-	}
 	if err = addClientUserAgent(stack, options); err != nil {
 		return err
 	}
@@ -125,15 +120,6 @@ func (c *Client) addOperationBatchCheckLayerAvailabilityMiddlewares(stack *middl
 		return err
 	}
 	if err = addSetLegacyContextSigningOptionsMiddleware(stack); err != nil {
-		return err
-	}
-	if err = addTimeOffsetBuild(stack, c); err != nil {
-		return err
-	}
-	if err = addUserAgentRetryMode(stack, options); err != nil {
-		return err
-	}
-	if err = addCredentialSource(stack, options); err != nil {
 		return err
 	}
 	if err = addOpBatchCheckLayerAvailabilityValidationMiddleware(stack); err != nil {
@@ -155,15 +141,6 @@ func (c *Client) addOperationBatchCheckLayerAvailabilityMiddlewares(stack *middl
 		return err
 	}
 	if err = addDisableHTTPSMiddleware(stack, options); err != nil {
-		return err
-	}
-	if err = addInterceptBeforeRetryLoop(stack, options); err != nil {
-		return err
-	}
-	if err = addInterceptAttempt(stack, options); err != nil {
-		return err
-	}
-	if err = addInterceptors(stack, options); err != nil {
 		return err
 	}
 	return nil

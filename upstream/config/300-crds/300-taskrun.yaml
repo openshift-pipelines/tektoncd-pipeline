@@ -1755,7 +1755,9 @@ spec:
                   additionalProperties:
                     type: string
                 cloudEvents:
-                  description: CloudEvents
+                  description: |-
+                    Deprecated: Removed in v0.44.0.
+                    CloudEvents
                   type: array
                   items:
                     description: CloudEventDelivery

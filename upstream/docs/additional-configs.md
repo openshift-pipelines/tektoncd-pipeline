@@ -90,14 +90,9 @@ data:
   default-cloud-events-sink: https://my-sink-url
 ```
 
-CloudEvents for `CustomRuns` are enabled by default when a sink is configured in the `config-events` ConfigMap. The `send-cloudevents-for-runs`
-feature flag can be used to disable them for `CustomRuns` only — for example, to avoid
-duplicate events when a custom task controller already sends its own CloudEvents.
-
-> **Deprecated:** `send-cloudevents-for-runs` is deprecated and will be removed in a
-> future release. It now defaults to `true`.
-
-To disable cloudevents for `CustomRuns`, use the following configuration:
+Additionally, CloudEvents for `CustomRuns` require an extra configuration to be
+enabled. This setting exists to avoid collisions with CloudEvents that might
+be sent by custom task controllers:
 
 ```yaml
 apiVersion: v1
@@ -109,8 +104,7 @@ metadata:
     app.kubernetes.io/instance: default
     app.kubernetes.io/part-of: tekton-pipelines
 data:
-  send-cloudevents-for-runs: "false"
-  # Other feature-flags (...)
+  send-cloudevents-for-runs: true
 ```
 
 ## Configuring self-signed cert for private registry

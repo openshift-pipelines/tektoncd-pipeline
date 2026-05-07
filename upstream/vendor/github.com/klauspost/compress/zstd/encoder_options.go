@@ -42,7 +42,6 @@ func (o *encoderOptions) setDefault() {
 		level:         SpeedDefault,
 		allLitEntropy: false,
 		lowMem:        false,
-		fullZero:      true,
 	}
 }
 

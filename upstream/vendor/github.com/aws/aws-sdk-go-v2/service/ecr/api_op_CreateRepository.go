@@ -11,10 +11,8 @@ import (
 	smithyhttp "github.com/aws/smithy-go/transport/http"
 )
 
-// Creates a repository. For more information, see [Amazon ECR repositories] in the Amazon Elastic
-// Container Registry User Guide.
-//
-// [Amazon ECR repositories]: https://docs.aws.amazon.com/AmazonECR/latest/userguide/Repositories.html
+// Creates a repository. For more information, see Amazon ECR repositories (https://docs.aws.amazon.com/AmazonECR/latest/userguide/Repositories.html)
+// in the Amazon Elastic Container Registry User Guide.
 func (c *Client) CreateRepository(ctx context.Context, params *CreateRepositoryInput, optFns ...func(*Options)) (*CreateRepositoryOutput, error) {
 	if params == nil {
 		params = &CreateRepositoryInput{}
@@ -34,10 +32,9 @@ type CreateRepositoryInput struct {
 
 	// The name to use for the repository. The repository name may be specified on its
 	// own (such as nginx-web-app ) or it can be prepended with a namespace to group
-	// the repository into a category (such as project-a/nginx-web-app ).
-	//
-	// The repository name must start with a letter and can only contain lowercase
-	// letters, numbers, hyphens, underscores, and forward slashes.
+	// the repository into a category (such as project-a/nginx-web-app ). The
+	// repository name must start with a letter and can only contain lowercase letters,
+	// numbers, hyphens, underscores, and forward slashes.
 	//
 	// This member is required.
 	RepositoryName *string
@@ -46,10 +43,6 @@ type CreateRepositoryInput struct {
 	// contents of your repository are encrypted at rest.
 	EncryptionConfiguration *types.EncryptionConfiguration
 
-	// The imageScanningConfiguration parameter is being deprecated, in favor of
-	// specifying the image scanning configuration at the registry level. For more
-	// information, see PutRegistryScanningConfiguration .
-	//
 	// The image scanning configuration for the repository. This determines whether
 	// images are scanned for known vulnerabilities after being pushed to the
 	// repository.
@@ -60,10 +53,6 @@ type CreateRepositoryInput struct {
 	// overwritten. If IMMUTABLE is specified, all image tags within the repository
 	// will be immutable which will prevent them from being overwritten.
 	ImageTagMutability types.ImageTagMutability
-
-	// A list of filters that specify which image tags should be excluded from the
-	// repository's image tag mutability setting.
-	ImageTagMutabilityExclusionFilters []types.ImageTagMutabilityExclusionFilter
 
 	// The Amazon Web Services account ID associated with the registry to create the
 	// repository. If you do not specify a registry, the default registry is assumed.
@@ -132,9 +121,6 @@ func (c *Client) addOperationCreateRepositoryMiddlewares(stack *middleware.Stack
 	if err = addRecordResponseTiming(stack); err != nil {
 		return err
 	}
-	if err = addSpanRetryLoop(stack, options); err != nil {
-		return err
-	}
 	if err = addClientUserAgent(stack, options); err != nil {
 		return err
 	}
@@ -145,15 +131,6 @@ func (c *Client) addOperationCreateRepositoryMiddlewares(stack *middleware.Stack
 		return err
 	}
 	if err = addSetLegacyContextSigningOptionsMiddleware(stack); err != nil {
-		return err
-	}
-	if err = addTimeOffsetBuild(stack, c); err != nil {
-		return err
-	}
-	if err = addUserAgentRetryMode(stack, options); err != nil {
-		return err
-	}
-	if err = addCredentialSource(stack, options); err != nil {
 		return err
 	}
 	if err = addOpCreateRepositoryValidationMiddleware(stack); err != nil {
@@ -175,15 +152,6 @@ func (c *Client) addOperationCreateRepositoryMiddlewares(stack *middleware.Stack
 		return err
 	}
 	if err = addDisableHTTPSMiddleware(stack, options); err != nil {
-		return err
-	}
-	if err = addInterceptBeforeRetryLoop(stack, options); err != nil {
-		return err
-	}
-	if err = addInterceptAttempt(stack, options); err != nil {
-		return err
-	}
-	if err = addInterceptors(stack, options); err != nil {
 		return err
 	}
 	return nil
