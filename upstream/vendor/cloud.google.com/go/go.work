@@ -1,4 +1,4 @@
-go 1.24.0
+go 1.23.0
 
 use (
 	.
@@ -29,15 +29,12 @@ use (
 	./batch
 	./beyondcorp
 	./bigquery
-	./bigquery/v2
 	./bigtable
 	./billing
 	./binaryauthorization
-	./capacityplanner
 	./certificatemanager
 	./channel
 	./chat
-	./chronicle
 	./cloudbuild
 	./cloudcontrolspartner
 	./clouddms
@@ -49,7 +46,6 @@ use (
 	./compute/metadata
 	./confidentialcomputing
 	./config
-	./configdelivery
 	./contactcenterinsights
 	./container
 	./containeranalysis
@@ -65,7 +61,6 @@ use (
 	./datastream
 	./deploy
 	./developerconnect
-	./devicestreaming
 	./dialogflow
 	./discoveryengine
 	./dlp
@@ -80,7 +75,6 @@ use (
 	./financialservices
 	./firestore
 	./functions
-	./geminidataanalytics
 	./gkebackup
 	./gkeconnect
 	./gkehub
@@ -100,20 +94,14 @@ use (
 	./internal/gapicgen
 	./internal/generated/snippets
 	./internal/godocfx
-	./internal/librariangen
 	./internal/postprocessor
 	./internal/protoveneer
-	./internal/stategen
 	./iot
 	./kms
 	./language
-	./licensemanager
 	./lifesciences
-	./locationfinder
 	./logging
 	./longrunning
-	./lustre
-	./maintenance
 	./managedidentities
 	./managedkafka
 	./maps
@@ -145,7 +133,6 @@ use (
 	./privilegedaccessmanager
 	./profiler
 	./pubsub
-	./pubsub/v2
 	./pubsublite
 	./rapidmigrationassessment
 	./recaptchaenterprise
@@ -170,12 +157,10 @@ use (
 	./shell
 	./shopping
 	./spanner
-	./spanner/benchmarks
 	./spanner/test/opentelemetry/test
 	./speech
 	./storage
 	./storage/internal/benchmarks
-	./storagebatchoperations
 	./storageinsights
 	./storagetransfer
 	./streetview

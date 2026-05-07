@@ -19,8 +19,7 @@ package customrun
 import (
 	"context"
 
-	bc "github.com/allegro/bigcache/v3"
-	"github.com/tektoncd/pipeline/pkg/apis/config"
+	lru "github.com/hashicorp/golang-lru"
 	"github.com/tektoncd/pipeline/pkg/apis/pipeline/v1beta1"
 	customrunreconciler "github.com/tektoncd/pipeline/pkg/client/injection/reconciler/pipeline/v1beta1/customrun"
 	"github.com/tektoncd/pipeline/pkg/reconciler/events/cloudevent"
@@ -31,11 +30,11 @@ import (
 // Reconciler implements controller.Reconciler for Configuration resources.
 type Reconciler struct {
 	cloudEventClient cloudevent.CEClient
-	cacheClient      *bc.BigCache
+	cacheClient      *lru.Cache
 }
 
 // NewReconciler creates a new Reconciler with the given clients.
-func NewReconciler(ceClient cloudevent.CEClient, cacheClient *bc.BigCache) *Reconciler {
+func NewReconciler(ceClient cloudevent.CEClient, cacheClient *lru.Cache) *Reconciler {
 	return &Reconciler{
 		cloudEventClient: ceClient,
 		cacheClient:      cacheClient,
@@ -46,8 +45,16 @@ func (c *Reconciler) GetCloudEventsClient() cloudevent.CEClient {
 	return c.cloudEventClient
 }
 
-func (c *Reconciler) GetCacheClient() *bc.BigCache {
+func (c *Reconciler) GetCacheClient() *lru.Cache {
 	return c.cacheClient
+}
+
+func (c *Reconciler) SetCloudEventsClient(client cloudevent.CEClient) {
+	c.cloudEventClient = client
+}
+
+func (c *Reconciler) SetCacheClient(client *lru.Cache) {
+	c.cacheClient = client
 }
 
 // Check that our Reconciler implements customrunreconciler.Interface
@@ -55,14 +62,10 @@ var (
 	_ customrunreconciler.Interface = (*Reconciler)(nil)
 )
 
-// ReconcileKind observes the resource conditions and triggers notifications accordingly
+// ReconcileKind oberves the resource conditions and triggers notifications accordingly
 func (c *Reconciler) ReconcileKind(ctx context.Context, customRun *v1beta1.CustomRun) pkgreconciler.Event {
-	// Custom task controllers may send their own events for CustomRuns; this flag
-	// prevents duplicate events when such a controller is in use.
-	// send-cloudevents-for-runs is deprecated and will be removed in a future release.
-	configs := config.FromContextOrDefaults(ctx)
-	if !configs.FeatureFlags.SendCloudEventsForRuns {
-		return nil
-	}
+	// Custom task controllers may be sending events for "CustomRuns" associated
+	// to the custom tasks they control. To avoid sending duplicate events,
+	// CloudEvents for "CustomRuns" are only sent when enabled
 	return notifications.ReconcileRunObject(ctx, c, customRun)
 }

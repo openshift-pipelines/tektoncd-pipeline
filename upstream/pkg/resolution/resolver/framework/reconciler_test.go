@@ -112,7 +112,7 @@ func TestReconcile(t *testing.T) {
 			},
 			paramMap: map[string]*framework.FakeResolvedResource{
 				"bar": {
-					Content:       "{\"apiVersion\": \"tekton.dev/v1\", \"kind\": \"Pipeline\"}",
+					Content:       "some content",
 					AnnotationMap: map[string]string{"foo": "bar"},
 					ContentSource: &pipelinev1.RefSource{
 						URI: "https://abc.com",
@@ -130,7 +130,7 @@ func TestReconcile(t *testing.T) {
 					},
 				},
 				ResolutionRequestStatusFields: v1beta1.ResolutionRequestStatusFields{
-					Data: base64.StdEncoding.Strict().EncodeToString([]byte("{\"apiVersion\": \"tekton.dev/v1\", \"kind\": \"Pipeline\"}")),
+					Data: base64.StdEncoding.Strict().EncodeToString([]byte("some content")),
 					RefSource: &pipelinev1.RefSource{
 						URI: "https://abc.com",
 						Digest: map[string]string{

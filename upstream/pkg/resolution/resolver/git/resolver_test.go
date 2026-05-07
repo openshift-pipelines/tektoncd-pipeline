@@ -390,27 +390,22 @@ type params struct {
 }
 
 func TestResolve(t *testing.T) {
-	objTemplate := "{\"apiVersion\": \"tekton.dev/v1\", \"kind\": \"%s\", \"metadata\": {\"name\": \"%s\"}}"
-	mainContent := fmt.Sprintf(objTemplate, "Pipeline", "released content in main branch and in tag v1")
-	oldBranchContent := fmt.Sprintf(objTemplate, "Pipeline", "oldcontent in test branch")
-	newBranchContent := fmt.Sprintf(objTemplate, "Pipeline", "new content in test branch")
-
 	// local repo set up for anonymous cloning
 	// ----
 	commits := []commitForRepo{{
 		Dir:      "foo/",
 		Filename: "old",
-		Content:  oldBranchContent,
+		Content:  "old content in test branch",
 		Branch:   "test-branch",
 	}, {
 		Dir:      "foo/",
 		Filename: "new",
-		Content:  newBranchContent,
+		Content:  "new content in test branch",
 		Branch:   "test-branch",
 	}, {
 		Dir:      "./",
 		Filename: "released",
-		Content:  mainContent,
+		Content:  "released content in main branch and in tag v1",
 		Tag:      "v1",
 	}}
 
@@ -479,7 +474,7 @@ func TestResolve(t *testing.T) {
 			url:        anonFakeRepoURL,
 		},
 		expectedCommitSHA: commitSHAsInAnonRepo[2],
-		expectedStatus:    resolution.CreateResolutionRequestStatusWithData([]byte(mainContent)),
+		expectedStatus:    resolution.CreateResolutionRequestStatusWithData([]byte("released content in main branch and in tag v1")),
 	}, {
 		name: "clone: revision is tag name",
 		args: &params{
@@ -488,7 +483,7 @@ func TestResolve(t *testing.T) {
 			url:        anonFakeRepoURL,
 		},
 		expectedCommitSHA: commitSHAsInAnonRepo[2],
-		expectedStatus:    resolution.CreateResolutionRequestStatusWithData([]byte(mainContent)),
+		expectedStatus:    resolution.CreateResolutionRequestStatusWithData([]byte("released content in main branch and in tag v1")),
 	}, {
 		name: "clone: revision is the full tag name i.e. refs/tags/v1",
 		args: &params{
@@ -497,7 +492,7 @@ func TestResolve(t *testing.T) {
 			url:        anonFakeRepoURL,
 		},
 		expectedCommitSHA: commitSHAsInAnonRepo[2],
-		expectedStatus:    resolution.CreateResolutionRequestStatusWithData([]byte(mainContent)),
+		expectedStatus:    resolution.CreateResolutionRequestStatusWithData([]byte("released content in main branch and in tag v1")),
 	}, {
 		name: "clone: revision is a branch name",
 		args: &params{
@@ -506,7 +501,7 @@ func TestResolve(t *testing.T) {
 			url:        anonFakeRepoURL,
 		},
 		expectedCommitSHA: commitSHAsInAnonRepo[1],
-		expectedStatus:    resolution.CreateResolutionRequestStatusWithData([]byte(newBranchContent)),
+		expectedStatus:    resolution.CreateResolutionRequestStatusWithData([]byte("new content in test branch")),
 	}, {
 		name: "clone: revision is a specific commit sha",
 		args: &params{
@@ -515,7 +510,7 @@ func TestResolve(t *testing.T) {
 			url:        anonFakeRepoURL,
 		},
 		expectedCommitSHA: commitSHAsInAnonRepo[0],
-		expectedStatus:    resolution.CreateResolutionRequestStatusWithData([]byte(oldBranchContent)),
+		expectedStatus:    resolution.CreateResolutionRequestStatusWithData([]byte("old content in test branch")),
 	}, {
 		name: "clone: file does not exist",
 		args: &params{
@@ -533,7 +528,7 @@ func TestResolve(t *testing.T) {
 			namespace:   "foo",
 		},
 		expectedCommitSHA: commitSHAsInAnonRepo[2],
-		expectedStatus:    resolution.CreateResolutionRequestStatusWithData([]byte(mainContent)),
+		expectedStatus:    resolution.CreateResolutionRequestStatusWithData([]byte("released content in main branch and in tag v1")),
 	}, {
 		name: "clone: secret for git clone does not exist",
 		args: &params{

@@ -19,8 +19,10 @@ package notifications
 import (
 	"context"
 
-	bc "github.com/allegro/bigcache/v3"
+	lru "github.com/hashicorp/golang-lru"
+	"github.com/tektoncd/pipeline/pkg/apis/config"
 	"github.com/tektoncd/pipeline/pkg/apis/pipeline/v1beta1"
+	"github.com/tektoncd/pipeline/pkg/reconciler/events"
 	"github.com/tektoncd/pipeline/pkg/reconciler/events/cache"
 	"github.com/tektoncd/pipeline/pkg/reconciler/events/cloudevent"
 	"knative.dev/pkg/apis"
@@ -31,12 +33,13 @@ import (
 // EventClientsProvider provides read access to cloud event dependencies
 type EventClientsProvider interface {
 	GetCloudEventsClient() cloudevent.CEClient
-	GetCacheClient() *bc.BigCache
+	GetCacheClient() *lru.Cache
 }
 
-// ReconcileRunObject observes a v1beta1.RunObject and triggers notifications.
+// ReconcileRunObject observes a v1beta1.RunObject and triggers notifications
 func ReconcileRunObject(ctx context.Context, e EventClientsProvider, readOnlyRun v1beta1.RunObject) pkgreconciler.Event {
 	logger := logging.FromContext(ctx)
+	configs := config.FromContextOrDefaults(ctx)
 	ctx = cloudevent.ToContext(ctx, e.GetCloudEventsClient())
 	ctx = cache.ToContext(ctx, e.GetCacheClient())
 
@@ -45,6 +48,8 @@ func ReconcileRunObject(ctx context.Context, e EventClientsProvider, readOnlyRun
 	condition := readOnlyRun.GetStatusCondition().GetCondition(apis.ConditionSucceeded)
 	logger.Debugf("%s %s, condition: %s", readOnlyRun.GetObjectKind().GroupVersionKind().Kind, readOnlyRun.GetObjectMeta().GetName(), condition)
 
-	cloudevent.EmitCloudEvents(ctx, readOnlyRun)
+	if configs.FeatureFlags.SendCloudEventsForRuns {
+		events.EmitCloudEvents(ctx, readOnlyRun)
+	}
 	return nil
 }
