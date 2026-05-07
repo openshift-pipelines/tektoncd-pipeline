@@ -13,7 +13,7 @@ We expose several kinds of exporters, including Prometheus, Google Stackdriver, 
 
 | Name                                                                                    | Type | Labels/Tags                                     | Status |
 |-----------------------------------------------------------------------------------------| ----------- |-------------------------------------------------| ----------- |
-| `tekton_pipelines_controller_pipelinerun_duration_seconds_[bucket, sum, count]`         | Histogram/LastValue(Gauge) | `*pipeline`=&lt;pipeline_name&gt; <br> `*pipelinerun`=&lt;pipelinerun_name&gt; <br> `status`=&lt;status&gt; <br> `namespace`=&lt;pipelinerun-namespace&gt; <br> `*reason`=&lt;reason&gt; | experimental |
+| `tekton_pipelines_controller_pipelinerun_duration_seconds_[bucket, sum, count]`         | Histogram/LastValue(Gauge) | `*pipeline`=&lt;pipeline_name&gt; <br> `*pipelinerun`=&lt;pipelinerun_name&gt; <br> `status`=&lt;status&gt; <br> `namespace`=&lt;pipelinerun-namespace&gt; | experimental |
 | `tekton_pipelines_controller_pipelinerun_taskrun_duration_seconds_[bucket, sum, count]` | Histogram/LastValue(Gauge) | `*pipeline`=&lt;pipeline_name&gt; <br> `*pipelinerun`=&lt;pipelinerun_name&gt; <br> `status`=&lt;status&gt; <br> `*task`=&lt;task_name&gt; <br> `*taskrun`=&lt;taskrun_name&gt;<br> `namespace`=&lt;pipelineruns-taskruns-namespace&gt;  <br> `*reason`=&lt;reason&gt; | experimental |
 | `tekton_pipelines_controller_pipelinerun_total` | Counter | `status`=&lt;status&gt;                         | experimental |
 | `tekton_pipelines_controller_running_pipelineruns` | Gauge |                                                 | experimental |
@@ -22,10 +22,6 @@ We expose several kinds of exporters, including Prometheus, Google Stackdriver, 
 | `tekton_pipelines_controller_running_taskruns` | Gauge |                                                 | experimental |
 | `tekton_pipelines_controller_running_taskruns_throttled_by_quota` | Gauge | <br> `namespace`=&lt;pipelinerun-namespace&gt; | experimental |
 | `tekton_pipelines_controller_running_taskruns_throttled_by_node`  | Gauge | <br> `namespace`=&lt;pipelinerun-namespace&gt; | experimental |
-| `tekton_pipelines_controller_running_pipelineruns_waiting_on_pipeline_resolution` | Gauge | | experimental |
-| `tekton_pipelines_controller_running_pipelineruns_waiting_on_task_resolution` | Gauge | | experimental |
-| `tekton_pipelines_controller_running_taskruns_waiting_on_task_resolution_count` | Gauge | | experimental |
-| `tekton_pipelines_controller_taskruns_pod_latency_milliseconds` | Gauge | `namespace`=&lt;namespace&gt; `pod`=&lt;pod_name&gt; `*task`=&lt;task_name&gt; `*taskrun`=&lt;taskrun_name&gt; (unbounded cardinality, see [#9393](https://github.com/tektoncd/pipeline/issues/9393)) | experimental |
 | `tekton_pipelines_controller_client_latency_[bucket, sum, count]` | Histogram |                                                 | experimental |
 
 The Labels/Tag marked as "*" are optional. And there's a choice between Histogram and LastValue(Gauge) for pipelinerun and taskrun duration metrics.
@@ -62,7 +58,7 @@ Following values are available in the configmap:
 | metrics.taskrun.duration-type | `lastvalue` | `tekton_pipelines_controller_pipelinerun_taskrun_duration_seconds` and  `tekton_pipelines_controller_taskrun_duration_seconds` is of type gauge or lastvalue |
 | metrics.pipelinerun.duration-type | `histogram` | `tekton_pipelines_controller_pipelinerun_duration_seconds` is of type histogram                                                                              |
 | metrics.pipelinerun.duration-type | `lastvalue` | `tekton_pipelines_controller_pipelinerun_duration_seconds` is of type gauge or lastvalue                                                                     |
-| metrics.count.enable-reason | `false` | Sets if the `reason` label should be included on duration metrics (`*_duration_seconds`); never affects total counters (`*_total`)                           |
+| metrics.count.enable-reason | `false` | Sets if the `reason` label should be included on count metrics                                                                                               |
 | metrics.taskrun.throttle.enable-namespace | `false` | Sets if the `namespace` label should be included on the `tekton_pipelines_controller_running_taskruns_throttled_by_quota` metric                             |
 
 Histogram value isn't available when pipelinerun or taskrun labels are selected. The Lastvalue or Gauge will be provided. Histogram would serve no purpose because it would generate a single bar. TaskRun and PipelineRun level metrics aren't recommended because they lead to an unbounded cardinality which degrades the observability database.

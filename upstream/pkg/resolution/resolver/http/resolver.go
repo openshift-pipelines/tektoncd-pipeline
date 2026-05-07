@@ -290,7 +290,6 @@ func FetchHttpResource(ctx context.Context, params map[string]string, kubeclient
 		}
 	}
 
-	// #nosec G704 -- URL cannot be constant in this case.
 	resp, err := httpClient.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("error fetching URL: %w", err)
