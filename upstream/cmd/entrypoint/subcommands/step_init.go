@@ -51,15 +51,10 @@ func stepInit(steps []string) error {
 
 	for i, s := range steps {
 		run := filepath.Join(tektonRoot, "run", strconv.Itoa(i), "status")
-
-		// Create symlinks, tolerating the case where they already exist
-		// from a previous container start (e.g. OOM restart, eviction).
-		nameLink := filepath.Join(stepDir, s)
-		indexLink := filepath.Join(stepDir, strconv.Itoa(i))
-		if err := os.Symlink(run, nameLink); err != nil && !os.IsExist(err) {
+		if err := os.Symlink(run, filepath.Join(stepDir, s)); err != nil {
 			return err
 		}
-		if err := os.Symlink(run, indexLink); err != nil && !os.IsExist(err) {
+		if err := os.Symlink(run, filepath.Join(stepDir, strconv.Itoa(i))); err != nil {
 			return err
 		}
 	}

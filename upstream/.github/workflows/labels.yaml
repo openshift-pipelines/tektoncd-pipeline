@@ -9,10 +9,6 @@ on:
       - labeled
       - unlabeled
 
-permissions:
-  contents: read
-  pull-requests: read
-
 jobs:
 
   check_labels:

@@ -1,22 +1,25 @@
 aliases:
   pipeline-approvers:
   - afrittoli
-  - aThorp96
   - dibyom
-  - khrm
+  - ImJasonH
   - vdemeester
   - pritidesai
+  - jerop
   - abayer
   - wlynch
+  - yongxuanzhang
+  - chitrangpatel
+  - jeromeJu
   - waveywaves
   - twoGiants
 
   pipeline-reviewers:
   - afrittoli
-  - aThorp96
   - dibyom
   - vdemeester
   - pritidesai
+  - jerop
   - abayer
   - twoGiants
   - khrm
@@ -25,8 +28,10 @@ aliases:
   apis-approvers:
   - afrittoli
   - dibyom
+  - ImJasonH
   - vdemeester
   - pritidesai
+  - jerop
   - abayer
   - wlynch
 
@@ -43,8 +48,3 @@ aliases:
 # dlorenc
 # lbernick
 # bobcatfish
-# ImJasonH
-# jerop
-# yongxuanzhang
-# chitrangpatel
-# jeromeJu

@@ -167,11 +167,8 @@ func (state PipelineRunState) AdjustStartTime(unadjustedStartTime *metav1.Time) 
 	return adjustedStartTime.DeepCopy()
 }
 
-// GetTaskRunsResults returns a map of all completed TaskRuns in the state, with the pipeline task name as
-// the key and the results from the corresponding TaskRun as the value. It includes tasks which have completed
-// successfully or with failure. Note: isFailure() returns true for ALL non-successful completed states including
-// cancelled and timed-out tasks, so any completed task that produced results will contribute them.
-// This is consistent with convertToResultRefs() in resultrefresolution.go.
+// GetTaskRunsResults returns a map of all successfully completed TaskRuns in the state, with the pipeline task name as
+// the key and the results from the corresponding TaskRun as the value. It only includes tasks which have completed successfully.
 func (state PipelineRunState) GetTaskRunsResults() map[string][]v1.TaskRunResult {
 	results := make(map[string][]v1.TaskRunResult)
 	for _, rpt := range state {
@@ -181,7 +178,7 @@ func (state PipelineRunState) GetTaskRunsResults() map[string][]v1.TaskRunResult
 		if rpt.IsCustomTask() {
 			continue
 		}
-		if !rpt.isSuccessful() && !rpt.isFailure() {
+		if !rpt.isSuccessful() {
 			continue
 		}
 		if rpt.PipelineTask.IsMatrixed() {
@@ -196,9 +193,8 @@ func (state PipelineRunState) GetTaskRunsResults() map[string][]v1.TaskRunResult
 	return results
 }
 
-// GetTaskRunsArtifacts returns a map of all completed TaskRuns in the state, with the pipeline task name as
-// the key and the artifacts from the corresponding TaskRun as the value. It includes tasks which have completed
-// successfully or with failure (including cancelled and timed-out, see GetTaskRunsResults comment).
+// GetTaskRunsArtifacts returns a map of all successfully completed TaskRuns in the state, with the pipeline task name as
+// the key and the artifacts from the corresponding TaskRun as the value. It only includes tasks which have completed successfully.
 func (state PipelineRunState) GetTaskRunsArtifacts() map[string]*v1.Artifacts {
 	results := make(map[string]*v1.Artifacts)
 	for _, rpt := range state {
@@ -208,7 +204,7 @@ func (state PipelineRunState) GetTaskRunsArtifacts() map[string]*v1.Artifacts {
 		if rpt.IsCustomTask() {
 			continue
 		}
-		if !rpt.isSuccessful() && !rpt.isFailure() {
+		if !rpt.isSuccessful() {
 			continue
 		}
 		if rpt.PipelineTask.IsMatrixed() {
@@ -242,16 +238,15 @@ func ConvertResultsMapToTaskRunResults(resultsMap map[string][]string) []v1.Task
 	return taskRunResults
 }
 
-// GetRunsResults returns a map of all completed Runs in the state, with the pipeline task name as the key
-// and the results from the corresponding TaskRun as the value. It includes runs which have completed
-// successfully or with failure (including cancelled and timed-out, see GetTaskRunsResults comment).
+// GetRunsResults returns a map of all successfully completed Runs in the state, with the pipeline task name as the key
+// and the results from the corresponding TaskRun as the value. It only includes runs which have completed successfully.
 func (state PipelineRunState) GetRunsResults() map[string][]v1beta1.CustomRunResult {
 	results := make(map[string][]v1beta1.CustomRunResult)
 	for _, rpt := range state {
 		if !rpt.IsCustomTask() {
 			continue
 		}
-		if !rpt.isSuccessful() && !rpt.isFailure() {
+		if !rpt.isSuccessful() {
 			continue
 		}
 		// Currently a Matrix cannot produce results so this is for a singular CustomRun

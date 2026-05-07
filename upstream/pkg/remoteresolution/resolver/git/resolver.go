@@ -18,7 +18,6 @@ package git
 
 import (
 	"context"
-	"encoding/hex"
 	"errors"
 	"time"
 
@@ -53,10 +52,6 @@ const (
 
 	// git revision parameter name
 	revisionParam = "revision"
-
-	// git SHA-XX commit hash length
-	sha1Length   = 40
-	sha256Length = 64
 )
 
 var _ framework.Resolver = (*Resolver)(nil)
@@ -117,7 +112,7 @@ func (r *Resolver) Validate(ctx context.Context, req *v1beta1.ResolutionRequestS
 }
 
 // IsImmutable implements ImmutabilityChecker.IsImmutable
-// Returns true if the revision parameter is a commit SHA (40-character SHA-1 or 64-character SHA-256 hex string)
+// Returns true if the revision parameter is a commit SHA (40-character hex string)
 func (r *Resolver) IsImmutable(params []v1.Param) bool {
 	var revision string
 	for _, param := range params {
@@ -127,13 +122,17 @@ func (r *Resolver) IsImmutable(params []v1.Param) bool {
 		}
 	}
 
-	// Check if length is valid (40 for SHA-1 or 64 for SHA-256)
-	if len(revision) != sha1Length && len(revision) != sha256Length {
+	// Checks if the given string looks like a git commit SHA.
+	// A valid commit SHA is exactly 40 characters of hexadecimal.
+	if len(revision) != 40 {
 		return false
 	}
-
-	_, err := hex.DecodeString(revision)
-	return err == nil
+	for _, r := range revision {
+		if !((r >= '0' && r <= '9') || (r >= 'a' && r <= 'f') || (r >= 'A' && r <= 'F')) {
+			return false
+		}
+	}
+	return true
 }
 
 // GetResolutionTimeout returns the configured timeout for git resolution requests.

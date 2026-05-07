@@ -251,11 +251,6 @@ func populateParamsWithDefaults(ctx context.Context, origParams []pipelinev1.Par
 		params[NamespaceParam] = pNS.StringVal
 	}
 
-	if ns, ok := params[NamespaceParam]; ok && strings.TrimSpace(ns) == "" {
-		missingParams = append(missingParams, NamespaceParam)
-		delete(params, NamespaceParam)
-	}
-
 	if len(missingParams) > 0 {
 		return nil, fmt.Errorf("missing required cluster resolver params: %s", strings.Join(missingParams, ", "))
 	}
@@ -268,7 +263,7 @@ func populateParamsWithDefaults(ctx context.Context, origParams []pipelinev1.Par
 		return params, nil
 	}
 
-	if conf[BlockedNamespacesKey] != "" && isInCommaSeparatedList("*", conf[BlockedNamespacesKey]) {
+	if conf[BlockedNamespacesKey] != "" && conf[BlockedNamespacesKey] == "*" {
 		return nil, errors.New("only explicit allowed access to namespaces is allowed")
 	}
 
@@ -281,9 +276,7 @@ func populateParamsWithDefaults(ctx context.Context, origParams []pipelinev1.Par
 
 func isInCommaSeparatedList(checkVal string, commaList string) bool {
 	for _, s := range strings.Split(commaList, ",") {
-		// TrimSpace on list entries only; Kubernetes namespace names cannot contain whitespace.
-		s = strings.TrimSpace(s)
-		if s != "" && s == checkVal {
+		if s == checkVal {
 			return true
 		}
 	}

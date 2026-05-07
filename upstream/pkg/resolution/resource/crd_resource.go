@@ -27,7 +27,6 @@ import (
 	rrclient "github.com/tektoncd/pipeline/pkg/client/resolution/clientset/versioned"
 	rrlisters "github.com/tektoncd/pipeline/pkg/client/resolution/listers/resolution/v1beta1"
 	common "github.com/tektoncd/pipeline/pkg/resolution/common"
-	apiequality "k8s.io/apimachinery/pkg/api/equality"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"knative.dev/pkg/apis"
@@ -133,7 +132,13 @@ func appendOwnerReference(rr *v1beta1.ResolutionRequest, ownerRef metav1.OwnerRe
 }
 
 func ownerRefsAreEqual(a, b metav1.OwnerReference) bool {
-	return apiequality.Semantic.DeepEqual(a, b)
+	// pointers values cannot be directly compared.
+	if (a.Controller == nil && b.Controller != nil) ||
+		(a.Controller != nil && b.Controller == nil) ||
+		(*a.Controller != *b.Controller) {
+		return false
+	}
+	return a.APIVersion == b.APIVersion && a.Kind == b.Kind && a.Name == b.Name && a.UID == b.UID
 }
 
 // ReadOnlyResolutionRequest is an opaque wrapper around ResolutionRequest
