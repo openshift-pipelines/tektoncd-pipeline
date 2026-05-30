@@ -705,7 +705,7 @@ github.com/sigstore/sigstore/pkg/signature/payload
 # github.com/sigstore/sigstore/pkg/signature/kms/aws v1.10.6
 ## explicit; go 1.25.0
 github.com/sigstore/sigstore/pkg/signature/kms/aws
-# github.com/sigstore/sigstore/pkg/signature/kms/azure v1.10.6
+# github.com/sigstore/sigstore/pkg/signature/kms/azure v1.10.5
 ## explicit; go 1.25.0
 github.com/sigstore/sigstore/pkg/signature/kms/azure
 # github.com/sigstore/sigstore/pkg/signature/kms/gcp v1.10.6
@@ -736,7 +736,7 @@ github.com/spiffe/go-spiffe/v2/spiffetls/tlsconfig
 github.com/spiffe/go-spiffe/v2/svid/jwtsvid
 github.com/spiffe/go-spiffe/v2/svid/x509svid
 github.com/spiffe/go-spiffe/v2/workloadapi
-# github.com/spiffe/spire-api-sdk v1.14.6
+# github.com/spiffe/spire-api-sdk v1.15.0
 ## explicit; go 1.23.0
 github.com/spiffe/spire-api-sdk/proto/spire/api/server/entry/v1
 github.com/spiffe/spire-api-sdk/proto/spire/api/types
@@ -771,7 +771,7 @@ go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp/internal/semconv
 go.opentelemetry.io/contrib/instrumentation/runtime
 go.opentelemetry.io/contrib/instrumentation/runtime/internal/deprecatedruntime
 go.opentelemetry.io/contrib/instrumentation/runtime/internal/x
-# go.opentelemetry.io/otel v1.43.0
+# go.opentelemetry.io/otel v1.44.0
 ## explicit; go 1.25.0
 go.opentelemetry.io/otel
 go.opentelemetry.io/otel/attribute
@@ -783,14 +783,13 @@ go.opentelemetry.io/otel/internal/baggage
 go.opentelemetry.io/otel/internal/errorhandler
 go.opentelemetry.io/otel/internal/global
 go.opentelemetry.io/otel/propagation
-go.opentelemetry.io/otel/semconv/internal
-go.opentelemetry.io/otel/semconv/v1.12.0
 go.opentelemetry.io/otel/semconv/v1.37.0
 go.opentelemetry.io/otel/semconv/v1.37.0/rpcconv
 go.opentelemetry.io/otel/semconv/v1.40.0
 go.opentelemetry.io/otel/semconv/v1.40.0/goconv
 go.opentelemetry.io/otel/semconv/v1.40.0/httpconv
 go.opentelemetry.io/otel/semconv/v1.40.0/otelconv
+go.opentelemetry.io/otel/semconv/v1.41.0
 # go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetricgrpc v1.42.0
 ## explicit; go 1.25.0
 go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetricgrpc
@@ -845,7 +844,7 @@ go.opentelemetry.io/otel/exporters/stdout/stdouttrace/internal
 go.opentelemetry.io/otel/exporters/stdout/stdouttrace/internal/counter
 go.opentelemetry.io/otel/exporters/stdout/stdouttrace/internal/observ
 go.opentelemetry.io/otel/exporters/stdout/stdouttrace/internal/x
-# go.opentelemetry.io/otel/metric v1.43.0
+# go.opentelemetry.io/otel/metric v1.44.0
 ## explicit; go 1.25.0
 go.opentelemetry.io/otel/metric
 go.opentelemetry.io/otel/metric/embedded
@@ -869,7 +868,7 @@ go.opentelemetry.io/otel/sdk/metric/internal/aggregate
 go.opentelemetry.io/otel/sdk/metric/internal/observ
 go.opentelemetry.io/otel/sdk/metric/internal/reservoir
 go.opentelemetry.io/otel/sdk/metric/metricdata
-# go.opentelemetry.io/otel/trace v1.43.0
+# go.opentelemetry.io/otel/trace v1.44.0
 ## explicit; go 1.25.0
 go.opentelemetry.io/otel/trace
 go.opentelemetry.io/otel/trace/embedded
@@ -910,7 +909,7 @@ go.yaml.in/yaml/v2
 # go.yaml.in/yaml/v3 v3.0.4
 ## explicit; go 1.16
 go.yaml.in/yaml/v3
-# golang.org/x/crypto v0.51.0
+# golang.org/x/crypto v0.52.0
 ## explicit; go 1.25.0
 golang.org/x/crypto/blake2b
 golang.org/x/crypto/blake2s
@@ -978,7 +977,7 @@ golang.org/x/oauth2/jwt
 golang.org/x/sync/errgroup
 golang.org/x/sync/semaphore
 golang.org/x/sync/singleflight
-# golang.org/x/sys v0.44.0
+# golang.org/x/sys v0.45.0
 ## explicit; go 1.25.0
 golang.org/x/sys/cpu
 golang.org/x/sys/plan9
@@ -1060,8 +1059,8 @@ google.golang.org/genproto/googleapis/api/httpbody
 google.golang.org/genproto/googleapis/rpc/code
 google.golang.org/genproto/googleapis/rpc/errdetails
 google.golang.org/genproto/googleapis/rpc/status
-# google.golang.org/grpc v1.80.0
-## explicit; go 1.24.0
+# google.golang.org/grpc v1.81.1
+## explicit; go 1.25.0
 google.golang.org/grpc
 google.golang.org/grpc/attributes
 google.golang.org/grpc/backoff
@@ -1128,6 +1127,7 @@ google.golang.org/grpc/internal/status
 google.golang.org/grpc/internal/syscall
 google.golang.org/grpc/internal/transport
 google.golang.org/grpc/internal/transport/networktype
+google.golang.org/grpc/internal/transport/readyreader
 google.golang.org/grpc/internal/xds
 google.golang.org/grpc/internal/xds/clients
 google.golang.org/grpc/keepalive
