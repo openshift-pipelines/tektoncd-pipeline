@@ -96,7 +96,10 @@ func (r *Reconciler) Reconcile(ctx context.Context, key string) error {
 		return controller.NewPermanentError(err)
 	}
 
-	if rr.IsDone() {
+	// If the pipelines controller has a deep queue, resolvers may reprocess
+	// a ResolutionRequest before the pipelines controller marks the resolved
+	// request as Done.
+	if rr.IsResolved() || rr.IsDone() {
 		return nil
 	}
 
@@ -113,8 +116,8 @@ func (r *Reconciler) Reconcile(ctx context.Context, key string) error {
 }
 
 func (r *Reconciler) resolve(ctx context.Context, key string, rr *v1beta1.ResolutionRequest) error {
-	errChan := make(chan error)
-	resourceChan := make(chan ResolvedResource)
+	errChan := make(chan error, 1)
+	resourceChan := make(chan ResolvedResource, 1)
 
 	paramsMap := make(map[string]string)
 	for _, p := range rr.Spec.Params {
