@@ -24,16 +24,16 @@ COPY --from=builder /tmp/sidecarlogresults /ko-app/sidecarlogresults
 COPY head ${KO_DATA_PATH}/HEAD
 
 LABEL \
-    com.redhat.component="openshift-pipelines-sidecarlogresults-rhel9-container" \
+    com.redhat.component="openshift-pipelines-sidecarlogresults-rhel10-container" \
     cpe="cpe:/a:redhat:openshift_pipelines:nightly::el9" \
     description="Red Hat OpenShift Pipelines tektoncd-pipeline sidecarlogresults" \
     io.k8s.description="Red Hat OpenShift Pipelines tektoncd-pipeline sidecarlogresults" \
     io.k8s.display-name="Red Hat OpenShift Pipelines tektoncd-pipeline sidecarlogresults" \
     io.openshift.tags="tekton,openshift,tektoncd-pipeline,sidecarlogresults" \
     maintainer="pipelines-extcomm@redhat.com" \
-    name="openshift-pipelines/pipelines-sidecarlogresults-rhel9" \
+    name="openshift-pipelines/pipelines-sidecarlogresults-rhel10" \
     summary="Red Hat OpenShift Pipelines tektoncd-pipeline sidecarlogresults" \
-    version="latest"
+    version="nightly"
 
 RUN groupadd -r -g 65532 nonroot && \
     useradd --no-log-init -r -u 65532 -g nonroot nonroot

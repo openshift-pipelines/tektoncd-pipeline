@@ -35,16 +35,16 @@ COPY --from=dependency-builder /dependencies/tini/tini /sbin/tini
 RUN chmod 0755 /sbin/tini && chown root:root /sbin/tini
 
 LABEL \
-    com.redhat.component="openshift-pipelines-resolvers-rhel9-container" \
+    com.redhat.component="openshift-pipelines-resolvers-rhel10-container" \
     cpe="cpe:/a:redhat:openshift_pipelines:nightly::el9" \
     description="Red Hat OpenShift Pipelines tektoncd-pipeline resolvers" \
     io.k8s.description="Red Hat OpenShift Pipelines tektoncd-pipeline resolvers" \
     io.k8s.display-name="Red Hat OpenShift Pipelines tektoncd-pipeline resolvers" \
     io.openshift.tags="tekton,openshift,tektoncd-pipeline,resolvers" \
     maintainer="pipelines-extcomm@redhat.com" \
-    name="openshift-pipelines/pipelines-resolvers-rhel9" \
+    name="openshift-pipelines/pipelines-resolvers-rhel10" \
     summary="Red Hat OpenShift Pipelines tektoncd-pipeline resolvers" \
-    version="latest"
+    version="nightly"
 
 RUN microdnf update && microdnf install -y git && microdnf clean all
 
