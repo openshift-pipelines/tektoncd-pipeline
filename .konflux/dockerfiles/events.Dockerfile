@@ -24,16 +24,16 @@ COPY --from=builder /tmp/events /ko-app/events
 COPY head ${KO_DATA_PATH}/HEAD
 
 LABEL \
-    com.redhat.component="openshift-pipelines-events-rhel9-container" \
+    com.redhat.component="openshift-pipelines-events-rhel10-container" \
     cpe="cpe:/a:redhat:openshift_pipelines:nightly::el9" \
     description="Red Hat OpenShift Pipelines tektoncd-pipeline events" \
     io.k8s.description="Red Hat OpenShift Pipelines tektoncd-pipeline events" \
     io.k8s.display-name="Red Hat OpenShift Pipelines tektoncd-pipeline events" \
     io.openshift.tags="tekton,openshift,tektoncd-pipeline,events" \
     maintainer="pipelines-extcomm@redhat.com" \
-    name="openshift-pipelines/pipelines-events-rhel9" \
+    name="openshift-pipelines/pipelines-events-rhel10" \
     summary="Red Hat OpenShift Pipelines tektoncd-pipeline events" \
-    version="latest"
+    version="nightly"
 
 RUN groupadd -r -g 65532 nonroot && \
     useradd --no-log-init -r -u 65532 -g nonroot nonroot
