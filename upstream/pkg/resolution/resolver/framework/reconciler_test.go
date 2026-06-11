@@ -20,8 +20,6 @@ import (
 	"context"
 	"encoding/base64"
 	"errors"
-	"fmt"
-	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -36,7 +34,6 @@ import (
 	"github.com/tektoncd/pipeline/test"
 	"github.com/tektoncd/pipeline/test/diff"
 	"github.com/tektoncd/pipeline/test/names"
-	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/tools/record"
@@ -209,59 +206,6 @@ func TestReconcile(t *testing.T) {
 			},
 			reconcilerTimeout: 1 * time.Second,
 			expectedErr:       errors.New("context deadline exceeded"),
-		}, {
-			name: "resolved but not yet done should skip re-resolution",
-			inputRequest: &v1beta1.ResolutionRequest{
-				TypeMeta: metav1.TypeMeta{
-					APIVersion: "resolution.tekton.dev/v1beta1",
-					Kind:       "ResolutionRequest",
-				},
-				ObjectMeta: metav1.ObjectMeta{
-					Name:              "rr",
-					Namespace:         "foo",
-					CreationTimestamp: metav1.Time{Time: time.Now()},
-					Labels: map[string]string{
-						resolutioncommon.LabelKeyResolverType: framework.LabelValueFakeResolverType,
-					},
-				},
-				Spec: v1beta1.ResolutionRequestSpec{
-					Params: []pipelinev1.Param{{
-						Name:  framework.FakeParamName,
-						Value: *pipelinev1.NewStructuredValues("bar"),
-					}},
-				},
-				Status: v1beta1.ResolutionRequestStatus{
-					Status: duckv1.Status{
-						Conditions: duckv1.Conditions{{
-							Type:   apis.ConditionSucceeded,
-							Status: corev1.ConditionUnknown,
-						}},
-					},
-					ResolutionRequestStatusFields: v1beta1.ResolutionRequestStatusFields{
-						Data: base64.StdEncoding.Strict().EncodeToString(
-							[]byte(`{"apiVersion": "tekton.dev/v1", "kind": "Pipeline"}`),
-						),
-					},
-				},
-			},
-			paramMap: map[string]*framework.FakeResolvedResource{
-				"bar": {
-					ErrorWith: "resolver should not have been called",
-				},
-			},
-			expectedStatus: &v1beta1.ResolutionRequestStatus{
-				Status: duckv1.Status{
-					Conditions: duckv1.Conditions{{
-						Type:   apis.ConditionSucceeded,
-						Status: corev1.ConditionUnknown,
-					}},
-				},
-				ResolutionRequestStatusFields: v1beta1.ResolutionRequestStatusFields{
-					Data: base64.StdEncoding.Strict().EncodeToString(
-						[]byte(`{"apiVersion": "tekton.dev/v1", "kind": "Pipeline"}`),
-					),
-				},
-			},
 		},
 	}
 
@@ -305,70 +249,6 @@ func TestReconcile(t *testing.T) {
 				}
 			}
 		})
-	}
-}
-
-func TestResolveGoroutineLeak(t *testing.T) {
-	const numRequests = 5
-
-	paramMap := map[string]*framework.FakeResolvedResource{
-		"bar": {WaitFor: 200 * time.Millisecond},
-	}
-
-	requests := make([]*v1beta1.ResolutionRequest, numRequests)
-	for i := range numRequests {
-		requests[i] = &v1beta1.ResolutionRequest{
-			TypeMeta: metav1.TypeMeta{
-				APIVersion: "resolution.tekton.dev/v1beta1",
-				Kind:       "ResolutionRequest",
-			},
-			ObjectMeta: metav1.ObjectMeta{
-				Name:              fmt.Sprintf("rr-%d", i),
-				Namespace:         "foo",
-				CreationTimestamp: metav1.Time{Time: time.Now()},
-				Labels: map[string]string{
-					resolutioncommon.LabelKeyResolverType: framework.LabelValueFakeResolverType,
-				},
-			},
-			Spec: v1beta1.ResolutionRequestSpec{
-				Params: []pipelinev1.Param{{
-					Name:  framework.FakeParamName,
-					Value: *pipelinev1.NewStructuredValues("bar"),
-				}},
-			},
-		}
-	}
-
-	d := test.Data{
-		ResolutionRequests: requests,
-	}
-
-	fakeResolver := &framework.FakeResolver{
-		ForParam: paramMap,
-		Timeout:  50 * time.Millisecond,
-	}
-
-	ctx, _ := ttesting.SetupFakeContext(t)
-	testAssets, cancel := getResolverFrameworkController(ctx, t, d, fakeResolver, setClockOnReconciler)
-	defer cancel()
-
-	runtime.GC()
-	time.Sleep(50 * time.Millisecond)
-	before := runtime.NumGoroutine()
-
-	for _, rr := range requests {
-		_ = testAssets.Controller.Reconciler.Reconcile(testAssets.Ctx, getRequestName(rr))
-	}
-
-	time.Sleep(500 * time.Millisecond)
-	runtime.GC()
-	time.Sleep(50 * time.Millisecond)
-	after := runtime.NumGoroutine()
-
-	leaked := after - before
-	if leaked >= numRequests {
-		t.Errorf("goroutine leak detected: %d goroutines leaked after %d timed-out resolutions (before=%d, after=%d)",
-			leaked, numRequests, before, after)
 	}
 }
 

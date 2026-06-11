@@ -74,9 +74,6 @@ data:
   sink: https://my-sink-url
 ```
 
-The `formats` field specifies which event format to use; currently `tektonv1` is the
-only supported format and is the default when the field is omitted.
-
 The sink used to be configured in the `config-defaults` config map.
 This option is still available, but deprecated, and will be removed.
 
@@ -178,7 +175,7 @@ _In the above example the environment variable `TEST_TEKTON` will not be overrid
 
 ## Configuring default resources requirements
 
-Resource requirements of containers created by the controller can be assigned default values. This allows you to fully control the resource requirements of `TaskRun` pods. Tekton does not apply resource requirements to its internal containers by default; configure this setting when your cluster policy requires requests or limits, for example in namespaces that enforce `ResourceQuota`.
+Resource requirements of containers created by the controller can be assigned default values. This allows to fully control the resources requirement of `TaskRun`.
 
 ```yaml
 apiVersion: v1
@@ -237,75 +234,7 @@ data:
         cpu: "500m"
 ```
 
-Any resource requirements set at the `Task` and `TaskRun` levels will override the default one specified in the `config-defaults` configmap.
-
-To make Tekton internal containers compatible with namespaces that require explicit requests and limits, configure named entries for `prepare`, `place-scripts`, `working-dir-initializer`, and `sidecar-tekton-log-results`, as in the following example:
-
-```yaml
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: config-defaults
-  namespace: tekton-pipelines
-data:
-  default-container-resource-requirements: |
-    prepare:
-      requests:
-        cpu: "100m"
-        memory: "64Mi"
-      limits:
-        cpu: "100m"
-        memory: "64Mi"
-    place-scripts:
-      requests:
-        cpu: "100m"
-        memory: "32Mi"
-      limits:
-        cpu: "100m"
-        memory: "32Mi"
-    working-dir-initializer:
-      requests:
-        cpu: "100m"
-        memory: "16Mi"
-      limits:
-        cpu: "100m"
-        memory: "16Mi"
-    sidecar-tekton-log-results:
-      requests:
-        cpu: "50m"
-        memory: "32Mi"
-      limits:
-        cpu: "50m"
-        memory: "32Mi"
-```
-
-### Performance tuning
-
-CPU **limits** on init containers cause [CFS throttling](https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/#how-pods-with-resource-limits-are-run), which can significantly slow down TaskRun execution — especially for the `prepare` init container that copies the entrypoint binary into every pod.
-
-If your namespace does **not** require CPU limits, you can specify only `requests`. This lets init containers burst to use available CPU while still giving the scheduler a request signal:
-
-```yaml
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: config-defaults
-  namespace: tekton-pipelines
-data:
-  default-container-resource-requirements: |
-    prepare:
-      requests:
-        cpu: "100m"
-        memory: "64Mi"
-    place-scripts:
-      requests:
-        cpu: "100m"
-        memory: "32Mi"
-    working-dir-initializer:
-      requests:
-        cpu: "100m"
-        memory: "16Mi"
-```
+Any resource requirements set at the `Task` and `TaskRun` levels will overidde the default one specified in the `config-defaults` configmap.
 
 ## Customizing basic execution parameters
 
@@ -440,12 +369,6 @@ Defaults to "ignore".
   source from where a remote Task/Pipeline definition was fetched. By default, this is set to `true`.
   To disable populating this field, set this flag to `"false"`.
 
-- `enable-termination-message-compression`: Set this flag to `"true"` to enable zlib compression of
-  termination messages written by the entrypoint. This increases the effective capacity for results
-  from ~33 to ~187 in typical scenarios (5.7x improvement). Has no effect when `results-from` is
-  set to `"sidecar-logs"` since sidecar logs bypass the termination message entirely. This is an
-  alpha feature gated behind `enable-api-fields: "alpha"` or the per-feature flag. Defaults to `"false"`.
-
 - `set-security-context`: Set this flag to `true` to set a security context for containers injected by Tekton that will allow TaskRun pods
 to run in namespaces with `restricted` pod security admission. By default, this is set to `false`.
 
@@ -478,7 +401,6 @@ Features currently in "alpha" are:
 | [keep pod on cancel](./taskruns.md#cancelling-a-taskrun)                                                     | N/A                                                                                                                  | [v0.52.0](https://github.com/tektoncd/pipeline/releases/tag/v0.52.0) | `keep-pod-on-cancel`                             |
 | [CEL in WhenExpression](./pipelines.md#use-cel-expression-in-whenexpression)                                                  | [TEP-0145](https://github.com/tektoncd/community/blob/main/teps/0145-cel-in-whenexpression.md)                       | [v0.53.0](https://github.com/tektoncd/pipeline/releases/tag/v0.53.0) | `enable-cel-in-whenexpression`                   |
 | [Param Enum](./taskruns.md#parameter-enums)                                                                  | [TEP-0144](https://github.com/tektoncd/community/blob/main/teps/0144-param-enum.md)                                  | [v0.54.0](https://github.com/tektoncd/pipeline/releases/tag/v0.54.0) | `enable-param-enum`                              |
-| Termination Message Compression                                                                             | N/A                                                                                                                  | N/A                                                                  | `enable-termination-message-compression`         |
 
 ### Beta Features
 

@@ -332,6 +332,7 @@ func (c *Reconciler) ReconcileKind(ctx context.Context, pr *v1.PipelineRun) pkgr
 			return controller.NewRequeueAfter(timeout - elapsed)
 		}
 		return nil
+
 	}
 	return nil
 }
