@@ -56,7 +56,7 @@ func (r *Reconciler) ReconcileKind(ctx context.Context, rr *v1beta1.ResolutionRe
 
 	maximumResolutionDuration := config.FromContextOrDefaults(ctx).Defaults.DefaultMaximumResolutionTimeout
 	switch {
-	case rr.IsResolved():
+	case rr.Status.Data != "":
 		rr.Status.MarkSucceeded()
 	case requestDuration(rr) > maximumResolutionDuration:
 		rr.Status.MarkFailed(resolutioncommon.ReasonResolutionTimedOut, timeoutMessage(maximumResolutionDuration))

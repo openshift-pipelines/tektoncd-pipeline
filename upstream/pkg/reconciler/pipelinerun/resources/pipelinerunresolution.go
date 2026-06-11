@@ -38,7 +38,6 @@ import (
 	"knative.dev/pkg/apis"
 	"knative.dev/pkg/kmeta"
 )
-
 // MissingResultFromCompletedTaskError indicates a task completed successfully
 // but did not emit a result that a downstream task references.
 type MissingResultFromCompletedTaskError struct {
@@ -51,6 +50,7 @@ func (e *MissingResultFromCompletedTaskError) Error() string {
 	return fmt.Sprintf("task %q completed successfully but did not emit the result %q, which is referenced by task %q",
 		e.Task, e.Result, e.Target)
 }
+
 
 const (
 	// ReasonConditionCheckFailed indicates that the reason for the failure status is that the

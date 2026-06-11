@@ -72,9 +72,15 @@ var _ reconciler.LeaderAware = &Reconciler{}
 // the framework.TimedResolution interface.
 const defaultMaximumResolutionDuration = time.Minute
 
+// allowedResourceKinds lists the kinds of resources which
+// are allowed to be resolved by resolvers
 var allowedResourceKinds = []string{
+	pipelineapi.PipelineRunControllerName,
 	pipelineapi.PipelineControllerName,
+	pipelineapi.TaskRunControllerName,
 	pipelineapi.TaskControllerName,
+	pipelineapi.RunControllerName,
+	pipelineapi.CustomRunControllerName,
 	pipelinev1beta1.StepActionKind,
 }
 
@@ -96,10 +102,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, key string) error {
 		return controller.NewPermanentError(err)
 	}
 
-	// If the pipelines controller has a deep queue, resolvers may reprocess
-	// a ResolutionRequest before the pipelines controller marks the resolved
-	// request as Done.
-	if rr.IsResolved() || rr.IsDone() {
+	if rr.IsDone() {
 		return nil
 	}
 
@@ -116,8 +119,8 @@ func (r *Reconciler) Reconcile(ctx context.Context, key string) error {
 }
 
 func (r *Reconciler) resolve(ctx context.Context, key string, rr *v1beta1.ResolutionRequest) error {
-	errChan := make(chan error, 1)
-	resourceChan := make(chan ResolvedResource, 1)
+	errChan := make(chan error)
+	resourceChan := make(chan ResolvedResource)
 
 	paramsMap := make(map[string]string)
 	for _, p := range rr.Spec.Params {
