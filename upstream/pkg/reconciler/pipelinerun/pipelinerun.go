@@ -21,11 +21,12 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"maps"
 	"path/filepath"
-	"reflect"
 	"regexp"
 	"sort"
 	"strings"
+	"time"
 
 	"k8s.io/apimachinery/pkg/util/wait"
 
@@ -47,7 +48,6 @@ import (
 	tknreconciler "github.com/tektoncd/pipeline/pkg/reconciler"
 	"github.com/tektoncd/pipeline/pkg/reconciler/apiserver"
 	"github.com/tektoncd/pipeline/pkg/reconciler/events"
-	"github.com/tektoncd/pipeline/pkg/reconciler/events/cloudevent"
 	"github.com/tektoncd/pipeline/pkg/reconciler/pipeline/dag"
 	rprp "github.com/tektoncd/pipeline/pkg/reconciler/pipelinerun/pipelinespec"
 	"github.com/tektoncd/pipeline/pkg/reconciler/pipelinerun/resources"
@@ -166,7 +166,6 @@ type Reconciler struct {
 	taskRunLister            listers.TaskRunLister
 	customRunLister          beta1listers.CustomRunLister
 	verificationPolicyLister alpha1listers.VerificationPolicyLister
-	cloudEventClient         cloudevent.CEClient
 	metrics                  *pipelinerunmetrics.Recorder
 	pvcHandler               volumeclaim.PvcHandler
 	resolutionRequester      resolution.Requester
@@ -184,7 +183,6 @@ var (
 // resource with the current status of the resource.
 func (c *Reconciler) ReconcileKind(ctx context.Context, pr *v1.PipelineRun) pkgreconciler.Event {
 	logger := logging.FromContext(ctx)
-	ctx = cloudevent.ToContext(ctx, c.cloudEventClient)
 	ctx = initTracing(ctx, c.tracerProvider, pr)
 	ctx, span := c.tracerProvider.Tracer(TracerName).Start(ctx, "PipelineRun:ReconcileKind")
 	defer span.End()
@@ -195,6 +193,9 @@ func (c *Reconciler) ReconcileKind(ctx context.Context, pr *v1.PipelineRun) pkgr
 
 	// Read the initial condition
 	before := pr.Status.GetCondition(apis.ConditionSucceeded)
+
+	// Record the duration and count after the reconcile cycle.
+	defer c.durationAndCountMetrics(ctx, pr, before)
 
 	// Check if we are failing to mark this as timed out for a while. If we are, mark immediately and finish the
 	// reconcile. We are assuming here that if the PipelineRun has timed out for a long time, it had time to run
@@ -208,6 +209,18 @@ func (c *Reconciler) ReconcileKind(ctx context.Context, pr *v1.PipelineRun) pkgr
 			return err
 		}
 		return controller.NewPermanentError(errors.New("PipelineRun has timed out for a long time"))
+	}
+
+	// If the PipelineRun is already done on entry, perform only the lightweight
+	// post-completion work: cleanup and return. This avoids expensive operations
+	// like listing VerificationPolicies, resolving Pipeline references, and
+	// calling SetDefaults on every resync of a completed run.
+	if pr.IsDone() {
+		err := c.cleanupAffinityAssistantsAndPVCs(ctx, pr)
+		if err != nil {
+			logger.Errorf("Failed to delete StatefulSet or PVC for PipelineRun %s: %v", pr.Name, err)
+		}
+		return c.finishReconcileUpdateEmitEvents(ctx, pr, before, err)
 	}
 
 	if !pr.HasStarted() && !pr.IsPending() {
@@ -237,15 +250,6 @@ func (c *Reconciler) ReconcileKind(ctx context.Context, pr *v1.PipelineRun) pkgr
 	}
 	getPipelineFunc := resources.GetPipelineFunc(ctx, c.KubeClientSet, c.PipelineClientSet, c.resolutionRequester, pr, vp)
 
-	if pr.IsDone() {
-		pr.SetDefaults(ctx)
-		err := c.cleanupAffinityAssistantsAndPVCs(ctx, pr)
-		if err != nil {
-			logger.Errorf("Failed to delete StatefulSet or PVC for PipelineRun %s: %v", pr.Name, err)
-		}
-		return c.finishReconcileUpdateEmitEvents(ctx, pr, before, err)
-	}
-
 	if err := propagatePipelineNameLabelToPipelineRun(pr); err != nil {
 		logger.Errorf("Failed to propagate pipeline name label to pipelinerun %s: %v", pr.Name, err)
 		return c.finishReconcileUpdateEmitEvents(ctx, pr, before, err)
@@ -267,8 +271,17 @@ func (c *Reconciler) ReconcileKind(ctx context.Context, pr *v1.PipelineRun) pkgr
 
 	// Reconcile this copy of the pipelinerun and then write back any status or label
 	// updates regardless of whether the reconciliation errored out.
-	if err = c.reconcile(ctx, pr, getPipelineFunc, before); err != nil {
+	if err = c.reconcile(ctx, pr, getPipelineFunc); err != nil {
 		logger.Errorf("Reconcile error: %v", err.Error())
+	}
+
+	// If the PipelineRun just transitioned to done during this reconcile,
+	// perform cleanup eagerly so subsequent reconciles find nothing to do.
+	if pr.IsDone() {
+		if cleanupErr := c.cleanupAffinityAssistantsAndPVCs(ctx, pr); cleanupErr != nil {
+			logger.Errorf("Failed to delete StatefulSet or PVC for PipelineRun %s: %v", pr.Name, cleanupErr)
+			err = errors.Join(err, cleanupErr)
+		}
 	}
 
 	if err = c.finishReconcileUpdateEmitEvents(ctx, pr, before, err); err != nil {
@@ -329,7 +342,7 @@ func (c *Reconciler) durationAndCountMetrics(ctx context.Context, pr *v1.Pipelin
 	defer span.End()
 	logger := logging.FromContext(ctx)
 	if pr.IsDone() {
-		err := c.metrics.DurationAndCount(pr, beforeCondition)
+		err := c.metrics.DurationAndCount(ctx, pr, beforeCondition)
 		if err != nil {
 			logger.Warnf("Failed to log the metrics : %v", err)
 		}
@@ -343,17 +356,28 @@ func (c *Reconciler) finishReconcileUpdateEmitEvents(ctx context.Context, pr *v1
 
 	afterCondition := pr.Status.GetCondition(apis.ConditionSucceeded)
 	events.Emit(ctx, beforeCondition, afterCondition, pr)
-	_, err := c.updateLabelsAndAnnotations(ctx, pr)
-	if err != nil {
-		logger.Warn("Failed to update PipelineRun labels/annotations", zap.Error(err))
-		events.EmitError(controller.GetEventRecorder(ctx), err, pr)
+
+	errs := []error{previousError}
+
+	// If the PipelineRun was already completed before and remains completed,
+	// there is no need to update labels and annotations — they can't have
+	// changed. This avoids an unnecessary API read+write on every resync of
+	// a done PipelineRun (ported from the TaskRun reconciler).
+	skipUpdateLabelsAndAnnotations := !afterCondition.IsUnknown() && !beforeCondition.IsUnknown()
+	if !skipUpdateLabelsAndAnnotations {
+		_, err := c.updateLabelsAndAnnotations(ctx, pr)
+		if err != nil {
+			logger.Warn("Failed to update PipelineRun labels/annotations", zap.Error(err))
+			events.EmitError(controller.GetEventRecorder(ctx), err, pr)
+			errs = append(errs, err)
+		}
 	}
 
-	errs := errors.Join(previousError, err)
+	joinedErr := errors.Join(errs...)
 	if controller.IsPermanentError(previousError) {
-		return controller.NewPermanentError(errs)
+		return controller.NewPermanentError(joinedErr)
 	}
-	return errs
+	return joinedErr
 }
 
 // resolvePipelineState will attempt to resolve each referenced pipeline task in the pipeline's spec and all of the resources
@@ -367,6 +391,13 @@ func (c *Reconciler) resolvePipelineState(
 ) (resources.PipelineRunState, error) {
 	ctx, span := c.tracerProvider.Tracer(TracerName).Start(ctx, "resolvePipelineState")
 	defer span.End()
+
+	// List VerificationPolicies once per reconcile for trusted resources (used by all pipeline tasks).
+	vp, err := c.verificationPolicyLister.VerificationPolicies(pr.Namespace).List(labels.Everything())
+	if err != nil {
+		return nil, fmt.Errorf("failed to list VerificationPolicies from namespace %s with error %w", pr.Namespace, err)
+	}
+
 	// Resolve each pipeline task individually because they each could have a different reference context (remote or local).
 	for _, pipelineTask := range pipelineTasks {
 		// We need the TaskRun name to ensure that we don't perform an additional remote resolution request for a PipelineTask
@@ -376,12 +407,6 @@ func (c *Reconciler) resolvePipelineState(
 			pipelineTask.Name,
 			pr.Name,
 		)
-
-		// list VerificationPolicies for trusted resources
-		vp, err := c.verificationPolicyLister.VerificationPolicies(pr.Namespace).List(labels.Everything())
-		if err != nil {
-			return nil, fmt.Errorf("failed to list VerificationPolicies from namespace %s with error %w", pr.Namespace, err)
-		}
 
 		getChildPipelineRunFunc := func(name string) (*v1.PipelineRun, error) {
 			return c.pipelineRunLister.PipelineRuns(pr.Namespace).Get(name)
@@ -401,9 +426,42 @@ func (c *Reconciler) resolvePipelineState(
 		)
 
 		getTaskRunFunc := func(name string) (*v1.TaskRun, error) {
-			return c.taskRunLister.TaskRuns(pr.Namespace).Get(name)
+			tr, err := c.taskRunLister.TaskRuns(pr.Namespace).Get(name)
+			if err != nil {
+				return nil, err
+			}
+			// If the informer cache shows the TaskRun as Failed due to pod eviction,
+			// verify against the API server to guard against stale cache data causing
+			// premature PipelineRun failure. Pod eviction is the only transient failure
+			// that can recover (pod gets rescheduled); all other failure reasons
+			// (Failed, Cancelled, TimedOut, etc.) are deterministic and cannot recover.
+			if cond := tr.Status.GetCondition(apis.ConditionSucceeded); cond != nil && cond.IsFalse() &&
+				cond.Reason == v1.TaskRunReasonPodEvicted.String() {
+				freshTR, freshErr := c.PipelineClientSet.TektonV1().TaskRuns(pr.Namespace).Get(ctx, name, metav1.GetOptions{})
+				if freshErr != nil {
+					// Eviction recovery never deletes the TaskRun — the controller
+					// reschedules a new pod and updates the same TaskRun in-place.
+					// NotFound here means the TaskRun was deleted externally (GC or
+					// manual deletion), not because it is recovering. Use the cached
+					// PodEvicted failure as the final state.
+					if apierrors.IsNotFound(freshErr) {
+						return tr, nil
+					}
+					return nil, fmt.Errorf("cannot verify TaskRun %s failure status against API server: %w", name, freshErr)
+				}
+				freshCond := freshTR.Status.GetCondition(apis.ConditionSucceeded)
+				// Treat nil condition (status not yet set) as non-terminal;
+				// the TaskRun may still be initializing after being rescheduled.
+				if freshCond == nil || !freshCond.IsFalse() {
+					logging.FromContext(ctx).Infof("TaskRun %s appears failed in cache but is not failed in API server; using API server status", name)
+				}
+				return freshTR, nil
+			}
+			return tr, nil
 		}
 
+		// CustomRuns don't create pods directly — they delegate to external controllers,
+		// so they are not subject to pod eviction and don't need stale-cache verification.
 		getCustomRunFunc := func(name string) (*v1beta1.CustomRun, error) {
 			r, err := c.customRunLister.CustomRuns(pr.Namespace).Get(name)
 			if err != nil {
@@ -455,10 +513,9 @@ func (c *Reconciler) resolvePipelineState(
 	return pst, nil
 }
 
-func (c *Reconciler) reconcile(ctx context.Context, pr *v1.PipelineRun, getPipelineFunc rprp.GetPipeline, beforeCondition *apis.Condition) error {
+func (c *Reconciler) reconcile(ctx context.Context, pr *v1.PipelineRun, getPipelineFunc rprp.GetPipeline) error {
 	ctx, span := c.tracerProvider.Tracer(TracerName).Start(ctx, "reconcile")
 	defer span.End()
-	defer c.durationAndCountMetrics(ctx, pr, beforeCondition)
 	logger := logging.FromContext(ctx)
 	pr.SetDefaults(ctx)
 
@@ -1186,6 +1243,8 @@ func (c *Reconciler) createTaskRun(ctx context.Context, taskRunName string, para
 
 	if rpt.PipelineTask.Timeout != nil {
 		tr.Spec.Timeout = rpt.PipelineTask.Timeout
+	} else if timeout := pipelineRunTimeout(ctx, pr, rpt, facts); timeout != nil {
+		tr.Spec.Timeout = timeout
 	}
 
 	// taskRunSpec timeout overrides pipeline task timeout
@@ -1294,6 +1353,9 @@ func (c *Reconciler) createCustomRun(ctx context.Context, runName string, params
 	params = append(params, rpt.PipelineTask.Params...)
 
 	taskTimeout := rpt.PipelineTask.Timeout
+	if taskTimeout == nil {
+		taskTimeout = pipelineRunTimeout(ctx, pr, rpt, facts)
+	}
 	// taskRunSpec timeout overrides pipeline task timeout
 	if taskRunSpec.Timeout != nil {
 		taskTimeout = taskRunSpec.Timeout
@@ -1526,6 +1588,38 @@ func (c *Reconciler) taskWorkspaceByWorkspaceVolumeSource(ctx context.Context, p
 	return binding
 }
 
+// pipelineRunTimeout returns the applicable PipelineRun-level timeout for a task,
+// based on whether it is a regular task or a finally task.
+// It only returns a value when the PipelineRun timeout exceeds the global default
+// (or is explicitly zero, meaning no timeout)
+func pipelineRunTimeout(ctx context.Context, pr *v1.PipelineRun, rpt *resources.ResolvedPipelineTask, facts *resources.PipelineRunFacts) *metav1.Duration {
+	var prTimeout *metav1.Duration
+	if facts.FinalTasksGraph != nil && rpt.IsFinalTask(facts) {
+		prTimeout = pr.FinallyTimeout()
+	} else {
+		prTimeout = pr.TasksTimeout()
+	}
+
+	if prTimeout == nil {
+		return nil
+	}
+
+	if prTimeout.Duration == config.NoTimeoutDuration {
+		return prTimeout
+	}
+
+	defaultTimeout := time.Duration(config.FromContextOrDefaults(ctx).Defaults.DefaultTimeoutMinutes) * time.Minute
+	if prTimeout.Duration > defaultTimeout {
+		return prTimeout
+	}
+	// When the PipelineRun timeout is smaller than or equal to the global default
+	// (e.g., tasks: 20m with default: 60m), we return nil and the global default to
+	// the TaskRun gets applied. The PipelineRun's cumulative timer will
+	// cancel the TaskRun at 20m, before the 60m default fires, so there is no
+	// risk of premature cancellation and no need to set an individual timeout.
+	return nil
+}
+
 // combinedSubPath returns the combined value of the optional subPath from workspaceBinding and the optional
 // subPath from pipelineTask. If both is set, they are joined with a slash.
 func combinedSubPath(workspaceSubPath string, pipelineTaskSubPath string) string {
@@ -1603,23 +1697,27 @@ func createChildResourceLabels(pr *v1.PipelineRun, pipelineTaskName string, incl
 	if pipelineTaskName != "" {
 		labels[pipeline.PipelineTaskLabelKey] = pipelineTaskName
 	}
-	if pr.Status.PipelineSpec != nil {
-		// check if a task is part of the "tasks" section, add a label to identify it during the runtime
-		for _, f := range pr.Status.PipelineSpec.Tasks {
-			if pipelineTaskName == f.Name {
-				labels[pipeline.MemberOfLabelKey] = v1.PipelineTasks
-				break
-			}
-		}
-		// check if a task is part of the "finally" section, add a label to identify it during the runtime
-		for _, f := range pr.Status.PipelineSpec.Finally {
-			if pipelineTaskName == f.Name {
-				labels[pipeline.MemberOfLabelKey] = v1.PipelineFinallyTasks
-				break
-			}
-		}
+	if memberOf := memberOfLookup(pr.Status.PipelineSpec, pipelineTaskName); memberOf != "" {
+		labels[pipeline.MemberOfLabelKey] = memberOf
 	}
 	return labels
+}
+
+func memberOfLookup(ps *v1.PipelineSpec, name string) string {
+	if ps == nil {
+		return ""
+	}
+	for _, t := range ps.Tasks {
+		if name == t.Name {
+			return v1.PipelineTasks
+		}
+	}
+	for _, t := range ps.Finally {
+		if name == t.Name {
+			return v1.PipelineFinallyTasks
+		}
+	}
+	return ""
 }
 
 func combineTaskRunAndTaskSpecLabels(pr *v1.PipelineRun, pipelineTask *v1.PipelineTask) map[string]string {
@@ -1673,7 +1771,7 @@ func (c *Reconciler) updateLabelsAndAnnotations(ctx context.Context, pr *v1.Pipe
 	if err != nil {
 		return nil, fmt.Errorf("error getting PipelineRun %s when updating labels/annotations: %w", pr.Name, err)
 	}
-	if !reflect.DeepEqual(pr.ObjectMeta.Labels, newPr.ObjectMeta.Labels) || !reflect.DeepEqual(pr.ObjectMeta.Annotations, newPr.ObjectMeta.Annotations) {
+	if !maps.Equal(pr.ObjectMeta.Labels, newPr.ObjectMeta.Labels) || !maps.Equal(pr.ObjectMeta.Annotations, newPr.ObjectMeta.Annotations) {
 		// Note that this uses Update vs. Patch because the former is significantly easier to test.
 		// If we want to switch this to Patch, then we will need to teach the utilities in test/controller.go
 		// to deal with Patch (setting resourceVersion, and optimistic concurrency checks).

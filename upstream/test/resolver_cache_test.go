@@ -39,6 +39,7 @@ import (
 	"knative.dev/pkg/test/helpers"
 
 	"github.com/prometheus/common/expfmt"
+	"github.com/prometheus/common/model"
 )
 
 const (
@@ -275,7 +276,7 @@ func manifestGetRequestCountFromRegistryMetrics(ctx context.Context, t *testing.
 		return 0, fmt.Errorf("failed to get metrics from pod: %w", err)
 	}
 
-	var parser expfmt.TextParser
+	parser := expfmt.NewTextParser(model.LegacyValidation)
 	metricFamilies, err := parser.TextToMetricFamilies(strings.NewReader(string(body)))
 	if err != nil {
 		return 0, fmt.Errorf("failed to parse metrics: %w", err)

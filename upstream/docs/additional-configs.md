@@ -90,9 +90,14 @@ data:
   default-cloud-events-sink: https://my-sink-url
 ```
 
-Additionally, CloudEvents for `CustomRuns` require an extra configuration to be
-enabled. This setting exists to avoid collisions with CloudEvents that might
-be sent by custom task controllers:
+CloudEvents for `CustomRuns` are enabled by default when a sink is configured in the `config-events` ConfigMap. The `send-cloudevents-for-runs`
+feature flag can be used to disable them for `CustomRuns` only — for example, to avoid
+duplicate events when a custom task controller already sends its own CloudEvents.
+
+> **Deprecated:** `send-cloudevents-for-runs` is deprecated and will be removed in a
+> future release. It now defaults to `true`.
+
+To disable cloudevents for `CustomRuns`, use the following configuration:
 
 ```yaml
 apiVersion: v1
@@ -104,7 +109,8 @@ metadata:
     app.kubernetes.io/instance: default
     app.kubernetes.io/part-of: tekton-pipelines
 data:
-  send-cloudevents-for-runs: true
+  send-cloudevents-for-runs: "false"
+  # Other feature-flags (...)
 ```
 
 ## Configuring self-signed cert for private registry
@@ -219,7 +225,7 @@ data:
         memory: "128Mi"
         cpu: "500m"
   
-    default: # updates resource requirements of init-containers and containers which has empty resource resource requirements
+    default: # updates resource requirements of init-containers and containers which has empty resource requirements
       requests:
         memory: "64Mi"
         cpu: "250m"
@@ -632,7 +638,7 @@ which results in:
 Now, verify the digest in the `release.yaml` by matching it with the provenance, for example, the digest for the release `v0.28.1`:
 
 ```shell
-curl -s https://storage.googleapis.com/tekton-releases/pipeline/previous/v0.28.1/release.yaml | grep github.com/tektoncd/pipeline/cmd/controller:v0.28.1 | awk -F"github.com/tektoncd/pipeline/cmd/controller:v0.28.1@" '{print $2}'
+curl -s https://infra.tekton.dev/tekton-releases/pipeline/previous/v0.28.1/release.yaml | grep github.com/tektoncd/pipeline/cmd/controller:v0.28.1 | awk -F"github.com/tektoncd/pipeline/cmd/controller:v0.28.1@" '{print $2}'
 ```
 
 which results in:

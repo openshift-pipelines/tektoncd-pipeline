@@ -34,7 +34,7 @@ import (
 	"github.com/tektoncd/pipeline/pkg/apis/pipeline/v1beta1"
 	"github.com/tektoncd/pipeline/test/diff"
 	"github.com/tektoncd/pipeline/test/parse"
-	"go.opencensus.io/trace"
+	"go.opentelemetry.io/otel"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -254,7 +254,7 @@ spec:
 // the metric that is emitted to track how long it took.
 func WaitForCustomRunSpecCancelled(ctx context.Context, c *clients, name string, desc string) error {
 	metricName := fmt.Sprintf("WaitForRunSpecCancelled/%s/%s", name, desc)
-	_, span := trace.StartSpan(ctx, metricName)
+	_, span := otel.Tracer("").Start(ctx, metricName)
 	defer span.End()
 
 	return pollImmediateWithContext(ctx, func() (bool, error) {
@@ -391,6 +391,16 @@ func applyV1Beta1Controller(t *testing.T) {
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		t.Fatalf("Failed to create Wait Custom Task Controller: %s, Output: %s", err, out)
+	}
+
+	// Wait for the controller deployment to be ready before running tests.
+	// This prevents race conditions where tests create CustomRuns before the
+	// controller is ready to reconcile them.
+	t.Log("Waiting for Wait Custom Task Controller deployment to be ready...")
+	cmd = exec.CommandContext(context.Background(), "kubectl", "rollout", "status", "deployment/wait-task-controller", "-n", "wait-task-beta", "--timeout=60s")
+	out, err = cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("Failed to wait for Wait Custom Task Controller deployment: %s, Output: %s", err, out)
 	}
 }
 

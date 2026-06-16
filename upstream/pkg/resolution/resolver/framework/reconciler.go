@@ -119,8 +119,8 @@ func (r *Reconciler) Reconcile(ctx context.Context, key string) error {
 }
 
 func (r *Reconciler) resolve(ctx context.Context, key string, rr *v1beta1.ResolutionRequest) error {
-	errChan := make(chan error, 1)
-	resourceChan := make(chan ResolvedResource, 1)
+	errChan := make(chan error)
+	resourceChan := make(chan ResolvedResource)
 
 	paramsMap := make(map[string]string)
 	for _, p := range rr.Spec.Params {

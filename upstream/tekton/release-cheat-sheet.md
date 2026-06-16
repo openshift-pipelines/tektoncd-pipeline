@@ -84,13 +84,14 @@ the pipelines repo, a terminal window and a text editor.
    ```
 
 1. Execute the release pipeline (takes ~45 mins).
-    
+
     **The minimum required tkn version is v0.30.0 or later**
 
     **If you are back-porting include this flag: `--param=releaseAsLatest="false"`**
 
    ```bash
     tkn --context dogfooding pipeline start pipeline-release \
+      --serviceaccount release-right-meow \
       --param package=github.com/tektoncd/pipeline \
       --param repoName="${TEKTON_REPO_NAME}" \
       --param gitRevision="${TEKTON_RELEASE_GIT_SHA}" \
@@ -102,9 +103,12 @@ the pipelines repo, a terminal window and a text editor.
       --param versionTag="${TEKTON_VERSION}" \
       --param releaseBucket=tekton-releases \
       --param koExtraArgs="" \
+      --param previousReleaseTag="${TEKTON_OLD_VERSION}" \
+      --param releaseName="${TEKTON_RELEASE_NAME}" \
       --workspace name=release-secret,secret=oci-release-secret \
       --workspace name=release-images-secret,secret=ghcr-creds \
       --workspace name=workarea,volumeClaimTemplateFile="${WORKSPACE_TEMPLATE}" \
+      --workspace name=github-secret,secret=github-token \
       --tasks-timeout 2h \
       --pipeline-timeout 3h
    ```
@@ -124,7 +128,7 @@ the pipelines repo, a terminal window and a text editor.
     NAME                    VALUE
     ∙ commit-sha            ff6d7abebde12460aecd061ab0f6fd21053ba8a7
     ∙ release-file           https://infra.tekton.dev/tekton-releases/pipeline/previous/v0.13.0/release.yaml
-    ∙ release-file-no-tag    https://infra.tekton.dev/tekton-releases/pipeline/previous/v0.13.0/release.notag.yaml
+    ∙ release-file-no-tag    https://infra.tekton.dev/tekton-releases/pipeline/previous/v0.13.0/release.notags.yaml
 
     (...)
     ```
@@ -134,16 +138,22 @@ the pipelines repo, a terminal window and a text editor.
 
 1. The YAMLs are now released! Anyone installing Tekton Pipelines will get the new version. Time to create a new GitHub release announcement:
 
-    1. Find the Rekor UUID for the release
+    1. **If the `github-secret` workspace was provided** (see below), a draft GitHub
+       release is created automatically by the pipeline. Skip to step (iv).
 
-    ```bash
-    RELEASE_FILE=https://infra.tekton.dev/tekton-releases/pipeline/previous/${TEKTON_VERSION}/release.yaml
-    CONTROLLER_IMAGE_SHA=$(curl -L $RELEASE_FILE | sed -n 's/"//g;s/.*ghcr\.io.*controller.*@//p;')
-    REKOR_UUID=$(rekor-cli search --sha $CONTROLLER_IMAGE_SHA | grep -v Found | head -1)
-    echo -e "CONTROLLER_IMAGE_SHA: ${CONTROLLER_IMAGE_SHA}\nREKOR_UUID: ${REKOR_UUID}"
-    ```
+    1. **If the `github-secret` workspace was NOT provided** (e.g. nightly builds),
+       you can create the draft manually:
 
-    1. Execute the Draft Release Pipeline.
+        Find the Rekor UUID for the release:
+
+        ```bash
+        RELEASE_FILE=https://infra.tekton.dev/tekton-releases/pipeline/previous/${TEKTON_VERSION}/release.yaml
+        CONTROLLER_IMAGE_SHA=$(curl -L $RELEASE_FILE | sed -n 's/"//g;s/.*ghcr\.io.*controller.*@//p;')
+        REKOR_UUID=$(rekor-cli search --sha $CONTROLLER_IMAGE_SHA | grep -v Found | head -1)
+        echo -e "CONTROLLER_IMAGE_SHA: ${CONTROLLER_IMAGE_SHA}\nREKOR_UUID: ${REKOR_UUID}"
+        ```
+
+        Execute the Draft Release Pipeline:
 
         Create a pod template file:
 
@@ -173,9 +183,10 @@ the pipelines repo, a terminal window and a text editor.
           release-draft-oci
         ```
 
-    1. Watch logs of resulting pipeline run on pipeline `release-draft-oci`
+        Watch logs of resulting pipeline run on pipeline `release-draft-oci`.
 
-    1. On successful completion, a URL will be logged. Visit that URL and look through the release notes.
+    1. On successful completion, visit https://github.com/tektoncd/pipeline/releases
+       and look through the draft release notes.
       1. Manually add upgrade and deprecation notices based on the generated release notes
       1. Double-check that the list of commits here matches your expectations
          for the release. You might need to remove incorrect commits or copy/paste commits
@@ -236,7 +247,7 @@ Congratulations, you're done!
 1. Configure `kubectl` to connect to
    [the dogfooding cluster](https://github.com/tektoncd/plumbing/blob/main/docs/dogfooding.md):
 
-   The dogfooding cluster is currently an OKE cluster in oracle cloud. we need the Oracle Cloud CLI client. Install oracle cloud cli (https://docs.oracle.com/en-us/iaas/Content/API/SDKDocs/cliinstall.htm) 
+   The dogfooding cluster is currently an OKE cluster in oracle cloud. we need the Oracle Cloud CLI client. Install oracle cloud cli (https://docs.oracle.com/en-us/iaas/Content/API/SDKDocs/cliinstall.htm)
 
     ```bash
     oci ce cluster create-kubeconfig --cluster-id <CLUSTER-OCID> --file $HOME/.kube/config --region <CLUSTER-REGION> --token-version 2.0.0  --kube-endpoint PUBLIC_ENDPOINT

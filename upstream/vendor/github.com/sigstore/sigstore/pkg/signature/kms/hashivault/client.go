@@ -32,6 +32,7 @@ import (
 	"time"
 
 	vault "github.com/hashicorp/vault/api"
+	config "github.com/hashicorp/vault/api/cliconfig"
 	"github.com/jellydator/ttlcache/v3"
 	"github.com/mitchellh/go-homedir"
 	"github.com/sigstore/sigstore/pkg/cryptoutils"
@@ -41,6 +42,9 @@ import (
 
 func init() {
 	sigkms.AddProvider(ReferenceScheme, func(_ context.Context, keyResourceID string, hashFunc crypto.Hash, opts ...signature.RPCOption) (sigkms.SignerVerifier, error) {
+		return LoadSignerVerifier(keyResourceID, hashFunc, opts...)
+	})
+	sigkms.AddProvider(AlternativeScheme, func(_ context.Context, keyResourceID string, hashFunc crypto.Hash, opts ...signature.RPCOption) (sigkms.SignerVerifier, error) {
 		return LoadSignerVerifier(keyResourceID, hashFunc, opts...)
 	})
 }
@@ -55,7 +59,7 @@ type hashivaultClient struct {
 
 var (
 	errReference   = errors.New("kms specification should be in the format hashivault://<key>")
-	referenceRegex = regexp.MustCompile(`^hashivault://(?P<path>\w(([\w-.]+)?\w)?)$`)
+	referenceRegex = regexp.MustCompile(`^(?:hashivault|openbao)://(?P<path>\w(([\w-.]+)?\w)?)$`)
 	prefixRegex    = regexp.MustCompile("^vault:v[0-9]+:")
 )
 
@@ -67,6 +71,9 @@ const (
 
 	// ReferenceScheme schemes for various KMS services are copied from https://github.com/google/go-cloud/tree/master/secrets
 	ReferenceScheme = "hashivault://"
+
+	// AlternativeScheme scheme for OpenBao KMS.
+	AlternativeScheme = "openbao://"
 )
 
 // ValidReference returns a non-nil error if the reference string is invalid
@@ -101,8 +108,13 @@ func newHashivaultClient(address, token, transitSecretEnginePath, keyResourceID 
 	if address == "" {
 		address = os.Getenv("VAULT_ADDR")
 	}
+
 	if address == "" {
-		return nil, errors.New("VAULT_ADDR is not set")
+		address = os.Getenv("BAO_ADDR")
+	}
+
+	if address == "" {
+		return nil, errors.New("VAULT_ADDR or BAO_ADDR is not set")
 	}
 
 	client, err := vault.NewClient(&vault.Config{
@@ -115,20 +127,46 @@ func newHashivaultClient(address, token, transitSecretEnginePath, keyResourceID 
 	if token == "" {
 		token = os.Getenv("VAULT_TOKEN")
 	}
+
 	if token == "" {
-		log.Printf("VAULT_TOKEN is not set, trying to read token from file at path ~/.vault-token")
-		homeDir, err := homedir.Dir()
-		if err != nil {
-			return nil, fmt.Errorf("get home directory: %w", err)
-		}
-
-		tokenFromFile, err := os.ReadFile(filepath.Join(homeDir, ".vault-token"))
-		if err != nil {
-			return nil, fmt.Errorf("read .vault-token file: %w", err)
-		}
-
-		token = string(tokenFromFile)
+		token = os.Getenv("BAO_TOKEN")
 	}
+
+	if token == "" {
+		log.Printf("VAULT_TOKEN or BAO_TOKEN not set, trying to find token helper")
+
+		// try token helper
+		tokenHelper, err := config.DefaultTokenHelper()
+		if err == nil {
+			if t, err := tokenHelper.Get(); err == nil && t != "" {
+				token = t
+			} else {
+				log.Printf("no token found via helper, trying ~/.vault-token")
+			}
+		} else {
+			log.Printf("no token helper configured, trying ~/.vault-token")
+		}
+
+		// read from ~/.vault-token
+		if token == "" {
+			homeDir, err := homedir.Dir()
+			if err != nil {
+				return nil, fmt.Errorf("get home directory: %w", err)
+			}
+
+			tokenFromFile, err := os.ReadFile(filepath.Join(homeDir, ".vault-token"))
+			if err != nil {
+				return nil, fmt.Errorf("read .vault-token file: %w", err)
+			}
+
+			token = string(tokenFromFile)
+		}
+	}
+
+	if token == "" {
+		return nil, fmt.Errorf("no Vault token found in env, helper, or ~/.vault-token")
+	}
+
 	client.SetToken(token)
 
 	if transitSecretEnginePath == "" {
@@ -156,7 +194,10 @@ func oidcLogin(_ context.Context, address, path, role, token string) (string, er
 		address = os.Getenv("VAULT_ADDR")
 	}
 	if address == "" {
-		return "", errors.New("VAULT_ADDR is not set")
+		address = os.Getenv("BAO_ADDR")
+	}
+	if address == "" {
+		return "", errors.New("VAULT_ADDR or BAO_ADDR is not set")
 	}
 	if path == "" {
 		path = "jwt"
@@ -169,7 +210,7 @@ func oidcLogin(_ context.Context, address, path, role, token string) (string, er
 		return "", fmt.Errorf("new vault client: %w", err)
 	}
 
-	loginData := map[string]interface{}{
+	loginData := map[string]any{
 		"role": role,
 		"jwt":  token,
 	}
@@ -201,7 +242,7 @@ func (h *hashivaultClient) fetchPublicKey(_ context.Context) (crypto.PublicKey, 
 		return nil, errors.New("failed to read transit key keys: corrupted response")
 	}
 
-	keys, ok := keysData.(map[string]interface{})
+	keys, ok := keysData.(map[string]any)
 	if !ok {
 		return nil, errors.New("failed to read transit key keys: Invalid keys map")
 	}
@@ -216,7 +257,7 @@ func (h *hashivaultClient) fetchPublicKey(_ context.Context) (crypto.PublicKey, 
 		return nil, errors.New("failed to read transit key keys: corrupted response")
 	}
 
-	keyMap, ok := keyData.(map[string]interface{})
+	keyMap, ok := keyData.(map[string]any)
 	if !ok {
 		return nil, fmt.Errorf("could not parse transit key keys data as map[string]interface{}")
 	}
@@ -304,7 +345,7 @@ func (h hashivaultClient) sign(digest []byte, alg crypto.Hash, opts ...signature
 		prehashed = false
 	}
 
-	signResult, err := client.Write(fmt.Sprintf("/%s/sign/%s%s", h.transitSecretEnginePath, h.keyPath, hashString(alg)), map[string]interface{}{
+	signResult, err := client.Write(fmt.Sprintf("/%s/sign/%s%s", h.transitSecretEnginePath, h.keyPath, hashString(alg)), map[string]any{
 		"input":               base64.StdEncoding.Strict().EncodeToString(digest),
 		"prehashed":           prehashed,
 		"key_version":         keyVersion,
@@ -367,7 +408,7 @@ func (h hashivaultClient) verify(sig, digest []byte, alg crypto.Hash, opts ...si
 		prehashed = false
 	}
 
-	result, err := client.Write(fmt.Sprintf("/%s/verify/%s/%s", h.transitSecretEnginePath, h.keyPath, hashString(alg)), map[string]interface{}{
+	result, err := client.Write(fmt.Sprintf("/%s/verify/%s/%s", h.transitSecretEnginePath, h.keyPath, hashString(alg)), map[string]any{
 		"input":     base64.StdEncoding.EncodeToString(digest),
 		"prehashed": prehashed,
 		"signature": fmt.Sprintf("%s%s", vaultDataPrefix, encodedSig),
@@ -394,7 +435,7 @@ func (h hashivaultClient) verify(sig, digest []byte, alg crypto.Hash, opts ...si
 }
 
 // Vault likes to prefix base64 data with a version prefix
-func vaultDecode(data interface{}, keyVersionUsed *string) ([]byte, error) {
+func vaultDecode(data any, keyVersionUsed *string) ([]byte, error) {
 	encoded, ok := data.(string)
 	if !ok {
 		return nil, errors.New("received non-string data")
@@ -426,7 +467,7 @@ func hashString(h crypto.Hash) string {
 func (h hashivaultClient) createKey(typeStr string) (crypto.PublicKey, error) {
 	client := h.client.Logical()
 
-	if _, err := client.Write(fmt.Sprintf("/%s/keys/%s", h.transitSecretEnginePath, h.keyPath), map[string]interface{}{
+	if _, err := client.Write(fmt.Sprintf("/%s/keys/%s", h.transitSecretEnginePath, h.keyPath), map[string]any{
 		"type": typeStr,
 	}); err != nil {
 		return nil, fmt.Errorf("failed to create transit key: %w", err)

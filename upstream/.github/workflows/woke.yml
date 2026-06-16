@@ -11,19 +11,25 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Harden Runner
-        uses: step-security/harden-runner@5ef0c079ce82195b2a36a210272d6b661572d83e # v2.14.2
+        uses: step-security/harden-runner@9af89fc71515a100421586dfdb3dc9c984fbf411 # v2.19.4
         with:
           egress-policy: audit
       - name: 'Checkout'
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
-        
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+
       - name: Get changed files
         id: changed-files
-        uses: tj-actions/changed-files@9426d40962ed5378910ee2e21d5f8c6fcbf2dd96 # v45.0.7
-        with:
-          write_output_files: true
-          files: |
-            **
+        env:
+          BASE_REF: ${{ github.base_ref }}
+        run: |
+          changed=$(git diff --name-only --diff-filter=ACMRT "origin/${BASE_REF}" HEAD -- | xargs)
+          echo "files=$changed" >> "$GITHUB_OUTPUT"
+          if [ -n "$changed" ]; then
+            echo "any_changed=true" >> "$GITHUB_OUTPUT"
+          fi
 
       - name: 'woke'
         if: steps.changed-files.outputs.any_changed == 'true'
@@ -31,4 +37,4 @@ jobs:
         with:
           # Cause the check to fail on any broke rules
           fail-on-error: true
-          woke-args: ${{ steps.changed_files.outputs.all_changed_files }}
+          woke-args: ${{ steps.changed-files.outputs.files }}

@@ -48,7 +48,6 @@ import (
 	resolutionv1beta1 "github.com/tektoncd/pipeline/pkg/apis/resolution/v1beta1"
 	resolutionutil "github.com/tektoncd/pipeline/pkg/internal/resolution"
 	podconvert "github.com/tektoncd/pipeline/pkg/pod"
-	"github.com/tektoncd/pipeline/pkg/reconciler/events/cloudevent"
 	"github.com/tektoncd/pipeline/pkg/reconciler/events/k8sevent"
 	"github.com/tektoncd/pipeline/pkg/reconciler/taskrun/resources"
 	ttesting "github.com/tektoncd/pipeline/pkg/reconciler/testing"
@@ -401,7 +400,6 @@ func getTaskRunController(t *testing.T, d test.Data) (test.Assets, func()) {
 func initializeTaskRunControllerAssets(t *testing.T, d test.Data, opts pipeline.Options) (test.Assets, func()) {
 	t.Helper()
 	ctx, _ := ttesting.SetupFakeContext(t)
-	ctx = ttesting.SetupFakeCloudClientContext(ctx, d.ExpectedCloudEventCount)
 	ctx, cancel := context.WithCancel(ctx)
 	test.EnsureConfigurationConfigMapsExist(&d)
 	c, informers := test.SeedTestData(t, ctx, d)
@@ -544,9 +542,10 @@ spec:
 	}
 }
 
-// TestReconcile_CloudEvents runs reconcile with a cloud event sink configured
-// to ensure that events are sent in different cases
-func TestReconcile_CloudEvents(t *testing.T) {
+// TestReconcile_K8sEventsEmitted verifies that the core TaskRun reconciler emits k8s events.
+// Cloud events are now sent exclusively by the dedicated tekton-events-controller (TEP-0137);
+// the core reconciler has no cloudEventClient field and does not inject a CE client into context.
+func TestReconcile_K8sEventsEmitted(t *testing.T) {
 	task := parse.MustParseV1Task(t, `
 metadata:
   name: test-task
@@ -574,22 +573,6 @@ spec:
 		Tasks:    []*v1.Task{task},
 		TaskRuns: []*v1.TaskRun{taskRun},
 	}
-
-	d.ConfigMaps = []*corev1.ConfigMap{
-		{
-			ObjectMeta: metav1.ObjectMeta{Name: config.GetDefaultsConfigName(), Namespace: system.Namespace()},
-			Data: map[string]string{
-				"default-cloud-events-sink": "http://synk:8080",
-			},
-		},
-	}
-
-	wantEvents := []string{
-		"Normal Start",
-		"Normal Running",
-	}
-
-	d.ExpectedCloudEventCount = len(wantEvents)
 
 	testAssets, cancel := getTaskRunController(t, d)
 	defer cancel()
@@ -626,17 +609,15 @@ spec:
 		t.Errorf("Expected reason %q but was %s", v1.TaskRunReasonRunning.String(), condition.Reason)
 	}
 
-	err = k8sevent.CheckEventsOrdered(t, testAssets.Recorder.Events, "reconcile-cloud-events", wantEvents)
-	if !(err == nil) {
+	// K8s events are still emitted by the core reconciler
+	wantK8sEvents := []string{
+		"Normal Start",
+		"Normal Running",
+	}
+	err = k8sevent.CheckEventsOrdered(t, testAssets.Recorder.Events, "reconcile-k8s-events", wantK8sEvents)
+	if err != nil {
 		t.Error(err.Error())
 	}
-
-	wantCloudEvents := []string{
-		`(?s)dev.tekton.event.taskrun.started.v1.*test-taskrun-not-started`,
-		`(?s)dev.tekton.event.taskrun.running.v1.*test-taskrun-not-started`,
-	}
-	ceClient := clients.CloudEvents.(cloudevent.FakeClient)
-	ceClient.CheckCloudEventsUnordered(t, "reconcile-cloud-events", wantCloudEvents)
 }
 
 func TestReconcile(t *testing.T) {
@@ -1372,6 +1353,186 @@ status:
 	}
 }
 
+func TestReconcileOnPendingTaskRun(t *testing.T) {
+	pendingTaskRun := parse.MustParseV1TaskRun(t, `
+metadata:
+  name: test-taskrun-pending
+  namespace: foo
+spec:
+  taskRef:
+    name: test-task
+  status: TaskRunPending
+`)
+	pendingCancelledTaskRun := parse.MustParseV1TaskRun(t, `
+metadata:
+  name: test-taskrun-pending-cancelled
+  namespace: foo
+spec:
+  taskRef:
+    name: test-task
+  status: TaskRunPending
+`)
+	d := test.Data{
+		TaskRuns: []*v1.TaskRun{pendingTaskRun, pendingCancelledTaskRun},
+		Tasks:    []*v1.Task{simpleTask},
+	}
+	testAssets, cancel := getTaskRunController(t, d)
+	defer cancel()
+	createServiceAccount(t, testAssets, "default", "foo")
+
+	clients := testAssets.Clients
+
+	// Pending -> Pending (first reconcile should keep it pending and not create a Pod).
+	if err := testAssets.Controller.Reconciler.Reconcile(testAssets.Ctx, getRunName(pendingTaskRun)); err != nil {
+		t.Errorf("expected no error reconciling pending TaskRun but got %v", err)
+	}
+
+	updatedTR, err := clients.Pipeline.TektonV1().TaskRuns(pendingTaskRun.Namespace).Get(testAssets.Ctx, pendingTaskRun.Name, metav1.GetOptions{})
+	if err != nil {
+		t.Fatalf("Expected TaskRun %s to exist but instead got error when getting it: %v", pendingTaskRun.Name, err)
+	}
+
+	condition := updatedTR.Status.GetCondition(apis.ConditionSucceeded)
+	if condition == nil || condition.Status != corev1.ConditionUnknown {
+		t.Errorf("Expected pending TaskRun to have condition status Unknown, but had %v", condition)
+	}
+	if condition != nil && condition.Reason != v1.TaskRunReasonPending.String() {
+		t.Errorf("Expected reason %q but was %q", v1.TaskRunReasonPending, condition.Reason)
+	}
+	if updatedTR.Status.StartTime != nil {
+		t.Errorf("Start time should be nil for pending TaskRun, not: %s", updatedTR.Status.StartTime)
+	}
+	if updatedTR.Status.PodName != "" {
+		t.Errorf("Pod should not be created for pending TaskRun, but PodName was %q", updatedTR.Status.PodName)
+	}
+
+	if err := testAssets.Controller.Reconciler.Reconcile(testAssets.Ctx, getRunName(pendingCancelledTaskRun)); err != nil {
+		t.Errorf("expected no error reconciling pending TaskRun but got %v", err)
+	}
+
+	updatedCancelledTR, err := clients.Pipeline.TektonV1().TaskRuns(pendingCancelledTaskRun.Namespace).Get(testAssets.Ctx, pendingCancelledTaskRun.Name, metav1.GetOptions{})
+	if err != nil {
+		t.Fatalf("Expected TaskRun %s to exist but instead got error when getting it: %v", pendingCancelledTaskRun.Name, err)
+	}
+
+	condition = updatedCancelledTR.Status.GetCondition(apis.ConditionSucceeded)
+	if condition == nil || condition.Status != corev1.ConditionUnknown {
+		t.Errorf("Expected pending cancelled TaskRun to have condition status Unknown, but had %v", condition)
+	}
+	if condition != nil && condition.Reason != v1.TaskRunReasonPending.String() {
+		t.Errorf("Expected reason %q but was %q", v1.TaskRunReasonPending, condition.Reason)
+	}
+	if updatedCancelledTR.Status.StartTime != nil {
+		t.Errorf("Start time should be nil for pending TaskRun, not: %s", updatedCancelledTR.Status.StartTime)
+	}
+	if updatedCancelledTR.Status.PodName != "" {
+		t.Errorf("Pod should not be created for pending TaskRun, but PodName was %q", updatedCancelledTR.Status.PodName)
+	}
+
+	// Pending -> Running: clearing spec.status should start execution.
+	updatedTR.Spec.Status = ""
+	if _, err := clients.Pipeline.TektonV1().TaskRuns(updatedTR.Namespace).Update(testAssets.Ctx, updatedTR, metav1.UpdateOptions{}); err != nil {
+		t.Fatalf("Failed to update pending TaskRun to clear spec.status: %v", err)
+	}
+
+	if err := testAssets.Controller.Reconciler.Reconcile(testAssets.Ctx, getRunName(updatedTR)); err != nil {
+		if ok, _ := controller.IsRequeueKey(err); !ok {
+			t.Errorf("expected a requeue error reconciling pending->running TaskRun but got %v", err)
+		}
+	}
+
+	runningTR, err := clients.Pipeline.TektonV1().TaskRuns(updatedTR.Namespace).Get(testAssets.Ctx, updatedTR.Name, metav1.GetOptions{})
+	if err != nil {
+		t.Fatalf("Expected TaskRun %s to exist but instead got error when getting it: %v", updatedTR.Name, err)
+	}
+	condition = runningTR.Status.GetCondition(apis.ConditionSucceeded)
+	if condition == nil {
+		t.Fatalf("Expected TaskRun %s to have a %s condition", runningTR.Name, apis.ConditionSucceeded)
+	}
+	if condition.Status != corev1.ConditionUnknown || condition.Reason != v1.TaskRunReasonRunning.String() {
+		t.Errorf("Expected pending->running TaskRun to be Unknown/Running but got %v", condition)
+	}
+	if runningTR.Status.StartTime == nil {
+		t.Errorf("Expected StartTime to be set for pending->running TaskRun, but it was nil")
+	}
+	if runningTR.Status.PodName == "" {
+		t.Fatalf("Expected PodName to be set for pending->running TaskRun, but it was empty")
+	}
+
+	// Verify the Pod exists.
+	if _, err := clients.Kube.CoreV1().Pods(runningTR.Namespace).Get(testAssets.Ctx, runningTR.Status.PodName, metav1.GetOptions{}); err != nil {
+		t.Fatalf("Expected Pod %s to exist but got error: %v", runningTR.Status.PodName, err)
+	}
+
+	// Reconcile again; ensure we don't create a second Pod.
+	podName := runningTR.Status.PodName
+	if err := testAssets.Controller.Reconciler.Reconcile(testAssets.Ctx, getRunName(runningTR)); err != nil {
+		if ok, _ := controller.IsRequeueKey(err); !ok {
+			t.Errorf("expected a requeue error reconciling running TaskRun but got %v", err)
+		}
+	}
+	runningTR2, err := clients.Pipeline.TektonV1().TaskRuns(runningTR.Namespace).Get(testAssets.Ctx, runningTR.Name, metav1.GetOptions{})
+	if err != nil {
+		t.Fatalf("Expected TaskRun %s to exist but instead got error when getting it: %v", runningTR.Name, err)
+	}
+	if runningTR2.Status.PodName != podName {
+		t.Fatalf("Expected TaskRun PodName to stay %q after subsequent reconcile, but got %q", podName, runningTR2.Status.PodName)
+	}
+
+	podPrefix := runningTR.Name + "-pod"
+	podList, err := clients.Kube.CoreV1().Pods(runningTR.Namespace).List(testAssets.Ctx, metav1.ListOptions{})
+	if err != nil {
+		t.Fatalf("Expected to list Pods but got error: %v", err)
+	}
+	var podCount int
+	for _, p := range podList.Items {
+		if strings.HasPrefix(p.Name, podPrefix) {
+			podCount++
+		}
+	}
+	if podCount != 1 {
+		t.Fatalf("Expected exactly one Pod for %q, but found %d", podPrefix, podCount)
+	}
+
+	// Pending -> Cancelled: setting spec.status to TaskRunCancelled should cancel without creating a Pod.
+	updatedCancelledTR.Spec.Status = "TaskRunCancelled"
+	if _, err := clients.Pipeline.TektonV1().TaskRuns(updatedCancelledTR.Namespace).Update(testAssets.Ctx, updatedCancelledTR, metav1.UpdateOptions{}); err != nil {
+		t.Fatalf("Failed to update pending TaskRun to TaskRunCancelled: %v", err)
+	}
+
+	if err := testAssets.Controller.Reconciler.Reconcile(testAssets.Ctx, getRunName(updatedCancelledTR)); err != nil {
+		if ok, _ := controller.IsRequeueKey(err); !ok {
+			t.Errorf("expected a requeue error reconciling pending->cancelled TaskRun but got %v", err)
+		}
+	}
+
+	cancelledTR, err := clients.Pipeline.TektonV1().TaskRuns(updatedCancelledTR.Namespace).Get(testAssets.Ctx, updatedCancelledTR.Name, metav1.GetOptions{})
+	if err != nil {
+		t.Fatalf("Expected TaskRun %s to exist but instead got error when getting it: %v", updatedCancelledTR.Name, err)
+	}
+	condition = cancelledTR.Status.GetCondition(apis.ConditionSucceeded)
+	if condition == nil {
+		t.Fatalf("Expected TaskRun %s to have a %s condition", cancelledTR.Name, apis.ConditionSucceeded)
+	}
+	if condition.Status != corev1.ConditionFalse || condition.Reason != v1.TaskRunReasonCancelled.String() {
+		t.Errorf("Expected pending->cancelled TaskRun to be False/TaskRunCancelled but got %v", condition)
+	}
+	if cancelledTR.Status.PodName != "" {
+		t.Errorf("Expected no Pod for pending->cancelled TaskRun, but PodName was %q", cancelledTR.Status.PodName)
+	}
+
+	cancelledPodPrefix := cancelledTR.Name + "-pod"
+	podList, err = clients.Kube.CoreV1().Pods(cancelledTR.Namespace).List(testAssets.Ctx, metav1.ListOptions{})
+	if err != nil {
+		t.Fatalf("Expected to list Pods but got error: %v", err)
+	}
+	for _, p := range podList.Items {
+		if strings.HasPrefix(p.Name, cancelledPodPrefix) {
+			t.Fatalf("Expected no Pod for cancelled TaskRun %q, but found Pod %q", cancelledTR.Name, p.Name)
+		}
+	}
+}
+
 func TestReconcileInvalidTaskRuns(t *testing.T) {
 	noTaskRun := parse.MustParseV1TaskRun(t, `
 metadata:
@@ -1675,6 +1836,7 @@ status:
         runningInEnvWithInjectedSidecars: true
         enforceNonfalsifiability: "none"
         enableAPIFields: "alpha"
+        sendCloudEventsForRuns: true
         awaitSidecarReadiness: true
         verificationNoMatchPolicy: "ignore"
         enableProvenanceInStatus: true
@@ -1686,6 +1848,7 @@ status:
     featureFlags:
       runningInEnvWithInjectedSidecars: true
       enableAPIFields: "alpha"
+      sendCloudEventsForRuns: true
       enforceNonfalsifiability: "none"
       awaitSidecarReadiness: true
       verificationNoMatchPolicy: "ignore"
@@ -1740,6 +1903,7 @@ status:
     featureFlags:
       runningInEnvWithInjectedSidecars: true
       enableAPIFields: "beta"
+      sendCloudEventsForRuns: true
       enforceNonfalsifiability: "none"
       awaitSidecarReadiness: true
       verificationNoMatchPolicy: "ignore"
@@ -4111,7 +4275,6 @@ spec:
 		Clock:             testClock,
 		taskRunLister:     testAssets.Informers.TaskRun.Lister(),
 		limitrangeLister:  testAssets.Informers.LimitRange.Lister(),
-		cloudEventClient:  testAssets.Clients.CloudEvents,
 		metrics:           nil, // Not used
 		entrypointCache:   nil, // Not used
 		pvcHandler:        volumeclaim.NewPVCHandler(testAssets.Clients.Kube, testAssets.Logger),
@@ -4219,7 +4382,6 @@ spec:
 		Clock:             testClock,
 		taskRunLister:     testAssets.Informers.TaskRun.Lister(),
 		limitrangeLister:  testAssets.Informers.LimitRange.Lister(),
-		cloudEventClient:  testAssets.Clients.CloudEvents,
 		metrics:           nil, // Not used
 		entrypointCache:   nil, // Not used
 		pvcHandler:        volumeclaim.NewPVCHandler(testAssets.Clients.Kube, testAssets.Logger),
@@ -4272,7 +4434,6 @@ status:
 		Clock:             testClock,
 		taskRunLister:     testAssets.Informers.TaskRun.Lister(),
 		limitrangeLister:  testAssets.Informers.LimitRange.Lister(),
-		cloudEventClient:  testAssets.Clients.CloudEvents,
 		metrics:           nil, // Not used
 		entrypointCache:   nil, // Not used
 		pvcHandler:        volumeclaim.NewPVCHandler(testAssets.Clients.Kube, testAssets.Logger),
@@ -4455,7 +4616,6 @@ spec:
 				Clock:             testClock,
 				taskRunLister:     testAssets.Informers.TaskRun.Lister(),
 				limitrangeLister:  testAssets.Informers.LimitRange.Lister(),
-				cloudEventClient:  testAssets.Clients.CloudEvents,
 				metrics:           nil,
 				entrypointCache:   nil,
 				pvcHandler:        volumeclaim.NewPVCHandler(testAssets.Clients.Kube, testAssets.Logger),
@@ -5527,7 +5687,6 @@ status:
 				Clock:             testClock,
 				taskRunLister:     testAssets.Informers.TaskRun.Lister(),
 				limitrangeLister:  testAssets.Informers.LimitRange.Lister(),
-				cloudEventClient:  testAssets.Clients.CloudEvents,
 				metrics:           nil, // Not used
 				entrypointCache:   nil, // Not used
 				pvcHandler:        volumeclaim.NewPVCHandler(testAssets.Clients.Kube, testAssets.Logger),
