@@ -2301,6 +2301,10 @@ pipeline will stop once all running tasks complete their work</p>
 </tr><tr><td><p>&#34;PipelineRunTimeout&#34;</p></td>
 <td><p>PipelineRunReasonTimedOut is the reason set when the PipelineRun has timed out</p>
 </td>
+</tr><tr><td><p>&#34;PipelineRunTimeoutRunningFinally&#34;</p></td>
+<td><p>PipelineRunReasonTimedOutRunningFinally indicates that the tasks timeout has been exceeded
+and no new DAG tasks will be scheduled, but final tasks are now running</p>
+</td>
 </tr></tbody>
 </table>
 <h3 id="tekton.dev/v1.PipelineRunResult">PipelineRunResult
@@ -3110,8 +3114,10 @@ PipelineRef
 </td>
 <td>
 <em>(Optional)</em>
-<p>PipelineRef is a reference to a pipeline definition
-Note: PipelineRef is in preview mode and not yet supported</p>
+<p>PipelineRef is a reference to a pipeline definition.
+This is an alpha field. You must set the &ldquo;enable-api-fields&rdquo; feature flag
+to &ldquo;alpha&rdquo; for this field to be supported. When enabled, the referenced
+Pipeline is executed as a child PipelineRun owned by the parent PipelineRun.</p>
 </td>
 </tr>
 <tr>
@@ -3125,8 +3131,10 @@ PipelineSpec
 </td>
 <td>
 <em>(Optional)</em>
-<p>PipelineSpec is a specification of a pipeline
-Note: PipelineSpec is in preview mode and not yet supported
+<p>PipelineSpec is a specification of a pipeline.
+This is an alpha field. You must set the &ldquo;enable-api-fields&rdquo; feature flag
+to &ldquo;alpha&rdquo; for this field to be supported. When enabled, the embedded
+Pipeline is executed as a child PipelineRun owned by the parent PipelineRun.
 Specifying PipelineSpec can be disabled by setting
 <code>disable-inline-spec</code> feature flag.
 See Pipeline.spec (API version: tekton.dev/v1)</p>
@@ -12477,8 +12485,10 @@ PipelineRef
 </td>
 <td>
 <em>(Optional)</em>
-<p>PipelineRef is a reference to a pipeline definition
-Note: PipelineRef is in preview mode and not yet supported</p>
+<p>PipelineRef is a reference to a pipeline definition.
+This is an alpha field. You must set the &ldquo;enable-api-fields&rdquo; feature flag
+to &ldquo;alpha&rdquo; for this field to be supported. When enabled, the referenced
+Pipeline is executed as a child PipelineRun owned by the parent PipelineRun.</p>
 </td>
 </tr>
 <tr>
@@ -12492,8 +12502,10 @@ PipelineSpec
 </td>
 <td>
 <em>(Optional)</em>
-<p>PipelineSpec is a specification of a pipeline
-Note: PipelineSpec is in preview mode and not yet supported
+<p>PipelineSpec is a specification of a pipeline.
+This is an alpha field. You must set the &ldquo;enable-api-fields&rdquo; feature flag
+to &ldquo;alpha&rdquo; for this field to be supported. When enabled, the embedded
+Pipeline is executed as a child PipelineRun owned by the parent PipelineRun.
 Specifying PipelineSpec can be disabled by setting
 <code>disable-inline-spec</code> feature flag.
 See Pipeline.spec (API version: tekton.dev/v1beta1)</p>
@@ -14772,6 +14784,7 @@ string
 </em>
 </td>
 <td>
+<em>(Optional)</em>
 <p>Default name for each Step specified as a DNS_LABEL.
 Each Step in a Task must have a unique name.
 Cannot be updated.</p>
