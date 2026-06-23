@@ -20,6 +20,8 @@ import (
 	"context"
 	"encoding/base64"
 	"errors"
+	"fmt"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -162,44 +164,7 @@ func TestReconcile(t *testing.T) {
 					},
 				},
 			},
-			expectedErr: errors.New("error getting \"Fake\" \"foo/rr\": resolved resource validation error: resolved data is not of a supported type, must be of Group: tekton.dev, Kinds: [Pipeline Task StepAction]"),
-		}, {
-			name: "known value invalid type",
-			inputRequest: &v1beta1.ResolutionRequest{
-				TypeMeta: metav1.TypeMeta{
-					APIVersion: "resolution.tekton.dev/v1beta1",
-					Kind:       "ResolutionRequest",
-				},
-				ObjectMeta: metav1.ObjectMeta{
-					Name:              "rr",
-					Namespace:         "foo",
-					CreationTimestamp: metav1.Time{Time: time.Now()},
-					Labels: map[string]string{
-						resolutioncommon.LabelKeyResolverType: resolutionframework.LabelValueFakeResolverType,
-					},
-				},
-				Spec: v1beta1.ResolutionRequestSpec{
-					Params: []pipelinev1.Param{{
-						Name:  resolutionframework.FakeParamName,
-						Value: *pipelinev1.NewStructuredValues("bar"),
-					}},
-				},
-				Status: v1beta1.ResolutionRequestStatus{},
-			},
-			paramMap: map[string]*resolutionframework.FakeResolvedResource{
-				"bar": {
-					Content:       "{\"apiVersion\": \"tekton.dev/v1\", \"kind\": \"PipelineRun\"}",
-					AnnotationMap: map[string]string{"foo": "bar"},
-					ContentSource: &pipelinev1.RefSource{
-						URI: "https://abc.com",
-						Digest: map[string]string{
-							"sha1": "xyz",
-						},
-						EntryPoint: "foo/bar",
-					},
-				},
-			},
-			expectedErr: errors.New("error getting \"Fake\" \"foo/rr\": resolved resource validation error: resolved data is not of a supported type, must be of Group: tekton.dev, Kinds: [Pipeline Task StepAction]"),
+			expectedErr: errors.New("error getting \"Fake\" \"foo/rr\": resolved resource validation error: resolved data is not of a supported type, must be of Group: tekton.dev, Kinds: [PipelineRun Pipeline TaskRun Task Run CustomRun StepAction]"),
 		}, {
 			name: "known value unknown type",
 			inputRequest: &v1beta1.ResolutionRequest{
@@ -236,7 +201,7 @@ func TestReconcile(t *testing.T) {
 					},
 				},
 			},
-			expectedErr: errors.New("error getting \"Fake\" \"foo/rr\": resolved resource validation error: resolved data is not of a supported type, must be of Group: tekton.dev, Kinds: [Pipeline Task StepAction]"),
+			expectedErr: errors.New("error getting \"Fake\" \"foo/rr\": resolved resource validation error: resolved data is not of a supported type, must be of Group: tekton.dev, Kinds: [PipelineRun Pipeline TaskRun Task Run CustomRun StepAction]"),
 		}, {
 			name: "unknown value",
 			inputRequest: &v1beta1.ResolutionRequest{
@@ -457,6 +422,59 @@ func TestReconcile(t *testing.T) {
 			reconcilerTimeout: 1 * time.Second,
 			expectedErr:       errors.New("context deadline exceeded"),
 			transient:         true,
+		}, {
+			name: "resolved but not yet done should skip re-resolution",
+			inputRequest: &v1beta1.ResolutionRequest{
+				TypeMeta: metav1.TypeMeta{
+					APIVersion: "resolution.tekton.dev/v1beta1",
+					Kind:       "ResolutionRequest",
+				},
+				ObjectMeta: metav1.ObjectMeta{
+					Name:              "rr",
+					Namespace:         "foo",
+					CreationTimestamp: metav1.Time{Time: time.Now()},
+					Labels: map[string]string{
+						resolutioncommon.LabelKeyResolverType: resolutionframework.LabelValueFakeResolverType,
+					},
+				},
+				Spec: v1beta1.ResolutionRequestSpec{
+					Params: []pipelinev1.Param{{
+						Name:  resolutionframework.FakeParamName,
+						Value: *pipelinev1.NewStructuredValues("bar"),
+					}},
+				},
+				Status: v1beta1.ResolutionRequestStatus{
+					Status: duckv1.Status{
+						Conditions: duckv1.Conditions{{
+							Type:   apis.ConditionSucceeded,
+							Status: corev1.ConditionUnknown,
+						}},
+					},
+					ResolutionRequestStatusFields: v1beta1.ResolutionRequestStatusFields{
+						Data: base64.StdEncoding.Strict().EncodeToString(
+							[]byte(`{"apiVersion": "tekton.dev/v1", "kind": "Pipeline"}`),
+						),
+					},
+				},
+			},
+			paramMap: map[string]*resolutionframework.FakeResolvedResource{
+				"bar": {
+					ErrorWith: "resolver should not have been called",
+				},
+			},
+			expectedStatus: &v1beta1.ResolutionRequestStatus{
+				Status: duckv1.Status{
+					Conditions: duckv1.Conditions{{
+						Type:   apis.ConditionSucceeded,
+						Status: corev1.ConditionUnknown,
+					}},
+				},
+				ResolutionRequestStatusFields: v1beta1.ResolutionRequestStatusFields{
+					Data: base64.StdEncoding.Strict().EncodeToString(
+						[]byte(`{"apiVersion": "tekton.dev/v1", "kind": "Pipeline"}`),
+					),
+				},
+			},
 		},
 	}
 
@@ -510,6 +528,77 @@ func TestReconcile(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestResolveGoroutineLeak(t *testing.T) {
+	const numRequests = 5
+
+	paramMap := map[string]*resolutionframework.FakeResolvedResource{
+		"bar": {WaitFor: 200 * time.Millisecond},
+	}
+
+	requests := make([]*v1beta1.ResolutionRequest, numRequests)
+	for i := range numRequests {
+		requests[i] = &v1beta1.ResolutionRequest{
+			TypeMeta: metav1.TypeMeta{
+				APIVersion: "resolution.tekton.dev/v1beta1",
+				Kind:       "ResolutionRequest",
+			},
+			ObjectMeta: metav1.ObjectMeta{
+				Name:              fmt.Sprintf("rr-%d", i),
+				Namespace:         "foo",
+				CreationTimestamp: metav1.Time{Time: time.Now()},
+				Labels: map[string]string{
+					resolutioncommon.LabelKeyResolverType: resolutionframework.LabelValueFakeResolverType,
+				},
+			},
+			Spec: v1beta1.ResolutionRequestSpec{
+				Params: []pipelinev1.Param{{
+					Name:  resolutionframework.FakeParamName,
+					Value: *pipelinev1.NewStructuredValues("bar"),
+				}},
+			},
+		}
+	}
+
+	d := test.Data{
+		ResolutionRequests: requests,
+		ConfigMaps: []*corev1.ConfigMap{{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "resolver-cache-config",
+				Namespace: system.Namespace(),
+			},
+			Data: map[string]string{},
+		}},
+	}
+
+	fakeResolver := &framework.FakeResolver{
+		ForParam: paramMap,
+		Timeout:  50 * time.Millisecond,
+	}
+
+	ctx, _ := ttesting.SetupFakeContext(t)
+	testAssets, cancel := getResolverFrameworkController(ctx, t, d, fakeResolver, setClockOnReconciler)
+	defer cancel()
+
+	runtime.GC()
+	time.Sleep(50 * time.Millisecond)
+	before := runtime.NumGoroutine()
+
+	for _, rr := range requests {
+		_ = testAssets.Controller.Reconciler.Reconcile(testAssets.Ctx, getRequestName(rr))
+	}
+
+	time.Sleep(500 * time.Millisecond)
+	runtime.GC()
+	time.Sleep(50 * time.Millisecond)
+	after := runtime.NumGoroutine()
+
+	leaked := after - before
+	if leaked >= numRequests {
+		t.Errorf("goroutine leak detected: %d goroutines leaked after %d timed-out resolutions (before=%d, after=%d)",
+			leaked, numRequests, before, after)
 	}
 }
 
