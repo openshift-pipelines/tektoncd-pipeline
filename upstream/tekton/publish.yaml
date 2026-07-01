@@ -73,7 +73,7 @@ spec:
   steps:
 
   - name: container-registry-auth
-    image: cgr.dev/chainguard/crane:latest-dev@sha256:c265d96949e1f05b951d37df5c4a72955d35b39b56760ab1523f05645d064fa5
+    image: cgr.dev/chainguard/crane:latest-dev@sha256:961872655a9aabb2d9569bd83b410a01a1dfe8d341b68d590332cbef79a517c3
     script: |
       #!/bin/sh
       set -ex
@@ -92,7 +92,7 @@ spec:
       cp ${DOCKER_CONFIG} /workspace/docker-config.json
 
   - name: create-ko-yaml
-    image: cgr.dev/chainguard/go:latest-dev@sha256:5b8898192479735f70723e7a7e4c1b93caba2c1243393ce3a214a74de8ffc44f
+    image: cgr.dev/chainguard/go:latest-dev@sha256:420e3d43d23ce3439e8e1d79d4d34005e8440585f492630c7c78b2f914c49664
     script: |
       #!/bin/sh
       set -ex
@@ -117,9 +117,9 @@ spec:
       fi
 
       # Combine Distroless with a Windows base image, used for the entrypoint image.
-      # Distroless is pinned to the last version based on Alpine 3.18. Newer versions are based on Alpine 3.19_alpha20230901.
+      # Static base image from tektoncd/plumbing, rebuilt daily.
       COMBINED_BASE_IMAGE=$(go run ./vendor/github.com/tektoncd/plumbing/cmd/combine/main.go \
-        cgr.dev/chainguard/static@sha256:67a1b00e0134e2b3a614c7198a26f7deed9d11b7acad4d52c79c0cfd47a2eae7 \
+        ghcr.io/tektoncd/plumbing/static-base@sha256:e150c89001e336b6a0200a6bac766a7b455e5573bf91c6c37f3ef8cf2fdccf0a \
         mcr.microsoft.com/windows/nanoserver:ltsc2019 \
         mcr.microsoft.com/windows/nanoserver:ltsc2022 \
         ${COMBINED_BASE_IMAGE_BASE}/combined-base-image:latest)
@@ -130,7 +130,7 @@ spec:
       cat /workspace/.ko.yaml
 
   - name: run-ko
-    image: ghcr.io/tektoncd/plumbing/ko@sha256:05f1fd6e4f3a20bf47132671323fd8a82b210ee95314cd6585c19e3dd4a005b3
+    image: ghcr.io/tektoncd/plumbing/ko@sha256:a9ac582151b898d4bf3c39041e5b4ba63d3a7e1df2c1854dcdbf844ddd168cd9
     env:
     - name: KO_DOCKER_REPO
       value: $(params.imageRegistry)/$(params.imageRegistryPath)
@@ -179,6 +179,9 @@ spec:
 
       ko resolve \
         --image-label=org.opencontainers.image.source=https://$(params.package) \
+        --image-label=org.opencontainers.image.url=https://$(params.package) \
+        --image-label=org.opencontainers.image.title=pipeline \
+        --image-label=org.opencontainers.image.description=Tekton\ Pipelines \
         --platform=$(params.platforms) \
         -t $(params.versionTag) \
         -R ${KO_EXTRA_ARGS} \
@@ -188,6 +191,9 @@ spec:
       # This is currently the case for `cri-o` (and most likely others)
       ko resolve \
         --image-label=org.opencontainers.image.source=https://$(params.package) \
+        --image-label=org.opencontainers.image.url=https://$(params.package) \
+        --image-label=org.opencontainers.image.title=pipeline \
+        --image-label=org.opencontainers.image.description=Tekton\ Pipelines \
         --platform=$(params.platforms) \
         -R ${KO_EXTRA_ARGS} \
         -f ${PROJECT_ROOT}/config/ > $OUTPUT_RELEASE_DIR/release.notags.yaml
@@ -197,7 +203,7 @@ spec:
       sed -i -e 's/\(pipeline.tekton.dev\/release\): "devel"/\1: "$(params.versionTag)"/g' -e 's/\(app.kubernetes.io\/version\): "devel"/\1: "$(params.versionTag)"/g' -e 's/\(version\): "devel"/\1: "$(params.versionTag)"/g' ${OUTPUT_RELEASE_DIR}/release.notags.yaml
 
   - name: koparse
-    image: ghcr.io/tektoncd/plumbing/koparse@sha256:f383e5581b6c912ba7bb5a057d718637cec735ed3deb1fa216596ca86403fcd8
+    image: ghcr.io/tektoncd/plumbing/koparse@sha256:9860a1e52b784c5e6a3931314a6f07c8febf87917c289fc556850de6752310f1
     script: |
       set -ex
 
@@ -231,7 +237,7 @@ spec:
         ${PRESERVE_IMPORT_PATH} > /workspace/built_images
 
   - name: tag-images
-    image: cgr.dev/chainguard/crane:latest-dev@sha256:c265d96949e1f05b951d37df5c4a72955d35b39b56760ab1523f05645d064fa5
+    image: cgr.dev/chainguard/crane:latest-dev@sha256:961872655a9aabb2d9569bd83b410a01a1dfe8d341b68d590332cbef79a517c3
     script: |
       #!/bin/sh
       set -ex

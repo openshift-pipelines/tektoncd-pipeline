@@ -122,7 +122,7 @@ jobs:
           })
           return { id: check.data.id }
 
-    - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+    - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7.0.0
       with:
         ref: ${{ needs.run-if-requested.outputs.sha }}
         persist-credentials: false
@@ -166,7 +166,7 @@ jobs:
         name: extra-tests-${{ matrix.k8s-version }}-${{ matrix.feature-flags }}-${{ matrix.os }}
         path: ${{ env.ARTIFACTS }}
 
-    - uses: chainguard-dev/actions/kind-diag@c69a264ec2a5934c3186c618f368fc1c86f16cff # v1.6.19
+    - uses: chainguard-dev/actions/kind-diag@9978bf17926f53444b5eff45479954d94ec12e32 # v1.6.24
       if: ${{ failure() }}
       with:
         artifact-name: extra-tests-${{ matrix.k8s-version }}-${{ matrix.feature-flags }}-${{ matrix.os }}-logs
