@@ -82,6 +82,8 @@ jobs:
         restore-keys: |
           ${{ runner.os }}-${{ runner.arch }}-ko-
     - uses: ko-build/setup-ko@d006021bd0c28d1ce33a07e7943d48b079944c8d # v0.9
+      with:
+        version: v0.18.1
 
     - name: Install Dependencies
       working-directory: ./
@@ -116,7 +118,7 @@ jobs:
         name: ${{ matrix.k8s-version }}-${{ matrix.feature-flags }}-${{ matrix.os }}
         path: ${{ env.ARTIFACTS }}
 
-    - uses: chainguard-dev/actions/kind-diag@9978bf17926f53444b5eff45479954d94ec12e32 # v1.6.24
+    - uses: chainguard-dev/actions/kind-diag@e1c4977ad9cb32b12c5b222ec0134a22bec60bd5 # v1.6.25
       if: ${{ failure() }}
       with:
         artifact-name: ${{ matrix.k8s-version }}-${{ matrix.feature-flags }}-${{ matrix.os }}-logs
