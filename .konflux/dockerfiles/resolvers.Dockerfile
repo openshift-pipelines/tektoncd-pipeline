@@ -44,7 +44,7 @@ LABEL \
     maintainer="pipelines-extcomm@redhat.com" \
     name="openshift-pipelines/pipelines-resolvers-rhel9" \
     summary="Red Hat OpenShift Pipelines tektoncd-pipeline resolvers" \
-    version="v1.21.3"
+    version="v1.21.4"
 
 RUN microdnf update && microdnf install -y git && microdnf clean all
 
