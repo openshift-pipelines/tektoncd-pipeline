@@ -36,7 +36,7 @@ RUN chmod 0755 /sbin/tini && chown root:root /sbin/tini
 
 LABEL \
     com.redhat.component="openshift-pipelines-resolvers-rhel9-container" \
-    cpe="cpe:/a:redhat:openshift_pipelines:next::el9" \
+    cpe="cpe:/a:redhat:openshift_pipelines:next::" \
     description="Red Hat OpenShift Pipelines tektoncd-pipeline resolvers" \
     io.k8s.description="Red Hat OpenShift Pipelines tektoncd-pipeline resolvers" \
     io.k8s.display-name="Red Hat OpenShift Pipelines tektoncd-pipeline resolvers" \
