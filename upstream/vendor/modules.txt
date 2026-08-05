@@ -414,9 +414,10 @@ github.com/goccy/kpoward
 # github.com/golang-jwt/jwt/v5 v5.3.1
 ## explicit; go 1.21
 github.com/golang-jwt/jwt/v5
-# github.com/google/cel-go v0.29.2
+# github.com/google/cel-go v0.30.0
 ## explicit; go 1.23.0
 github.com/google/cel-go/cel
+github.com/google/cel-go/cel/async
 github.com/google/cel-go/checker
 github.com/google/cel-go/checker/decls
 github.com/google/cel-go/common
@@ -594,7 +595,7 @@ github.com/inconshreveable/mousetrap
 # github.com/jellydator/ttlcache/v3 v3.4.0
 ## explicit; go 1.23.0
 github.com/jellydator/ttlcache/v3
-# github.com/jenkins-x/go-scm v1.15.31
+# github.com/jenkins-x/go-scm v1.15.32
 ## explicit; go 1.26.3
 github.com/jenkins-x/go-scm/pkg/hmac
 github.com/jenkins-x/go-scm/scm
