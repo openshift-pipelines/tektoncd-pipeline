@@ -1,4 +1,4 @@
-ARG GO_BUILDER=registry.access.redhat.com/ubi9/go-toolset:1.25
+ARG GO_BUILDER=registry.access.redhat.com/ubi9/go-toolset:latest
 ARG RUNTIME=registry.access.redhat.com/ubi9/ubi-minimal:latest
 
 FROM $RUNTIME as dependency-builder
@@ -44,7 +44,7 @@ LABEL \
     maintainer="pipelines-extcomm@redhat.com" \
     name="openshift-pipelines/pipelines-resolvers-rhel9" \
     summary="Red Hat OpenShift Pipelines tektoncd-pipeline resolvers" \
-    version="v1.24.0"
+    version="v1.24.0-RC-1"
 
 RUN microdnf update && microdnf install -y git && microdnf clean all
 
