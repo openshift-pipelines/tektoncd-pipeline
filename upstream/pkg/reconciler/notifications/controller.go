@@ -19,7 +19,7 @@ package notifications
 import (
 	"context"
 
-	lru "github.com/hashicorp/golang-lru"
+	bc "github.com/allegro/bigcache/v3"
 	"github.com/tektoncd/pipeline/pkg/apis/config"
 	cacheclient "github.com/tektoncd/pipeline/pkg/reconciler/events/cache"
 	cloudeventclient "github.com/tektoncd/pipeline/pkg/reconciler/events/cloudevent"
@@ -28,20 +28,30 @@ import (
 	"knative.dev/pkg/logging"
 )
 
-// ConfigStoreFromContext initialise the config store from the context
-func ConfigStoreFromContext(ctx context.Context, cmw configmap.Watcher) *config.Store {
+// ConfigStoreFromContext initialises the config store from the context.
+// Optional onAfterStore hooks are forwarded to config.NewStore so callers can
+// react to config changes (e.g. tracing provider updates).
+func ConfigStoreFromContext(ctx context.Context, cmw configmap.Watcher, onAfterStore ...func(name string, value interface{})) *config.Store {
 	logger := logging.FromContext(ctx)
-	configStore := config.NewStore(logger.Named("config-store"))
+	configStore := config.NewStore(logger.Named("config-store"), onAfterStore...)
 	configStore.WatchConfigs(cmw)
 	return configStore
 }
 
 // EventClientsFromContext extracts the cloud event clients from the context.
-func EventClientsFromContext(ctx context.Context) (cloudeventclient.CEClient, *lru.Cache) {
+func EventClientsFromContext(ctx context.Context) (cloudeventclient.CEClient, *bc.BigCache) {
 	return cloudeventclient.Get(ctx), cacheclient.Get(ctx)
 }
 
 // ControllerOptions returns a function that returns options for a controller implementation
+//
+// Options:
+//   - SkipStatusUpdates: true - ensures that this is a readonly controller
+//
+// Note: no Concurrency limit is set. The knative work queue guarantees per-key
+// serialization: the same object cannot be reconciled concurrently by two workers
+// (client-go's processing set ensures this). The cache is therefore safe to use
+// with the default concurrency.
 func ControllerOptions(name string, store *config.Store) func(impl *controller.Impl) controller.Options {
 	return func(impl *controller.Impl) controller.Options {
 		return controller.Options{

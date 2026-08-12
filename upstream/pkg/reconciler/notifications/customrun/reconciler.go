@@ -19,25 +19,31 @@ package customrun
 import (
 	"context"
 
-	lru "github.com/hashicorp/golang-lru"
+	bc "github.com/allegro/bigcache/v3"
+	"github.com/tektoncd/pipeline/pkg/apis/config"
 	"github.com/tektoncd/pipeline/pkg/apis/pipeline/v1beta1"
 	customrunreconciler "github.com/tektoncd/pipeline/pkg/client/injection/reconciler/pipeline/v1beta1/customrun"
 	"github.com/tektoncd/pipeline/pkg/reconciler/events/cloudevent"
 	"github.com/tektoncd/pipeline/pkg/reconciler/notifications"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/trace"
 	pkgreconciler "knative.dev/pkg/reconciler"
 )
 
 // Reconciler implements controller.Reconciler for Configuration resources.
 type Reconciler struct {
 	cloudEventClient cloudevent.CEClient
-	cacheClient      *lru.Cache
+	cacheClient      *bc.BigCache
+	tracerProvider   trace.TracerProvider
 }
 
 // NewReconciler creates a new Reconciler with the given clients.
-func NewReconciler(ceClient cloudevent.CEClient, cacheClient *lru.Cache) *Reconciler {
+func NewReconciler(ceClient cloudevent.CEClient, cacheClient *bc.BigCache) *Reconciler {
 	return &Reconciler{
 		cloudEventClient: ceClient,
 		cacheClient:      cacheClient,
+		tracerProvider:   otel.GetTracerProvider(),
 	}
 }
 
@@ -45,16 +51,8 @@ func (c *Reconciler) GetCloudEventsClient() cloudevent.CEClient {
 	return c.cloudEventClient
 }
 
-func (c *Reconciler) GetCacheClient() *lru.Cache {
+func (c *Reconciler) GetCacheClient() *bc.BigCache {
 	return c.cacheClient
-}
-
-func (c *Reconciler) SetCloudEventsClient(client cloudevent.CEClient) {
-	c.cloudEventClient = client
-}
-
-func (c *Reconciler) SetCacheClient(client *lru.Cache) {
-	c.cacheClient = client
 }
 
 // Check that our Reconciler implements customrunreconciler.Interface
@@ -62,10 +60,18 @@ var (
 	_ customrunreconciler.Interface = (*Reconciler)(nil)
 )
 
-// ReconcileKind oberves the resource conditions and triggers notifications accordingly
+// ReconcileKind observes the resource conditions and triggers notifications accordingly
 func (c *Reconciler) ReconcileKind(ctx context.Context, customRun *v1beta1.CustomRun) pkgreconciler.Event {
-	// Custom task controllers may be sending events for "CustomRuns" associated
-	// to the custom tasks they control. To avoid sending duplicate events,
-	// CloudEvents for "CustomRuns" are only sent when enabled
+	// Custom task controllers may send their own events for CustomRuns; this flag
+	// prevents duplicate events when such a controller is in use.
+	// send-cloudevents-for-runs is deprecated and will be removed in a future release.
+	configs := config.FromContextOrDefaults(ctx)
+	if !configs.FeatureFlags.SendCloudEventsForRuns {
+		return nil
+	}
+	ctx = initTracing(ctx, c.tracerProvider, customRun)
+	ctx, span := c.tracerProvider.Tracer(TracerName).Start(ctx, "ReconcileKind")
+	defer span.End()
+	span.SetAttributes(attribute.String("customrun", customRun.Name), attribute.String("namespace", customRun.Namespace))
 	return notifications.ReconcileRunObject(ctx, c, customRun)
 }

@@ -76,9 +76,11 @@ data:
   # Setting this flag will determine which gated features are enabled.
   # Acceptable values are "stable", "beta", or "alpha".
   enable-api-fields: "beta"
-  # Setting this flag to "true" enables CloudEvents for CustomRuns and Runs, as long as a
-  # CloudEvents sink is configured in the config-defaults config map
-  send-cloudevents-for-runs: "false"
+  # DEPRECATED: send-cloudevents-for-runs is deprecated and will be removed in a future
+  # release. CloudEvents are now enabled by default when a sink is configured in the
+  # config-events ConfigMap. This flag only affects CustomRuns; it has no effect on
+  # TaskRuns or PipelineRuns.
+  send-cloudevents-for-runs: "true"
   # This flag affects the behavior of taskruns and pipelineruns in cases where no VerificationPolicies match them.
   # If it is set to "fail", TaskRuns and PipelineRuns will fail verification if no matching policies are found.
   # If it is set to "warn", TaskRuns and PipelineRuns will run to completion if no matching policies are found, and an error will be logged.
@@ -136,3 +138,20 @@ data:
   # If set to "false", exponential backoff will be disabled.
   # For advanced tuning of backoff parameters, update the 'wait-exponential-backoff' ConfigMap.
   enable-wait-exponential-backoff: "false"
+  # Setting this flag to "true" will compress termination messages with flate
+  # to fit more results in the 4KB Kubernetes termination message limit.
+  # Only applies when results-from is set to "termination-message" (the default);
+  # ignored when results-from is "sidecar-logs".
+  # Alpha feature — this is a short-term measure. External result storage
+  # (TEP-0164) will address the underlying 4KB limitation.
+  enable-termination-message-compression: "false"
+  # Controls whether informer cache transforms are enabled. When enabled (default),
+  # the controller strips large, unnecessary metadata fields (managedFields and the
+  # kubectl last-applied-configuration annotation) from PipelineRuns, TaskRuns,
+  # CustomRuns, and Pods stored in the informer cache to reduce memory usage.
+  #
+  # Set to "false" to disable if you encounter issues with missing data in cached objects.
+  # Changes require a controller restart to take effect.
+  #
+  # See https://github.com/tektoncd/pipeline/issues/7691 for more info.
+  enable-informer-cache-transforms: "true"
