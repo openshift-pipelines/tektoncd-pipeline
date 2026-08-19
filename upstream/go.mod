@@ -39,7 +39,7 @@ require (
 	github.com/elastic/crd-ref-docs v0.3.0
 	github.com/go-jose/go-jose/v3 v3.0.5
 	github.com/goccy/kpoward v0.1.0
-	github.com/google/cel-go v0.30.0
+	github.com/google/cel-go v0.31.0
 	github.com/google/go-containerregistry/pkg/authn/k8schain v0.0.0-20260414223304-7a662782a11f
 	github.com/sigstore/sigstore/pkg/signature/kms/aws v1.10.9
 	github.com/sigstore/sigstore/pkg/signature/kms/azure v1.10.9
@@ -216,7 +216,7 @@ require (
 	google.golang.org/api v0.287.1 // indirect
 	google.golang.org/genproto v0.0.0-20260319201613-d00831a3d3e7 // indirect
 	google.golang.org/grpc v1.83.0
-	google.golang.org/protobuf v1.36.12-0.20260120151049-f2248ac996af
+	google.golang.org/protobuf v1.36.12
 	gopkg.in/inf.v0 v0.9.1 // indirect
 	gopkg.in/yaml.v3 v3.0.1
 	k8s.io/apiextensions-apiserver v0.35.7
