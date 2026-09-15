@@ -24,7 +24,7 @@ defaults:
 jobs:
   go-coverage:
     name: Go coverage
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-latest-8-cores
     permissions:
       contents: read
       actions: read
@@ -32,7 +32,7 @@ jobs:
 
     steps:
       - name: Harden runner
-        uses: step-security/harden-runner@bf7454d06d71f1098171f2acdf0cd4708d7b5920 # v2.20.0
+        uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c # v2.21.0
         with:
           egress-policy: audit
 
@@ -50,7 +50,11 @@ jobs:
       - name: Generate coverage
         working-directory: ${{ github.workspace }}/src/github.com/tektoncd/pipeline
         run: |
-          go test -coverprofile=coverage.out -covermode=atomic ./... || true
+          PACKAGES=$(go list ./... | grep -vE '/cmd(/|$)|/vendor(/|$)|/hack(/|$)|/test(/|$)|/fake(/|$)|/pkg/client(/|$)|/examples(/|$)|/tekton(/|$)')
+          COVERPKG=$(echo $PACKAGES | tr ' ' ',')
+          go test -coverprofile=coverage_raw.out -covermode=atomic -coverpkg="$COVERPKG" $PACKAGES
+          grep -vE 'zz_generated\.deepcopy\.go|openapi_generated\.go' coverage_raw.out > coverage.out
+          rm -f coverage_raw.out
           echo "Generated coverage profile"
 
       - name: Archive coverage results
@@ -69,7 +73,6 @@ jobs:
 
   codecov-upload:
     name: Upload coverage to Codecov
-    if: github.event_name != 'pull_request'
     needs: go-coverage
     runs-on: ubuntu-24.04
     permissions:
@@ -79,7 +82,7 @@ jobs:
 
     steps:
       - name: Harden runner
-        uses: step-security/harden-runner@9af89fc71515a100421586dfdb3dc9c984fbf411 # v2.19.4
+        uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c # v2.21.0
         with:
           egress-policy: audit
 
@@ -89,7 +92,7 @@ jobs:
           persist-credentials: false
 
       - name: Download coverage artifact
-        uses: actions/download-artifact@95815c38cf2ff2164869cbab79da8d1f422bc89e # v4.2.1
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: code-coverage
 
@@ -101,3 +104,4 @@ jobs:
           flags: unit-tests
           use_oidc: true
           fail_ci_if_error: false
+          disable_search: true
