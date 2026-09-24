@@ -46,7 +46,7 @@ LABEL \
     summary="Red Hat OpenShift Pipelines tektoncd-pipeline resolvers" \
     version="v1.24.1"
 
-RUN microdnf update && microdnf install -y git && microdnf clean all
+RUN microdnf update -y && microdnf install -y git && microdnf clean all
 
 RUN groupadd -r -g 65532 nonroot && \
     useradd --no-log-init -r -u 65532 -g nonroot nonroot
