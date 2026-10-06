@@ -12,14 +12,11 @@ import (
 
 // Informs Amazon ECR that the image layer upload has completed for a specified
 // registry, repository name, and upload ID. You can optionally provide a sha256
-// digest of the image layer for data validation purposes.
-//
-// When an image is pushed, the CompleteLayerUpload API is called once per each
-// new image layer to verify that the upload has completed.
-//
-// This operation is used by the Amazon ECR proxy and is not generally used by
-// customers for pulling and pushing images. In most cases, you should use the
-// docker CLI to pull, tag, and push images.
+// digest of the image layer for data validation purposes. When an image is pushed,
+// the CompleteLayerUpload API is called once per each new image layer to verify
+// that the upload has completed. This operation is used by the Amazon ECR proxy
+// and is not generally used by customers for pulling and pushing images. In most
+// cases, you should use the docker CLI to pull, tag, and push images.
 func (c *Client) CompleteLayerUpload(ctx context.Context, params *CompleteLayerUploadInput, optFns ...func(*Options)) (*CompleteLayerUploadOutput, error) {
 	if params == nil {
 		params = &CompleteLayerUploadInput{}
@@ -47,7 +44,8 @@ type CompleteLayerUploadInput struct {
 	// This member is required.
 	RepositoryName *string
 
-	// The upload ID from a previous InitiateLayerUpload operation to associate with the image layer.
+	// The upload ID from a previous InitiateLayerUpload operation to associate with
+	// the image layer.
 	//
 	// This member is required.
 	UploadId *string
@@ -123,9 +121,6 @@ func (c *Client) addOperationCompleteLayerUploadMiddlewares(stack *middleware.St
 	if err = addRecordResponseTiming(stack); err != nil {
 		return err
 	}
-	if err = addSpanRetryLoop(stack, options); err != nil {
-		return err
-	}
 	if err = addClientUserAgent(stack, options); err != nil {
 		return err
 	}
@@ -136,15 +131,6 @@ func (c *Client) addOperationCompleteLayerUploadMiddlewares(stack *middleware.St
 		return err
 	}
 	if err = addSetLegacyContextSigningOptionsMiddleware(stack); err != nil {
-		return err
-	}
-	if err = addTimeOffsetBuild(stack, c); err != nil {
-		return err
-	}
-	if err = addUserAgentRetryMode(stack, options); err != nil {
-		return err
-	}
-	if err = addCredentialSource(stack, options); err != nil {
 		return err
 	}
 	if err = addOpCompleteLayerUploadValidationMiddleware(stack); err != nil {
@@ -166,15 +152,6 @@ func (c *Client) addOperationCompleteLayerUploadMiddlewares(stack *middleware.St
 		return err
 	}
 	if err = addDisableHTTPSMiddleware(stack, options); err != nil {
-		return err
-	}
-	if err = addInterceptBeforeRetryLoop(stack, options); err != nil {
-		return err
-	}
-	if err = addInterceptAttempt(stack, options); err != nil {
-		return err
-	}
-	if err = addInterceptors(stack, options); err != nil {
 		return err
 	}
 	return nil

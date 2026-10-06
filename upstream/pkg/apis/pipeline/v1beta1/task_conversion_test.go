@@ -232,7 +232,6 @@ spec:
       path: /path
     stderrConfig:
       path: /another-path
-    restartPolicy: Always
   volumes:
   - name: volume
   params:
@@ -367,7 +366,7 @@ spec:
 	taskWithDeprecatedFieldsV1.ObjectMeta.Annotations = map[string]string{
 		v1beta1.TaskDeprecationsAnnotationKey: `{"foo":{"deprecatedSteps":` +
 			`[{"name":"","ports":[{"name":"port","containerPort":0}],"resources":{},"livenessProbe":{"initialDelaySeconds":1},"readinessProbe":{"initialDelaySeconds":2},"startupProbe":{"initialDelaySeconds":3},"lifecycle":{"postStart":{"exec":{"command":["lifecycle command"]}}},"terminationMessagePath":"path","terminationMessagePolicy":"policy","stdin":true,"stdinOnce":true,"tty":true}],` +
-			`"deprecatedStepTemplate":{"ports":[{"name":"port","containerPort":0}],"resources":{},"livenessProbe":{"initialDelaySeconds":1},"readinessProbe":{"initialDelaySeconds":2},"startupProbe":{"initialDelaySeconds":3},"lifecycle":{"postStart":{"exec":{"command":["lifecycle command"]}}},"terminationMessagePath":"path","terminationMessagePolicy":"policy","stdin":true,"stdinOnce":true,"tty":true}}}`,
+			`"deprecatedStepTemplate":{"name":"","ports":[{"name":"port","containerPort":0}],"resources":{},"livenessProbe":{"initialDelaySeconds":1},"readinessProbe":{"initialDelaySeconds":2},"startupProbe":{"initialDelaySeconds":3},"lifecycle":{"postStart":{"exec":{"command":["lifecycle command"]}}},"terminationMessagePath":"path","terminationMessagePolicy":"policy","stdin":true,"stdinOnce":true,"tty":true}}}`,
 	}
 	taskWithoutStepTemplateYAMLV1beta1 := parse.MustParseV1beta1Task(t, taskWithoutStepTemplateYAML)
 	taskWithoutStepTemplateYAMLV1 := parse.MustParseV1Task(t, taskWithoutStepTemplateYAML)

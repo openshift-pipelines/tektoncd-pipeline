@@ -24,7 +24,6 @@ import (
 	v1 "github.com/tektoncd/pipeline/pkg/apis/pipeline/v1"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
-	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/propagation"
 	"go.opentelemetry.io/otel/trace"
 	"knative.dev/pkg/logging"
@@ -39,17 +38,15 @@ const (
 	TaskRunSpanContextAnnotation = "tekton.dev/taskrunSpanContext"
 )
 
-// initTracing initializes tracing by creating or restoring the root span.
-// It persists the span context in status and restores parent context propagated
-// through annotations. The caller is responsible for ending the returned span.
-func initTracing(ctx context.Context, tracerProvider trace.TracerProvider, pr *v1.PipelineRun) (context.Context, trace.Span) {
+// initialize tracing by creating the root span and injecting the
+// spanContext is propagated through annotations in the CR
+func initTracing(ctx context.Context, tracerProvider trace.TracerProvider, pr *v1.PipelineRun) context.Context {
 	logger := logging.FromContext(ctx)
 	pro := otel.GetTextMapPropagator()
-	noopSpan := trace.SpanFromContext(context.Background())
 
 	// SpanContext was created already
 	if len(pr.Status.SpanContext) > 0 {
-		return pro.Extract(ctx, propagation.MapCarrier(pr.Status.SpanContext)), noopSpan
+		return pro.Extract(ctx, propagation.MapCarrier(pr.Status.SpanContext))
 	}
 
 	spanContext := make(map[string]string)
@@ -62,11 +59,12 @@ func initTracing(ctx context.Context, tracerProvider trace.TracerProvider, pr *v
 		}
 
 		pr.Status.SpanContext = spanContext
-		return pro.Extract(ctx, propagation.MapCarrier(pr.Status.SpanContext)), noopSpan
+		return pro.Extract(ctx, propagation.MapCarrier(pr.Status.SpanContext))
 	}
 
 	// Create a new root span since there was no parent spanContext provided through annotations
 	ctxWithTrace, span := tracerProvider.Tracer(TracerName).Start(ctx, "PipelineRun:Reconciler")
+	defer span.End()
 	span.SetAttributes(attribute.String("pipelinerun", pr.Name), attribute.String("namespace", pr.Namespace))
 
 	pro.Inject(ctxWithTrace, propagation.MapCarrier(spanContext))
@@ -74,13 +72,12 @@ func initTracing(ctx context.Context, tracerProvider trace.TracerProvider, pr *v
 	logger.Debug("got tracing carrier", spanContext)
 	if len(spanContext) == 0 {
 		logger.Debug("tracerProvider doesn't provide a traceId, tracing is disabled")
-		span.End()
-		return ctx, noopSpan
+		return ctx
 	}
 
 	span.AddEvent("updating PipelineRun status with SpanContext")
 	pr.Status.SpanContext = spanContext
-	return ctxWithTrace, span
+	return ctxWithTrace
 }
 
 // Extract spanContext from the context and return it as json encoded string
@@ -102,21 +99,4 @@ func getMarshalledSpanFromContext(ctx context.Context) (string, error) {
 		return "", errors.New("marshalled spanContext size is too big")
 	}
 	return string(marshalled), nil
-}
-
-// tracerFromContext returns a tracer bound to the provider that created the
-// span already on ctx. Helpers such as the cancel and timeout paths run within
-// the reconcile context but do not have access to the Reconciler's
-// TracerProvider, so this keeps their spans on the same trace.
-func tracerFromContext(ctx context.Context) trace.Tracer {
-	return trace.SpanFromContext(ctx).TracerProvider().Tracer(TracerName)
-}
-
-// recordSpanError marks the span as failed and records the error, mirroring the
-// convention used by the notifications reconcilers.
-func recordSpanError(span trace.Span, err error) {
-	if err != nil {
-		span.SetStatus(codes.Error, err.Error())
-		span.RecordError(err)
-	}
 }

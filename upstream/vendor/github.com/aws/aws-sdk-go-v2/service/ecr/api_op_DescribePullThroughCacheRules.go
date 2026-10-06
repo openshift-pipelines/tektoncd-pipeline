@@ -120,9 +120,6 @@ func (c *Client) addOperationDescribePullThroughCacheRulesMiddlewares(stack *mid
 	if err = addRecordResponseTiming(stack); err != nil {
 		return err
 	}
-	if err = addSpanRetryLoop(stack, options); err != nil {
-		return err
-	}
 	if err = addClientUserAgent(stack, options); err != nil {
 		return err
 	}
@@ -133,15 +130,6 @@ func (c *Client) addOperationDescribePullThroughCacheRulesMiddlewares(stack *mid
 		return err
 	}
 	if err = addSetLegacyContextSigningOptionsMiddleware(stack); err != nil {
-		return err
-	}
-	if err = addTimeOffsetBuild(stack, c); err != nil {
-		return err
-	}
-	if err = addUserAgentRetryMode(stack, options); err != nil {
-		return err
-	}
-	if err = addCredentialSource(stack, options); err != nil {
 		return err
 	}
 	if err = stack.Initialize.Add(newServiceMetadataMiddleware_opDescribePullThroughCacheRules(options.Region), middleware.Before); err != nil {
@@ -162,17 +150,16 @@ func (c *Client) addOperationDescribePullThroughCacheRulesMiddlewares(stack *mid
 	if err = addDisableHTTPSMiddleware(stack, options); err != nil {
 		return err
 	}
-	if err = addInterceptBeforeRetryLoop(stack, options); err != nil {
-		return err
-	}
-	if err = addInterceptAttempt(stack, options); err != nil {
-		return err
-	}
-	if err = addInterceptors(stack, options); err != nil {
-		return err
-	}
 	return nil
 }
+
+// DescribePullThroughCacheRulesAPIClient is a client that implements the
+// DescribePullThroughCacheRules operation.
+type DescribePullThroughCacheRulesAPIClient interface {
+	DescribePullThroughCacheRules(context.Context, *DescribePullThroughCacheRulesInput, ...func(*Options)) (*DescribePullThroughCacheRulesOutput, error)
+}
+
+var _ DescribePullThroughCacheRulesAPIClient = (*Client)(nil)
 
 // DescribePullThroughCacheRulesPaginatorOptions is the paginator options for
 // DescribePullThroughCacheRules
@@ -248,9 +235,6 @@ func (p *DescribePullThroughCacheRulesPaginator) NextPage(ctx context.Context, o
 	}
 	params.MaxResults = limit
 
-	optFns = append([]func(*Options){
-		addIsPaginatorUserAgent,
-	}, optFns...)
 	result, err := p.client.DescribePullThroughCacheRules(ctx, &params, optFns...)
 	if err != nil {
 		return nil, err
@@ -269,14 +253,6 @@ func (p *DescribePullThroughCacheRulesPaginator) NextPage(ctx context.Context, o
 
 	return result, nil
 }
-
-// DescribePullThroughCacheRulesAPIClient is a client that implements the
-// DescribePullThroughCacheRules operation.
-type DescribePullThroughCacheRulesAPIClient interface {
-	DescribePullThroughCacheRules(context.Context, *DescribePullThroughCacheRulesInput, ...func(*Options)) (*DescribePullThroughCacheRulesOutput, error)
-}
-
-var _ DescribePullThroughCacheRulesAPIClient = (*Client)(nil)
 
 func newServiceMetadataMiddleware_opDescribePullThroughCacheRules(region string) *awsmiddleware.RegisterServiceMetadata {
 	return &awsmiddleware.RegisterServiceMetadata{

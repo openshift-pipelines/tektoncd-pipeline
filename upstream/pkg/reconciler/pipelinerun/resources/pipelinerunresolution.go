@@ -29,7 +29,6 @@ import (
 	pipelineErrors "github.com/tektoncd/pipeline/pkg/apis/pipeline/errors"
 	v1 "github.com/tektoncd/pipeline/pkg/apis/pipeline/v1"
 	"github.com/tektoncd/pipeline/pkg/apis/pipeline/v1beta1"
-	rprp "github.com/tektoncd/pipeline/pkg/reconciler/pipelinerun/pipelinespec"
 	"github.com/tektoncd/pipeline/pkg/reconciler/taskrun/resources"
 	"github.com/tektoncd/pipeline/pkg/remote"
 	resolutioncommon "github.com/tektoncd/pipeline/pkg/resolution/common"
@@ -39,19 +38,6 @@ import (
 	"knative.dev/pkg/apis"
 	"knative.dev/pkg/kmeta"
 )
-
-// MissingResultFromCompletedTaskError indicates a task completed successfully
-// but did not emit a result that a downstream task references.
-type MissingResultFromCompletedTaskError struct {
-	Task   string
-	Result string
-	Target string
-}
-
-func (e *MissingResultFromCompletedTaskError) Error() string {
-	return fmt.Sprintf("task %q completed successfully but did not emit the result %q, which is referenced by task %q",
-		e.Task, e.Result, e.Target)
-}
 
 const (
 	// ReasonConditionCheckFailed indicates that the reason for the failure status is that the
@@ -76,20 +62,6 @@ func (e *TaskNotFoundError) Error() string {
 }
 
 func (e *TaskNotFoundError) Unwrap() error {
-	return e.Err
-}
-
-// PipelineNotFoundError indicates that the resolution failed because a referenced Pipeline couldn't be retrieved
-type PipelineNotFoundError struct {
-	Name string
-	Err  error
-}
-
-func (e *PipelineNotFoundError) Error() string {
-	return fmt.Sprintf("Couldn't retrieve Pipeline %q: %s", e.Name, e.Err.Error())
-}
-
-func (e *PipelineNotFoundError) Unwrap() error {
 	return e.Err
 }
 
@@ -164,19 +136,11 @@ func (t ResolvedPipelineTask) isDone(facts *PipelineRunFacts) bool {
 
 // IsRunning returns true only if the task is neither succeeded, cancelled nor failed
 func (t ResolvedPipelineTask) IsRunning() bool {
-	switch {
-	case t.IsCustomTask():
-		if len(t.CustomRuns) == 0 {
-			return false
-		}
-	case t.IsChildPipeline():
-		if len(t.ChildPipelineRuns) == 0 {
-			return false
-		}
-	default:
-		if len(t.TaskRuns) == 0 {
-			return false
-		}
+	if t.IsCustomTask() && len(t.CustomRuns) == 0 {
+		return false
+	}
+	if !t.IsCustomTask() && len(t.TaskRuns) == 0 {
+		return false
 	}
 	return !t.isSuccessful() && !t.isFailure()
 }
@@ -188,7 +152,7 @@ func (t ResolvedPipelineTask) IsCustomTask() bool {
 
 // IsChildPipeline returns true if the PipelineTask references a child Pipeline.
 func (t ResolvedPipelineTask) IsChildPipeline() bool {
-	return t.PipelineTask.PipelineSpec != nil || t.PipelineTask.PipelineRef != nil
+	return t.PipelineTask.PipelineSpec != nil
 }
 
 // getReason returns the latest reason if the run has completed successfully
@@ -705,7 +669,6 @@ func ResolvePipelineTask(
 	ctx context.Context,
 	pipelineRun v1.PipelineRun,
 	getChildPipelineRun GetPipelineRun,
-	getChildPipeline rprp.GetPipeline,
 	getTask resources.GetTask,
 	getTaskRun resources.GetTaskRun,
 	getRun GetRun,
@@ -740,8 +703,9 @@ func ResolvePipelineTask(
 			numCombinations,
 		)
 
+		// happy path: no pipelineRef, no local/remote resolution, no getPipeline
 		for _, childPipelineRunName := range rpt.ChildPipelineRunNames {
-			if err := rpt.setChildPipelineRunsAndResolvedPipeline(ctx, childPipelineRunName, getChildPipelineRun, getChildPipeline, pipelineTask); err != nil {
+			if err := rpt.setChildPipelineRunsAndResolvedPipeline(ctx, childPipelineRunName, getChildPipelineRun, pipelineTask); err != nil {
 				return nil, err
 			}
 		}
@@ -774,48 +738,29 @@ func (t *ResolvedPipelineTask) setChildPipelineRunsAndResolvedPipeline(
 	ctx context.Context,
 	childPipelineRunName string,
 	getChildPipelineRun GetPipelineRun,
-	getChildPipeline rprp.GetPipeline,
 	pipelineTask v1.PipelineTask,
 ) error {
 	childPipelineRun, err := getChildPipelineRun(childPipelineRunName)
-	if err != nil && !kerrors.IsNotFound(err) {
-		return fmt.Errorf("error retrieving child PipelineRun %s: %w", childPipelineRunName, err)
+	if err != nil {
+		if !kerrors.IsNotFound(err) {
+			return fmt.Errorf("error retrieving child PipelineRun %s: %w", childPipelineRunName, err)
+		}
 	}
 	if childPipelineRun != nil {
 		t.ChildPipelineRuns = append(t.ChildPipelineRuns, childPipelineRun)
 	}
 
-	if pipelineTask.PipelineSpec == nil && pipelineTask.PipelineRef == nil {
-		return fmt.Errorf("PipelineTask %q must specify one of PipelineRef or PipelineSpec", pipelineTask.Name)
+	rp := ResolvedPipeline{}
+	switch {
+	case pipelineTask.PipelineSpec != nil:
+		rp.PipelineSpec = pipelineTask.PipelineSpec
+	case pipelineTask.PipelineRef != nil:
+		return fmt.Errorf("PipelineRef for PipelineTask %q is not yet implemented", pipelineTask.Name)
+	default:
+		return fmt.Errorf("PipelineSpec in PipelineTask %q missing", pipelineTask.Name)
 	}
 
-	if pipelineTask.PipelineSpec != nil {
-		t.ResolvedPipeline = ResolvedPipeline{PipelineSpec: pipelineTask.PipelineSpec}
-		return nil
-	}
-
-	// pipelineTask.PipelineRef != nil
-	p, _, vr, err := getChildPipeline(ctx, pipelineTask.PipelineRef.Name)
-	if errors.Is(err, remote.ErrRequestInProgress) || (err != nil && resolutioncommon.IsErrTransient(err)) {
-		return err
-	}
-	if err != nil {
-		name := pipelineTask.PipelineRef.Name
-		if len(strings.TrimSpace(name)) == 0 {
-			name = resource.GenerateErrorLogString(string(pipelineTask.PipelineRef.Resolver), pipelineTask.PipelineRef.Params)
-		}
-		return &PipelineNotFoundError{
-			Name: name,
-			Err:  err,
-		}
-	}
-
-	spec := p.Spec
-	t.ResolvedPipeline = ResolvedPipeline{
-		PipelineSpec:       &spec,
-		PipelineName:       p.Name,
-		VerificationResult: vr,
-	}
+	t.ResolvedPipeline = rp
 	return nil
 }
 
@@ -830,8 +775,10 @@ func (t *ResolvedPipelineTask) setTaskRunsAndResolvedTask(
 	pipelineTask v1.PipelineTask,
 ) error {
 	taskRun, err := getTaskRun(taskRunName)
-	if err != nil && !kerrors.IsNotFound(err) {
-		return fmt.Errorf("error retrieving TaskRun %s: %w", taskRunName, err)
+	if err != nil {
+		if !kerrors.IsNotFound(err) {
+			return fmt.Errorf("error retrieving TaskRun %s: %w", taskRunName, err)
+		}
 	}
 	if taskRun != nil {
 		t.TaskRuns = append(t.TaskRuns, taskRun)
@@ -890,7 +837,10 @@ func resolveTask(
 	case pipelineTask.TaskSpec != nil:
 		rt.TaskSpec = &pipelineTask.TaskSpec.TaskSpec
 	default:
-		return nil, fmt.Errorf("PipelineTask %q must specify one of TaskRef, TaskSpec, PipelineRef, or PipelineSpec", pipelineTask.Name)
+		// If the alpha feature is enabled, and the user has configured pipelineSpec or pipelineRef, it will enter here.
+		// Currently, the controller is not yet adapted, and to avoid a panic, an error message is provided here.
+		// TODO: Adjust the logic here once the feature is supported in the future.
+		return nil, fmt.Errorf("currently, Task %q does not support PipelineRef, please use PipelineSpec, TaskRef or TaskSpec instead", pipelineTask.Name)
 	}
 	rt.TaskSpec.SetDefaults(ctx)
 	return rt, nil
@@ -1052,13 +1002,6 @@ func CheckMissingResultReferences(pipelineRunState PipelineRunState, target *Res
 			customRun := referencedPipelineTask.CustomRuns[0]
 			_, err := findRunResultForParam(customRun, resultRef)
 			if err != nil {
-				if referencedPipelineTask.isSuccessful() {
-					return &MissingResultFromCompletedTaskError{
-						Task:   resultRef.PipelineTask,
-						Result: resultRef.Result,
-						Target: target.PipelineTask.Name,
-					}
-				}
 				return err
 			}
 		} else {
@@ -1068,13 +1011,6 @@ func CheckMissingResultReferences(pipelineRunState PipelineRunState, target *Res
 			taskRun := referencedPipelineTask.TaskRuns[0]
 			_, err := findTaskResultForParam(taskRun, resultRef)
 			if err != nil {
-				if referencedPipelineTask.isSuccessful() {
-					return &MissingResultFromCompletedTaskError{
-						Task:   resultRef.PipelineTask,
-						Result: resultRef.Result,
-						Target: target.PipelineTask.Name,
-					}
-				}
 				return err
 			}
 		}

@@ -25,16 +25,17 @@ import (
 	"knative.dev/pkg/apis"
 )
 
-// Emit emits events for object.
+// Emit emits events for object
+// Two types of events are supported, k8s and cloud events.
 //
-// k8s events are sent if afterCondition is different from beforeCondition.
+// k8s events are always sent if afterCondition is different from beforeCondition
+// Cloud events are always sent if enabled, i.e. if a sink is available
 func Emit(ctx context.Context, beforeCondition *apis.Condition, afterCondition *apis.Condition, object runtime.Object) {
 	k8sevent.EmitK8sEvents(ctx, beforeCondition, afterCondition, object)
+	cloudevent.EmitCloudEventsWhenConditionChange(ctx, beforeCondition, afterCondition, object)
 }
 
-// EmitCloudEvents is refactored to cloudevent, this is to avoid breaking change.
-//
-// Deprecated: Use pkg/reconciler/events/cloudevent.EmitCloudEvents directly.
+// EmitCloudEvents is refactored to cloudevent, this is to avoid breaking change
 var EmitCloudEvents = cloudevent.EmitCloudEvents
 
 // EmitError is refactored to k8sevent, this is to avoid breaking change

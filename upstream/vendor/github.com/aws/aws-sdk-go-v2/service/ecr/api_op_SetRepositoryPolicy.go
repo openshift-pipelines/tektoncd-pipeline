@@ -11,10 +11,8 @@ import (
 )
 
 // Applies a repository policy to the specified repository to control access
-// permissions. For more information, see [Amazon ECR Repository policies]in the Amazon Elastic Container Registry
-// User Guide.
-//
-// [Amazon ECR Repository policies]: https://docs.aws.amazon.com/AmazonECR/latest/userguide/repository-policies.html
+// permissions. For more information, see Amazon ECR Repository policies (https://docs.aws.amazon.com/AmazonECR/latest/userguide/repository-policies.html)
+// in the Amazon Elastic Container Registry User Guide.
 func (c *Client) SetRepositoryPolicy(ctx context.Context, params *SetRepositoryPolicyInput, optFns ...func(*Options)) (*SetRepositoryPolicyOutput, error) {
 	if params == nil {
 		params = &SetRepositoryPolicyInput{}
@@ -33,9 +31,8 @@ func (c *Client) SetRepositoryPolicy(ctx context.Context, params *SetRepositoryP
 type SetRepositoryPolicyInput struct {
 
 	// The JSON repository policy text to apply to the repository. For more
-	// information, see [Amazon ECR repository policies]in the Amazon Elastic Container Registry User Guide.
-	//
-	// [Amazon ECR repository policies]: https://docs.aws.amazon.com/AmazonECR/latest/userguide/repository-policy-examples.html
+	// information, see Amazon ECR repository policies (https://docs.aws.amazon.com/AmazonECR/latest/userguide/repository-policy-examples.html)
+	// in the Amazon Elastic Container Registry User Guide.
 	//
 	// This member is required.
 	PolicyText *string
@@ -46,8 +43,9 @@ type SetRepositoryPolicyInput struct {
 	RepositoryName *string
 
 	// If the policy you are attempting to set on a repository policy would prevent
-	// you from setting another policy in the future, you must force the SetRepositoryPolicyoperation.
-	// This is intended to prevent accidental repository lock outs.
+	// you from setting another policy in the future, you must force the
+	// SetRepositoryPolicy operation. This is intended to prevent accidental repository
+	// lock outs.
 	Force bool
 
 	// The Amazon Web Services account ID associated with the registry that contains
@@ -118,9 +116,6 @@ func (c *Client) addOperationSetRepositoryPolicyMiddlewares(stack *middleware.St
 	if err = addRecordResponseTiming(stack); err != nil {
 		return err
 	}
-	if err = addSpanRetryLoop(stack, options); err != nil {
-		return err
-	}
 	if err = addClientUserAgent(stack, options); err != nil {
 		return err
 	}
@@ -131,15 +126,6 @@ func (c *Client) addOperationSetRepositoryPolicyMiddlewares(stack *middleware.St
 		return err
 	}
 	if err = addSetLegacyContextSigningOptionsMiddleware(stack); err != nil {
-		return err
-	}
-	if err = addTimeOffsetBuild(stack, c); err != nil {
-		return err
-	}
-	if err = addUserAgentRetryMode(stack, options); err != nil {
-		return err
-	}
-	if err = addCredentialSource(stack, options); err != nil {
 		return err
 	}
 	if err = addOpSetRepositoryPolicyValidationMiddleware(stack); err != nil {
@@ -161,15 +147,6 @@ func (c *Client) addOperationSetRepositoryPolicyMiddlewares(stack *middleware.St
 		return err
 	}
 	if err = addDisableHTTPSMiddleware(stack, options); err != nil {
-		return err
-	}
-	if err = addInterceptBeforeRetryLoop(stack, options); err != nil {
-		return err
-	}
-	if err = addInterceptAttempt(stack, options); err != nil {
-		return err
-	}
-	if err = addInterceptors(stack, options); err != nil {
 		return err
 	}
 	return nil

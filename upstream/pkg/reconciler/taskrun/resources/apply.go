@@ -20,7 +20,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"maps"
 	"path/filepath"
 	"regexp"
 	"sort"
@@ -415,12 +414,7 @@ func replacementsFromDefaultParams(defaults v1.ParamSpecs) (map[string]string, m
 				}
 			case v1.ParamTypeObject:
 				for _, pattern := range paramPatterns {
-					// Clone, never alias: callers (extendObjectReplacements, getTaskParameters)
-					// merge TaskRun values into these object replacements. Handing out the param's
-					// shared ObjectVal let that merge mutate the default in place; with concurrent
-					// StepAction ref resolution that shared-map write crashed the controller with
-					// "fatal error: concurrent map writes".
-					objectReplacements[fmt.Sprintf(pattern, p.Name)] = maps.Clone(p.Default.ObjectVal)
+					objectReplacements[fmt.Sprintf(pattern, p.Name)] = p.Default.ObjectVal
 				}
 				for k, v := range p.Default.ObjectVal {
 					stringReplacements[fmt.Sprintf(objectIndividualVariablePattern, p.Name, k)] = v
@@ -481,9 +475,7 @@ func replacementsFromParams(params v1.Params) (map[string]string, map[string][]s
 			}
 		case v1.ParamTypeObject:
 			for _, pattern := range paramPatterns {
-				// Clone for the same reason as replacementsFromDefaultParams: never hand out an
-				// alias of the param's shared ObjectVal, so downstream merges stay private.
-				objectReplacements[fmt.Sprintf(pattern, p.Name)] = maps.Clone(p.Value.ObjectVal)
+				objectReplacements[fmt.Sprintf(pattern, p.Name)] = p.Value.ObjectVal
 			}
 			for k, v := range p.Value.ObjectVal {
 				stringReplacements[fmt.Sprintf(objectIndividualVariablePattern, p.Name, k)] = v

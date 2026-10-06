@@ -302,9 +302,7 @@ type TaskRunStatusFields struct {
 	// CloudEvents describe the state of each cloud event requested via a
 	// CloudEventResource.
 	//
-	// Deprecated: No content written to it. To be Removed (since v0.44.0).
-	// Use kubectl describe (CloudEventSent/CloudEventFailed k8s Events) or the
-	// tekton_events_sent_total Prometheus metric for delivery visibility instead.
+	// Deprecated: Removed in v0.44.0.
 	//
 	// +optional
 	// +listType=atomic
@@ -462,7 +460,6 @@ type CloudEventDeliveryState struct {
 }
 
 // +genclient
-// +kubebuilder:object:root=true
 // +genreconciler:krshapedlogic=false
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 // +k8s:openapi-gen=true

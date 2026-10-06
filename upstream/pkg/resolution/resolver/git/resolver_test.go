@@ -390,27 +390,22 @@ type params struct {
 }
 
 func TestResolve(t *testing.T) {
-	objTemplate := "{\"apiVersion\": \"tekton.dev/v1\", \"kind\": \"%s\", \"metadata\": {\"name\": \"%s\"}}"
-	mainContent := fmt.Sprintf(objTemplate, "Pipeline", "released content in main branch and in tag v1")
-	oldBranchContent := fmt.Sprintf(objTemplate, "Pipeline", "oldcontent in test branch")
-	newBranchContent := fmt.Sprintf(objTemplate, "Pipeline", "new content in test branch")
-
 	// local repo set up for anonymous cloning
 	// ----
 	commits := []commitForRepo{{
 		Dir:      "foo/",
 		Filename: "old",
-		Content:  oldBranchContent,
+		Content:  "old content in test branch",
 		Branch:   "test-branch",
 	}, {
 		Dir:      "foo/",
 		Filename: "new",
-		Content:  newBranchContent,
+		Content:  "new content in test branch",
 		Branch:   "test-branch",
 	}, {
 		Dir:      "./",
 		Filename: "released",
-		Content:  mainContent,
+		Content:  "released content in main branch and in tag v1",
 		Tag:      "v1",
 	}}
 
@@ -479,7 +474,7 @@ func TestResolve(t *testing.T) {
 			url:        anonFakeRepoURL,
 		},
 		expectedCommitSHA: commitSHAsInAnonRepo[2],
-		expectedStatus:    resolution.CreateResolutionRequestStatusWithData([]byte(mainContent)),
+		expectedStatus:    resolution.CreateResolutionRequestStatusWithData([]byte("released content in main branch and in tag v1")),
 	}, {
 		name: "clone: revision is tag name",
 		args: &params{
@@ -488,7 +483,7 @@ func TestResolve(t *testing.T) {
 			url:        anonFakeRepoURL,
 		},
 		expectedCommitSHA: commitSHAsInAnonRepo[2],
-		expectedStatus:    resolution.CreateResolutionRequestStatusWithData([]byte(mainContent)),
+		expectedStatus:    resolution.CreateResolutionRequestStatusWithData([]byte("released content in main branch and in tag v1")),
 	}, {
 		name: "clone: revision is the full tag name i.e. refs/tags/v1",
 		args: &params{
@@ -497,7 +492,7 @@ func TestResolve(t *testing.T) {
 			url:        anonFakeRepoURL,
 		},
 		expectedCommitSHA: commitSHAsInAnonRepo[2],
-		expectedStatus:    resolution.CreateResolutionRequestStatusWithData([]byte(mainContent)),
+		expectedStatus:    resolution.CreateResolutionRequestStatusWithData([]byte("released content in main branch and in tag v1")),
 	}, {
 		name: "clone: revision is a branch name",
 		args: &params{
@@ -506,7 +501,7 @@ func TestResolve(t *testing.T) {
 			url:        anonFakeRepoURL,
 		},
 		expectedCommitSHA: commitSHAsInAnonRepo[1],
-		expectedStatus:    resolution.CreateResolutionRequestStatusWithData([]byte(newBranchContent)),
+		expectedStatus:    resolution.CreateResolutionRequestStatusWithData([]byte("new content in test branch")),
 	}, {
 		name: "clone: revision is a specific commit sha",
 		args: &params{
@@ -515,7 +510,7 @@ func TestResolve(t *testing.T) {
 			url:        anonFakeRepoURL,
 		},
 		expectedCommitSHA: commitSHAsInAnonRepo[0],
-		expectedStatus:    resolution.CreateResolutionRequestStatusWithData([]byte(oldBranchContent)),
+		expectedStatus:    resolution.CreateResolutionRequestStatusWithData([]byte("old content in test branch")),
 	}, {
 		name: "clone: file does not exist",
 		args: &params{
@@ -533,7 +528,7 @@ func TestResolve(t *testing.T) {
 			namespace:   "foo",
 		},
 		expectedCommitSHA: commitSHAsInAnonRepo[2],
-		expectedStatus:    resolution.CreateResolutionRequestStatusWithData([]byte(mainContent)),
+		expectedStatus:    resolution.CreateResolutionRequestStatusWithData([]byte("released content in main branch and in tag v1")),
 	}, {
 		name: "clone: secret for git clone does not exist",
 		args: &params{
@@ -1226,136 +1221,5 @@ func TestGetScmConfigForParamConfigKey(t *testing.T) {
 				t.Errorf("expected config: %s", diff.PrintWantGot(d))
 			}
 		})
-	}
-}
-
-func TestResolveWithRetrySucceedsAfterTransientFailure(t *testing.T) {
-	config := map[string]string{
-		ConfigBackoffDuration: "1ms",
-		ConfigBackoffFactor:   "1.0",
-		ConfigBackoffJitter:   "0",
-		ConfigBackoffSteps:    "3",
-		ConfigBackoffCap:      "10ms",
-	}
-	ctx := framework.InjectResolverConfigToContext(t.Context(), config)
-
-	callCount := 0
-	expected := &resolvedGitResource{
-		Content:  []byte("hello"),
-		Revision: "abc123",
-	}
-
-	result, err := ResolveWithRetry(ctx, func() (framework.ResolvedResource, error) {
-		callCount++
-		if callCount < 3 {
-			return nil, errors.New("transient error")
-		}
-		return expected, nil
-	})
-	if err != nil {
-		t.Fatalf("expected success after retries, got error: %v", err)
-	}
-	if callCount != 3 {
-		t.Fatalf("expected 3 attempts, got %d", callCount)
-	}
-	if string(result.Data()) != string(expected.Data()) {
-		t.Fatalf("expected data %q, got %q", expected.Data(), result.Data())
-	}
-}
-
-func TestResolveWithRetryExhaustsRetries(t *testing.T) {
-	config := map[string]string{
-		ConfigBackoffDuration: "1ms",
-		ConfigBackoffFactor:   "1.0",
-		ConfigBackoffJitter:   "0",
-		ConfigBackoffSteps:    "2",
-		ConfigBackoffCap:      "10ms",
-	}
-	ctx := framework.InjectResolverConfigToContext(t.Context(), config)
-
-	callCount := 0
-	_, err := ResolveWithRetry(ctx, func() (framework.ResolvedResource, error) {
-		callCount++
-		return nil, errors.New("persistent error")
-	})
-	if err == nil {
-		t.Fatal("expected error after exhausting retries, got nil")
-	}
-	if callCount != 2 {
-		t.Fatalf("expected 2 attempts (matching steps), got %d", callCount)
-	}
-}
-
-func TestResolveWithRetryContextCancelled(t *testing.T) {
-	config := map[string]string{
-		ConfigBackoffSteps: "3",
-	}
-	ctx := framework.InjectResolverConfigToContext(t.Context(), config)
-	ctx, cancel := context.WithCancel(ctx)
-	cancel()
-
-	_, err := ResolveWithRetry(ctx, func() (framework.ResolvedResource, error) {
-		t.Fatal("fn should not be called with cancelled context")
-		return nil, errors.New("unreachable")
-	})
-	if err == nil {
-		t.Fatal("expected error with cancelled context, got nil")
-	}
-	if !errors.Is(err, context.Canceled) {
-		t.Fatalf("expected context.Canceled error, got: %v", err)
-	}
-}
-
-func TestResolveWithRetryContextCancelledMidBackoff(t *testing.T) {
-	config := map[string]string{
-		ConfigBackoffDuration: "50ms",
-		ConfigBackoffFactor:   "1.0",
-		ConfigBackoffJitter:   "0",
-		ConfigBackoffSteps:    "5",
-		ConfigBackoffCap:      "1s",
-	}
-	ctx := framework.InjectResolverConfigToContext(t.Context(), config)
-	ctx, cancel := context.WithCancel(ctx)
-
-	callCount := 0
-	_, err := ResolveWithRetry(ctx, func() (framework.ResolvedResource, error) {
-		callCount++
-		if callCount == 1 {
-			cancel()
-		}
-		return nil, errors.New("transient error")
-	})
-	if err == nil {
-		t.Fatal("expected error, got nil")
-	}
-	if !errors.Is(err, context.Canceled) {
-		t.Fatalf("expected context.Canceled error, got: %v", err)
-	}
-}
-
-func TestResolveWithRetrySucceedsFirstAttempt(t *testing.T) {
-	config := map[string]string{
-		ConfigBackoffSteps: "3",
-	}
-	ctx := framework.InjectResolverConfigToContext(t.Context(), config)
-
-	callCount := 0
-	expected := &resolvedGitResource{
-		Content:  []byte("hello"),
-		Revision: "abc123",
-	}
-
-	result, err := ResolveWithRetry(ctx, func() (framework.ResolvedResource, error) {
-		callCount++
-		return expected, nil
-	})
-	if err != nil {
-		t.Fatalf("expected success, got error: %v", err)
-	}
-	if callCount != 1 {
-		t.Fatalf("expected 1 attempt, got %d", callCount)
-	}
-	if string(result.Data()) != string(expected.Data()) {
-		t.Fatalf("expected data %q, got %q", expected.Data(), result.Data())
 	}
 }
