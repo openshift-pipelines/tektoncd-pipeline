@@ -11,7 +11,7 @@ metadata:
     pipelinesascode.tekton.dev/max-keep-runs: "3"
     pipelinesascode.tekton.dev/on-cel-expression: event == "push" && target_branch
       == "release-v1.15.x" &&
-      (("dependencies/tini/***".pathChanged() || "upstream/***".pathChanged() || ".konflux/patches/***".pathChanged() || ".konflux/rpms/***".pathChanged() ) ||
+      (("dependencies/tini/***".pathChanged() || ".konflux/patches/***".pathChanged() || ".konflux/rpms/***".pathChanged() ) ||
       ".konflux/dockerfiles/resolvers.Dockerfile".pathChanged() ||
       ".tekton/tektoncd-pipeline-1-15-resolvers-push.yaml".pathChanged())
   creationTimestamp: null
@@ -30,7 +30,7 @@ spec:
   - name: revision
     value: '{{revision}}'
   - name: output-image
-    value: quay.io/redhat-user-workloads/tekton-ecosystem-tenant/pipelines-resolvers-rhel8:{{revision}}
+    value: quay.io/redhat-user-workloads/tekton-ecosystem-tenant/pipelines-resolvers-rhel9:{{revision}}
   - name: dockerfile
     value: .konflux/dockerfiles/resolvers.Dockerfile
   - name: additional-tags
@@ -39,11 +39,6 @@ spec:
   - name: prefetch-input
     value: |
       {"type": "rpm", "path": ".konflux/rpms"}
-  - name: repo-name
-    value: "tektoncd-pipeline"
-  - name: slack-group-ids
-    value:
-      - "S050DU2F7FH"
   pipelineRef:
     name: docker-build-ta
   taskRunTemplate:
