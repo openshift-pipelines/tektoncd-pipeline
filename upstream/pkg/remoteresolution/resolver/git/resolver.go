@@ -170,7 +170,6 @@ func (r *Resolver) Resolve(ctx context.Context, req *v1beta1.ResolutionRequestSp
 
 	if cache.ShouldUse(ctx, r, req.Params) {
 		return cache.Get(ctx).GetCachedOrResolveFromRemote(
-			ctx,
 			req.Params,
 			labelValueGitResolverType,
 			func() (resolutionframework.ResolvedResource, error) {
@@ -190,10 +189,9 @@ func (r *Resolver) resolveViaGit(ctx context.Context, params map[string]string) 
 		Params:     params,
 	}
 
-	return git.ResolveWithRetry(ctx, func() (resolutionframework.ResolvedResource, error) {
-		if params[git.UrlParam] != "" {
-			return g.ResolveGitClone(ctx)
-		}
-		return g.ResolveAPIGit(ctx, r.clientFunc)
-	})
+	if params[git.UrlParam] != "" {
+		return g.ResolveGitClone(ctx)
+	}
+
+	return g.ResolveAPIGit(ctx, r.clientFunc)
 }

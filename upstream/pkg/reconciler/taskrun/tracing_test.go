@@ -14,35 +14,23 @@ limitations under the License.
 package taskrun
 
 import (
-	"maps"
 	"testing"
-
-	"github.com/tektoncd/pipeline/pkg/reconciler/taskrun/resources"
 
 	v1 "github.com/tektoncd/pipeline/pkg/apis/pipeline/v1"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/propagation"
 	tracesdk "go.opentelemetry.io/otel/sdk/trace"
-	"go.opentelemetry.io/otel/sdk/trace/tracetest"
 	"go.opentelemetry.io/otel/trace"
-	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 func TestInitTracing(t *testing.T) {
-	oldPropagator := otel.GetTextMapPropagator()
 	otel.SetTextMapPropagator(propagation.TraceContext{})
-	t.Cleanup(func() { otel.SetTextMapPropagator(oldPropagator) })
-
-	exporter := tracetest.NewInMemoryExporter()
-	tracerProvider := tracesdk.NewTracerProvider(tracesdk.WithSyncer(exporter))
-	defer func() { _ = tracerProvider.Shutdown(t.Context()) }()
 
 	testcases := []struct {
 		name                    string
 		taskRun                 *v1.TaskRun
 		tracerProvider          trace.TracerProvider
-		exporter                *tracetest.InMemoryExporter
 		expectSpanContextStatus bool
 		expectValidSpanContext  bool
 		parentTraceID           string
@@ -54,8 +42,7 @@ func TestInitTracing(t *testing.T) {
 				Namespace: "testns",
 			},
 		},
-		tracerProvider:          tracerProvider,
-		exporter:                exporter,
+		tracerProvider:          tracesdk.NewTracerProvider(),
 		expectSpanContextStatus: true,
 		expectValidSpanContext:  true,
 	}, {
@@ -103,24 +90,7 @@ func TestInitTracing(t *testing.T) {
 	for _, tc := range testcases {
 		t.Run(tc.name, func(t *testing.T) {
 			tr := tc.taskRun
-			ctx, span := initTracing(t.Context(), tc.tracerProvider, tr)
-
-			if tc.exporter != nil {
-				if got := tc.exporter.GetSpans(); len(got) != 0 {
-					t.Fatalf("root span exported before caller ended it: got %d spans", len(got))
-				}
-			}
-
-			span.End()
-			if tc.exporter != nil {
-				spans := tc.exporter.GetSpans()
-				if len(spans) != 1 {
-					t.Fatalf("exported spans = %d, want 1", len(spans))
-				}
-				if spans[0].Name != "TaskRun:Reconciler" {
-					t.Fatalf("exported span name = %q, want TaskRun:Reconciler", spans[0].Name)
-				}
-			}
+			ctx := initTracing(t.Context(), tc.tracerProvider, tr)
 
 			if ctx == nil {
 				t.Fatalf("returned nil context from initTracing")
@@ -149,60 +119,5 @@ func TestInitTracing(t *testing.T) {
 				}
 			}
 		})
-	}
-}
-
-func TestReconcilerApplyPathsEmitSpans(t *testing.T) {
-	exporter := tracetest.NewInMemoryExporter()
-	tp := tracesdk.NewTracerProvider(tracesdk.WithSyncer(exporter))
-	t.Cleanup(func() {
-		_ = tp.Shutdown(t.Context())
-	})
-
-	taskSpec := &v1.TaskSpec{
-		Steps: []v1.Step{{Name: "s", Image: "foo"}},
-	}
-
-	tr := &v1.TaskRun{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "tr",
-			Namespace: "ns",
-		},
-		Spec: v1.TaskRunSpec{
-			TaskSpec: taskSpec,
-		},
-	}
-
-	rtr := &resources.ResolvedTask{
-		TaskName: "my-task",
-		TaskSpec: taskSpec,
-	}
-
-	_, err := applyParamsContextsResultsAndWorkspaces(
-		t.Context(),
-		tp.Tracer(TracerName),
-		tr,
-		rtr,
-		map[string]corev1.Volume{},
-	)
-	if err != nil {
-		t.Fatalf("applyParamsContextsResultsAndWorkspaces() = %v", err)
-	}
-
-	seen := map[string]struct{}{}
-	for _, s := range exporter.GetSpans() {
-		seen[s.Name] = struct{}{}
-	}
-
-	expectedSpanNames := []string{
-		"applyParamsContextsResultsAndWorkspaces",
-		"ApplyParameters",
-		"ApplyWorkspaces",
-	}
-
-	for _, spanName := range expectedSpanNames {
-		if _, ok := seen[spanName]; !ok {
-			t.Fatalf("expected span %q to be exported; got spans: %v", spanName, maps.Keys(seen))
-		}
 	}
 }

@@ -43,10 +43,9 @@ type DescribeRegistriesInput struct {
 	// request where maxResults was used and the results exceeded the value of that
 	// parameter. Pagination continues from the end of the previous results that
 	// returned the nextToken value. If there are no more results to return, this
-	// value is null .
-	//
-	// This token should be treated as an opaque identifier that is only used to
-	// retrieve the next items in a list and not for other programmatic purposes.
+	// value is null . This token should be treated as an opaque identifier that is
+	// only used to retrieve the next items in a list and not for other programmatic
+	// purposes.
 	NextToken *string
 
 	noSmithyDocumentSerde
@@ -114,9 +113,6 @@ func (c *Client) addOperationDescribeRegistriesMiddlewares(stack *middleware.Sta
 	if err = addRecordResponseTiming(stack); err != nil {
 		return err
 	}
-	if err = addSpanRetryLoop(stack, options); err != nil {
-		return err
-	}
 	if err = addClientUserAgent(stack, options); err != nil {
 		return err
 	}
@@ -127,15 +123,6 @@ func (c *Client) addOperationDescribeRegistriesMiddlewares(stack *middleware.Sta
 		return err
 	}
 	if err = addSetLegacyContextSigningOptionsMiddleware(stack); err != nil {
-		return err
-	}
-	if err = addTimeOffsetBuild(stack, c); err != nil {
-		return err
-	}
-	if err = addUserAgentRetryMode(stack, options); err != nil {
-		return err
-	}
-	if err = addCredentialSource(stack, options); err != nil {
 		return err
 	}
 	if err = stack.Initialize.Add(newServiceMetadataMiddleware_opDescribeRegistries(options.Region), middleware.Before); err != nil {
@@ -156,17 +143,16 @@ func (c *Client) addOperationDescribeRegistriesMiddlewares(stack *middleware.Sta
 	if err = addDisableHTTPSMiddleware(stack, options); err != nil {
 		return err
 	}
-	if err = addInterceptBeforeRetryLoop(stack, options); err != nil {
-		return err
-	}
-	if err = addInterceptAttempt(stack, options); err != nil {
-		return err
-	}
-	if err = addInterceptors(stack, options); err != nil {
-		return err
-	}
 	return nil
 }
+
+// DescribeRegistriesAPIClient is a client that implements the DescribeRegistries
+// operation.
+type DescribeRegistriesAPIClient interface {
+	DescribeRegistries(context.Context, *DescribeRegistriesInput, ...func(*Options)) (*DescribeRegistriesOutput, error)
+}
+
+var _ DescribeRegistriesAPIClient = (*Client)(nil)
 
 // DescribeRegistriesPaginatorOptions is the paginator options for
 // DescribeRegistries
@@ -239,9 +225,6 @@ func (p *DescribeRegistriesPaginator) NextPage(ctx context.Context, optFns ...fu
 	}
 	params.MaxResults = limit
 
-	optFns = append([]func(*Options){
-		addIsPaginatorUserAgent,
-	}, optFns...)
 	result, err := p.client.DescribeRegistries(ctx, &params, optFns...)
 	if err != nil {
 		return nil, err
@@ -260,14 +243,6 @@ func (p *DescribeRegistriesPaginator) NextPage(ctx context.Context, optFns ...fu
 
 	return result, nil
 }
-
-// DescribeRegistriesAPIClient is a client that implements the DescribeRegistries
-// operation.
-type DescribeRegistriesAPIClient interface {
-	DescribeRegistries(context.Context, *DescribeRegistriesInput, ...func(*Options)) (*DescribeRegistriesOutput, error)
-}
-
-var _ DescribeRegistriesAPIClient = (*Client)(nil)
 
 func newServiceMetadataMiddleware_opDescribeRegistries(region string) *awsmiddleware.RegisterServiceMetadata {
 	return &awsmiddleware.RegisterServiceMetadata{

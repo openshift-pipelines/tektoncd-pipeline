@@ -50,7 +50,7 @@ import (
 	"strings"
 	"time"
 
-	v1 "github.com/tektoncd/pipeline/pkg/apis/pipeline/v1"
+	"github.com/tektoncd/pipeline/pkg/apis/pipeline/v1beta1"
 	"go.opentelemetry.io/otel"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -316,31 +316,6 @@ func TaskRunFailed(name string) ConditionAccessorFn {
 	return Failed(name)
 }
 
-// TaskRunPending provides a poll condition function that checks if the TaskRun
-// has been marked pending by the Tekton controller. If the TaskRun starts
-// running before we observe the pending state, an error is returned.
-func TaskRunPending(name string) ConditionAccessorFn {
-	running := Running(name)
-
-	return func(ca apis.ConditionAccessor) (bool, error) {
-		c := ca.GetCondition(apis.ConditionSucceeded)
-		if c != nil {
-			if c.Status == corev1.ConditionUnknown && c.Reason == string(v1.TaskRunReasonPending) {
-				return true, nil
-			}
-		}
-		status, err := running(ca)
-		if status {
-			reason := ""
-			if c != nil {
-				reason = c.Reason
-			}
-			return false, fmt.Errorf("status should be %s, but it is %s", v1.TaskRunReasonPending, reason)
-		}
-		return status, err
-	}
-}
-
 // PipelineRunSucceed provides a poll condition function that checks if the PipelineRun
 // has successfully completed.
 func PipelineRunSucceed(name string) ConditionAccessorFn {
@@ -361,7 +336,7 @@ func PipelineRunPending(name string) ConditionAccessorFn {
 	return func(ca apis.ConditionAccessor) (bool, error) {
 		c := ca.GetCondition(apis.ConditionSucceeded)
 		if c != nil {
-			if c.Status == corev1.ConditionUnknown && c.Reason == string(v1.PipelineRunReasonPending) {
+			if c.Status == corev1.ConditionUnknown && c.Reason == string(v1beta1.PipelineRunReasonPending) {
 				return true, nil
 			}
 		}
@@ -372,7 +347,7 @@ func PipelineRunPending(name string) ConditionAccessorFn {
 			if c != nil {
 				reason = c.Reason
 			}
-			return false, fmt.Errorf("status should be %s, but it is %s", v1.PipelineRunReasonPending, reason)
+			return false, fmt.Errorf("status should be %s, but it is %s", v1beta1.PipelineRunReasonPending, reason)
 		}
 		return status, err
 	}

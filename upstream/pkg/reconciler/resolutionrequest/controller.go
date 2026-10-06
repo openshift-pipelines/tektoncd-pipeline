@@ -20,7 +20,6 @@ import (
 	"context"
 
 	"github.com/tektoncd/pipeline/pkg/apis/config"
-	resolutionclient "github.com/tektoncd/pipeline/pkg/client/resolution/injection/client"
 	resolutionrequestinformer "github.com/tektoncd/pipeline/pkg/client/resolution/injection/informers/resolution/v1beta1/resolutionrequest"
 	resolutionrequestreconciler "github.com/tektoncd/pipeline/pkg/client/resolution/injection/reconciler/resolution/v1beta1/resolutionrequest"
 	"k8s.io/utils/clock"
@@ -39,15 +38,11 @@ func NewController(clock clock.PassiveClock) func(ctx context.Context, cmw confi
 		configStore.WatchConfigs(cmw)
 
 		r := &Reconciler{
-			client: resolutionclient.Get(ctx),
-			clock:  clock,
+			clock: clock,
 		}
 		impl := resolutionrequestreconciler.NewImpl(ctx, r, func(impl *controller.Impl) controller.Options {
 			return controller.Options{
 				ConfigStore: configStore,
-				// ResolutionRequest status is shared with resolver controllers, so avoid
-				// generated whole-status updates.
-				SkipStatusUpdates: true,
 			}
 		})
 

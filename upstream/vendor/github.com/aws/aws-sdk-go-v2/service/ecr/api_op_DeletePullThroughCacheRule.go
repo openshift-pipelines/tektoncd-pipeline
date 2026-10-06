@@ -52,9 +52,6 @@ type DeletePullThroughCacheRuleOutput struct {
 	// secret associated with the pull through cache rule.
 	CredentialArn *string
 
-	// The ARN of the IAM role associated with the pull through cache rule.
-	CustomRoleArn *string
-
 	// The Amazon ECR repository prefix associated with the request.
 	EcrRepositoryPrefix *string
 
@@ -63,9 +60,6 @@ type DeletePullThroughCacheRuleOutput struct {
 
 	// The upstream registry URL associated with the pull through cache rule.
 	UpstreamRegistryUrl *string
-
-	// The upstream repository prefix associated with the pull through cache rule.
-	UpstreamRepositoryPrefix *string
 
 	// Metadata pertaining to the operation's result.
 	ResultMetadata middleware.Metadata
@@ -116,9 +110,6 @@ func (c *Client) addOperationDeletePullThroughCacheRuleMiddlewares(stack *middle
 	if err = addRecordResponseTiming(stack); err != nil {
 		return err
 	}
-	if err = addSpanRetryLoop(stack, options); err != nil {
-		return err
-	}
 	if err = addClientUserAgent(stack, options); err != nil {
 		return err
 	}
@@ -129,15 +120,6 @@ func (c *Client) addOperationDeletePullThroughCacheRuleMiddlewares(stack *middle
 		return err
 	}
 	if err = addSetLegacyContextSigningOptionsMiddleware(stack); err != nil {
-		return err
-	}
-	if err = addTimeOffsetBuild(stack, c); err != nil {
-		return err
-	}
-	if err = addUserAgentRetryMode(stack, options); err != nil {
-		return err
-	}
-	if err = addCredentialSource(stack, options); err != nil {
 		return err
 	}
 	if err = addOpDeletePullThroughCacheRuleValidationMiddleware(stack); err != nil {
@@ -159,15 +141,6 @@ func (c *Client) addOperationDeletePullThroughCacheRuleMiddlewares(stack *middle
 		return err
 	}
 	if err = addDisableHTTPSMiddleware(stack, options); err != nil {
-		return err
-	}
-	if err = addInterceptBeforeRetryLoop(stack, options); err != nil {
-		return err
-	}
-	if err = addInterceptAttempt(stack, options); err != nil {
-		return err
-	}
-	if err = addInterceptors(stack, options); err != nil {
 		return err
 	}
 	return nil

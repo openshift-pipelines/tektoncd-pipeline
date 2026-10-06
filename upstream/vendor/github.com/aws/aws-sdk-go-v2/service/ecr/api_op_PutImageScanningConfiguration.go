@@ -13,9 +13,8 @@ import (
 
 // The PutImageScanningConfiguration API is being deprecated, in favor of
 // specifying the image scanning configuration at the registry level. For more
-// information, see PutRegistryScanningConfiguration.
-//
-// Updates the image scanning configuration for the specified repository.
+// information, see PutRegistryScanningConfiguration . Updates the image scanning
+// configuration for the specified repository.
 func (c *Client) PutImageScanningConfiguration(ctx context.Context, params *PutImageScanningConfigurationInput, optFns ...func(*Options)) (*PutImageScanningConfigurationOutput, error) {
 	if params == nil {
 		params = &PutImageScanningConfigurationInput{}
@@ -114,9 +113,6 @@ func (c *Client) addOperationPutImageScanningConfigurationMiddlewares(stack *mid
 	if err = addRecordResponseTiming(stack); err != nil {
 		return err
 	}
-	if err = addSpanRetryLoop(stack, options); err != nil {
-		return err
-	}
 	if err = addClientUserAgent(stack, options); err != nil {
 		return err
 	}
@@ -127,15 +123,6 @@ func (c *Client) addOperationPutImageScanningConfigurationMiddlewares(stack *mid
 		return err
 	}
 	if err = addSetLegacyContextSigningOptionsMiddleware(stack); err != nil {
-		return err
-	}
-	if err = addTimeOffsetBuild(stack, c); err != nil {
-		return err
-	}
-	if err = addUserAgentRetryMode(stack, options); err != nil {
-		return err
-	}
-	if err = addCredentialSource(stack, options); err != nil {
 		return err
 	}
 	if err = addOpPutImageScanningConfigurationValidationMiddleware(stack); err != nil {
@@ -157,15 +144,6 @@ func (c *Client) addOperationPutImageScanningConfigurationMiddlewares(stack *mid
 		return err
 	}
 	if err = addDisableHTTPSMiddleware(stack, options); err != nil {
-		return err
-	}
-	if err = addInterceptBeforeRetryLoop(stack, options); err != nil {
-		return err
-	}
-	if err = addInterceptAttempt(stack, options); err != nil {
-		return err
-	}
-	if err = addInterceptors(stack, options); err != nil {
 		return err
 	}
 	return nil

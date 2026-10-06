@@ -84,7 +84,7 @@ func TestBundleResolverCache(t *testing.T) {
 }
 
 // @test:execution=serial
-// @test:reason=scales the shared resolver deployment to 4 replicas to verify leader election prevents duplicate registry fetches
+// @test:reason=scales the shared resolver deployment to 4 replicas, causing concurrent cache tests to see 4 registry fetches instead of the expected 1
 // @test:tags=resolver,cache,replicas
 func TestBundleResolverCacheWithFourResolverReplicas(t *testing.T) {
 	ctx := t.Context()
@@ -95,8 +95,7 @@ func TestBundleResolverCacheWithFourResolverReplicas(t *testing.T) {
 	// GIVEN
 	replicas := 4
 	taskRunCount := 80
-	// Only the replica that owns the ResolutionRequest bucket should populate its cache.
-	expectedRequests := 1
+	expectedRequests := replicas
 	task := newHelloWorldTask(t, helpers.ObjectNameForTest(t), namespace)
 	repoName := "test-" + task.Name
 	repo := getRegistryServiceIP(ctx, t, c, namespace) + ":5000/" + repoName
@@ -225,13 +224,9 @@ func assertRegistryRequestCount(ctx context.Context, t *testing.T, c *clients, n
 
 	actualRequestsFromLogs := countManifestGetRequestsInRegistryLogs(ctx, t, c, namespace, repoName)
 	if expectedRequests != actualRequestsFromLogs {
-		// Log-based counting is informational only — registry log format
-		// varies across versions and can produce duplicates (e.g.,
-		// Distribution v3.1.0 logs both access-log and handler-level entries
-		// per request). Use metrics as the authoritative source.
-		t.Logf(
-			"Note: log-based count (%d) differs from expected (%d) — this is informational, see metrics below",
-			actualRequestsFromLogs, expectedRequests,
+		t.Errorf(
+			"Caching not working as expected. Expected %d registry requests with %d resolver replicas, got %d",
+			expectedRequests, replicas, actualRequestsFromLogs,
 		)
 	}
 
