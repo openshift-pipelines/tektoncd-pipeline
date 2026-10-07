@@ -1755,9 +1755,7 @@ spec:
                   additionalProperties:
                     type: string
                 cloudEvents:
-                  description: |-
-                    Deprecated: Removed in v0.44.0.
-                    CloudEvents
+                  description: CloudEvents
                   type: array
                   items:
                     description: CloudEventDelivery
@@ -1895,6 +1893,8 @@ spec:
                             This field is not used and can be removed in a future release
                             once we're confident old PipelineRuns have been cleaned up.
                             See issue #8359 for context.
+                          type: boolean
+                        enableTerminationMessageCompression:
                           type: boolean
                         enableWaitExponentialBackoff:
                           type: boolean
@@ -2166,6 +2166,8 @@ spec:
                                   This field is not used and can be removed in a future release
                                   once we're confident old PipelineRuns have been cleaned up.
                                   See issue #8359 for context.
+                                type: boolean
+                              enableTerminationMessageCompression:
                                 type: boolean
                               enableWaitExponentialBackoff:
                                 type: boolean
@@ -4046,6 +4048,8 @@ spec:
                             once we're confident old PipelineRuns have been cleaned up.
                             See issue #8359 for context.
                           type: boolean
+                        enableTerminationMessageCompression:
+                          type: boolean
                         enableWaitExponentialBackoff:
                           type: boolean
                         enforceNonfalsifiability:
@@ -4308,6 +4312,8 @@ spec:
                                   This field is not used and can be removed in a future release
                                   once we're confident old PipelineRuns have been cleaned up.
                                   See issue #8359 for context.
+                                type: boolean
+                              enableTerminationMessageCompression:
                                 type: boolean
                               enableWaitExponentialBackoff:
                                 type: boolean
