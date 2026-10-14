@@ -7,6 +7,9 @@ FROM $GO_BUILDER AS builder
 WORKDIR /go/src/github.com/tektoncd/pipeline
 COPY upstream .
 COPY .konflux/patches patches/
+# go-toolset builder runs non-root while COPY leaves root-owned files;
+# git apply needs write access to the tree.
+USER 0
 RUN set -e; for f in patches/*.patch; do echo ${f}; [[ -f ${f} ]] || continue; git apply ${f}; done
 COPY head HEAD
 ENV GODEBUG="http2server=0"
