@@ -1,7 +1,7 @@
 ARG GO_BUILDER=registry.access.redhat.com/ubi9/go-toolset:latest@sha256:5e68f09a652ac6627a83c57655e42e24575efb278b54336039c9308607fc6b21
-ARG RUNTIME=registry.access.redhat.com/ubi9/ubi-minimal:latest
+ARG UBI_RUNTIME=registry.access.redhat.com/ubi9/ubi-minimal:latest
 
-FROM $RUNTIME as dependency-builder
+FROM $UBI_RUNTIME as dependency-builder
 
 COPY dependencies/tini dependencies/tini
 WORKDIR /dependencies/tini
@@ -21,7 +21,7 @@ ENV GODEBUG="http2server=0"
 RUN go build -ldflags="-X 'knative.dev/pkg/changeset.rev=$(cat HEAD)'" -mod=vendor -tags disable_gcp,strictfipsruntime -v -o /tmp/resolvers \
     ./cmd/resolvers
 
-FROM $RUNTIME
+FROM $UBI_RUNTIME
 ARG VERSION=next
 
 ENV RESOLVERS=/usr/local/bin/resolvers \
