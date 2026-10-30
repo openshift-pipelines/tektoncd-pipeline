@@ -1,7 +1,8 @@
 contentOrigin:
   repofiles:
-    - ./ubi.repo 
+    - ./ubi.repo
 packages:
+  - shadow-utils
   - cmake
   - gcc
   - git
