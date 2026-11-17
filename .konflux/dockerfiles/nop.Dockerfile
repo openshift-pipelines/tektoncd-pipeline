@@ -17,7 +17,7 @@ RUN go build -ldflags="-X 'knative.dev/pkg/changeset.rev=$(cat HEAD)'" -mod=vend
     ./cmd/nop
 
 FROM $UBI_RUNTIME
-ARG VERSION=1.24
+ARG VERSION=1.25
 
 ENV NOP=/usr/local/bin/nop \
     KO_APP=/ko-app \
@@ -34,7 +34,7 @@ COPY --from=fips_builder /etc/redhat-release /etc/
 
 LABEL \
     com.redhat.component="openshift-pipelines-nop-rhel9-container" \
-    cpe="cpe:/a:redhat:openshift_pipelines:1.24::el9" \
+    cpe="cpe:/a:redhat:openshift_pipelines:1.25::el9" \
     description="Red Hat OpenShift Pipelines tektoncd-pipeline nop" \
     distribution-scope="public" \
     io.k8s.description="Red Hat OpenShift Pipelines tektoncd-pipeline nop" \
@@ -46,7 +46,7 @@ LABEL \
     summary="Red Hat OpenShift Pipelines tektoncd-pipeline nop" \
     url="https://access.redhat.com/containers/#/registry.access.redhat.com/ubi9-minimal/images/9.4-1227.1725849298" \
     vendor="Red Hat, Inc." \
-    version="v1.24.4"
+    version="v1.25.0"
 
 USER 65532
 

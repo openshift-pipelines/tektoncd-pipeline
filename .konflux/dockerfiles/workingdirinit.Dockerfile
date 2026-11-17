@@ -14,7 +14,7 @@ RUN go build -ldflags="-X 'knative.dev/pkg/changeset.rev=$(cat HEAD)'" -mod=vend
     ./cmd/workingdirinit
 
 FROM $UBI_RUNTIME
-ARG VERSION=1.24
+ARG VERSION=1.25
 
 ENV WORKINGDIRINIT=/usr/local/bin/workingdirinit \
     KO_APP=/ko-app \
@@ -25,7 +25,7 @@ COPY head ${KO_DATA_PATH}/HEAD
 
 LABEL \
     com.redhat.component="openshift-pipelines-workingdirinit-rhel9-container" \
-    cpe="cpe:/a:redhat:openshift_pipelines:1.24::el9" \
+    cpe="cpe:/a:redhat:openshift_pipelines:1.25::el9" \
     description="Red Hat OpenShift Pipelines tektoncd-pipeline workingdirinit" \
     io.k8s.description="Red Hat OpenShift Pipelines tektoncd-pipeline workingdirinit" \
     io.k8s.display-name="Red Hat OpenShift Pipelines tektoncd-pipeline workingdirinit" \
@@ -33,7 +33,7 @@ LABEL \
     maintainer="pipelines-extcomm@redhat.com" \
     name="openshift-pipelines/pipelines-workingdirinit-rhel9" \
     summary="Red Hat OpenShift Pipelines tektoncd-pipeline workingdirinit" \
-    version="v1.24.4"
+    version="v1.25.0"
 
 RUN groupadd -r -g 65532 nonroot && \
     useradd --no-log-init -r -u 65532 -g nonroot nonroot
