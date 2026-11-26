@@ -25,7 +25,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/tektoncd/pipeline/internal/sidecarlogresults"
 	"github.com/tektoncd/pipeline/pkg/apis/config"
 	"github.com/tektoncd/pipeline/pkg/apis/pipeline"
 	v1 "github.com/tektoncd/pipeline/pkg/apis/pipeline/v1"
@@ -53,6 +52,10 @@ var (
 	// it could be the content has changed, signature is invalid or public key is invalid
 	ReasonResourceVerificationFailed = v1.TaskRunReasonResourceVerificationFailed.String()
 )
+
+// ErrResultNotFound is returned when a specific result key is not found in the
+// list of RunResults. Callers should check for this with errors.Is.
+var ErrResultNotFound = errors.New("result not found")
 
 const (
 	// ReasonExceededResourceQuota indicates that the TaskRun failed to create a pod due to
@@ -197,33 +200,6 @@ func setTaskRunArtifactsFromRunResult(runResults []result.RunResult, artifacts *
 	return nil
 }
 
-func getTaskResultsFromSidecarLogs(runResults []result.RunResult) []result.RunResult {
-	taskResultsFromSidecarLogs := []result.RunResult{}
-	for _, slr := range runResults {
-		if slr.ResultType == result.TaskRunResultType {
-			taskResultsFromSidecarLogs = append(taskResultsFromSidecarLogs, slr)
-		}
-	}
-	return taskResultsFromSidecarLogs
-}
-
-func getStepResultsFromSidecarLogs(sidecarLogResults []result.RunResult, containerName string) ([]result.RunResult, error) {
-	stepResultsFromSidecarLogs := []result.RunResult{}
-	for _, slr := range sidecarLogResults {
-		if slr.ResultType == result.StepResultType {
-			stepName, resultName, err := sidecarlogresults.ExtractStepAndResultFromSidecarResultName(slr.Key)
-			if err != nil {
-				return []result.RunResult{}, err
-			}
-			if stepName == containerName {
-				slr.Key = resultName
-				stepResultsFromSidecarLogs = append(stepResultsFromSidecarLogs, slr)
-			}
-		}
-	}
-	return stepResultsFromSidecarLogs, nil
-}
-
 func setTaskRunStatusBasedOnStepStatus(ctx context.Context, logger *zap.SugaredLogger, stepStatuses []corev1.ContainerStatus, tr *v1.TaskRun, podPhase corev1.PodPhase, kubeclient kubernetes.Interface, ts *v1.TaskSpec) error {
 	trs := &tr.Status
 	var errs []error
@@ -246,7 +222,7 @@ func setTaskRunStatusBasedOnStepStatus(ctx context.Context, logger *zap.SugaredL
 	if sidecarLogsResultsEnabled {
 		// extraction of results from sidecar logs
 		if tr.Status.TaskSpec.Results != nil || artifactsSidecarCreated {
-			slr, err := sidecarlogresults.GetResultsFromSidecarLogs(ctx, kubeclient, tr.Namespace, tr.Status.PodName, pipeline.ReservedResultsSidecarContainerName, podPhase)
+			slr, err := getResultsFromSidecarLogs(ctx, kubeclient, tr.Namespace, tr.Status.PodName, pipeline.ReservedResultsSidecarContainerName, podPhase)
 			if err != nil {
 				errs = append(errs, err)
 			}
@@ -331,12 +307,12 @@ func setTaskRunStatusBasedOnStepStatus(ctx context.Context, logger *zap.SugaredL
 					errs = append(errs, err)
 				}
 				time, err := extractStartedAtTimeFromResults(results)
-				if err != nil {
+				if err != nil && !errors.Is(err, ErrResultNotFound) {
 					logger.Errorf("error setting the start time of step %q in taskrun %q: %v", s.Name, tr.Name, err)
 					errs = append(errs, err)
 				}
 				exitCode, err := extractExitCodeFromResults(results)
-				if err != nil {
+				if err != nil && !errors.Is(err, ErrResultNotFound) {
 					logger.Errorf("error extracting the exit code of step %q in taskrun %q: %v", s.Name, tr.Name, err)
 					errs = append(errs, err)
 				}
@@ -566,7 +542,7 @@ func extractStartedAtTimeFromResults(results []result.RunResult) (*metav1.Time, 
 			return &startedAt, nil
 		}
 	}
-	return nil, nil //nolint:nilnil // would be more ergonomic to return a sentinel error
+	return nil, ErrResultNotFound
 }
 
 func extractExitCodeFromResults(results []result.RunResult) (*int32, error) {
@@ -581,7 +557,7 @@ func extractExitCodeFromResults(results []result.RunResult) (*int32, error) {
 			return &exitCode, nil
 		}
 	}
-	return nil, nil //nolint:nilnil // would be more ergonomic to return a sentinel error
+	return nil, ErrResultNotFound
 }
 
 func extractTerminationReasonFromResults(results []result.RunResult) string {
