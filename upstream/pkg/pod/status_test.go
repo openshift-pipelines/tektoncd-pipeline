@@ -17,6 +17,7 @@ limitations under the License.
 package pod
 
 import (
+	"errors"
 	"fmt"
 	"reflect"
 	"strings"
@@ -25,7 +26,6 @@ import (
 
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
-	"github.com/tektoncd/pipeline/internal/sidecarlogresults"
 	"github.com/tektoncd/pipeline/pkg/apis/config"
 	v1 "github.com/tektoncd/pipeline/pkg/apis/pipeline/v1"
 	"github.com/tektoncd/pipeline/pkg/result"
@@ -141,7 +141,7 @@ func TestSetTaskRunStatusBasedOnStepStatus_sidecar_logs(t *testing.T) {
 			},
 		},
 		maxResultSize: 1,
-		wantErr:       fmt.Errorf("%d bytes %w of %d bytes", 9, sidecarlogresults.ErrSizeExceeded, 1),
+		wantErr:       fmt.Errorf("%d bytes %w of %d bytes", 9, ErrSizeExceeded, 1),
 	}, {
 		desc: "test result with sidecar logs bad format",
 		tr: v1.TaskRun{
@@ -177,7 +177,7 @@ func TestSetTaskRunStatusBasedOnStepStatus_sidecar_logs(t *testing.T) {
 			},
 		},
 		maxResultSize:   1,
-		wantErr:         fmt.Errorf("%d bytes %w of %d bytes", 9, sidecarlogresults.ErrSizeExceeded, 1),
+		wantErr:         fmt.Errorf("%d bytes %w of %d bytes", 9, ErrSizeExceeded, 1),
 		enableArtifacts: true,
 	}, {
 		desc: "test artifact with sidecar logs bad format",
@@ -3510,47 +3510,6 @@ func TestSortPodContainerStatuses(t *testing.T) {
 	}
 }
 
-func TestGetStepResultsFromSidecarLogs(t *testing.T) {
-	stepName := "step-foo"
-	resultName := "step-res"
-	sidecarLogResults := []result.RunResult{{
-		Key:        fmt.Sprintf("%s.%s", stepName, resultName),
-		Value:      "bar",
-		ResultType: result.StepResultType,
-	}, {
-		Key:        "task-res",
-		Value:      "task-bar",
-		ResultType: result.TaskRunResultType,
-	}}
-	want := []result.RunResult{{
-		Key:        resultName,
-		Value:      "bar",
-		ResultType: result.StepResultType,
-	}}
-	got, err := getStepResultsFromSidecarLogs(sidecarLogResults, stepName)
-	if err != nil {
-		t.Errorf("did not expect an error but got: %v", err)
-	}
-	if d := cmp.Diff(want, got); d != "" {
-		t.Error(diff.PrintWantGot(d))
-	}
-}
-
-func TestGetStepResultsFromSidecarLogs_Error(t *testing.T) {
-	stepName := "step-foo"
-	resultName := "step-res"
-	sidecarLogResults := []result.RunResult{{
-		Key:        fmt.Sprintf("%s-%s", stepName, resultName),
-		Value:      "bar",
-		ResultType: result.StepResultType,
-	}}
-	_, err := getStepResultsFromSidecarLogs(sidecarLogResults, stepName)
-	wantErr := fmt.Errorf("invalid string %s-%s : expected somtthing that looks like <stepName>.<resultName>", stepName, resultName)
-	if d := cmp.Diff(wantErr.Error(), err.Error()); d != "" {
-		t.Error(diff.PrintWantGot(d))
-	}
-}
-
 func TestGetStepTerminationReasonFromContainerStatus(t *testing.T) {
 	tests := []struct {
 		desc                      string
@@ -3751,27 +3710,6 @@ func TestGetStepTerminationReasonFromContainerStatus(t *testing.T) {
 				}
 			}
 		})
-	}
-}
-
-func TestGetTaskResultsFromSidecarLogs(t *testing.T) {
-	sidecarLogResults := []result.RunResult{{
-		Key:        "step-foo.step-res",
-		Value:      "bar",
-		ResultType: result.StepResultType,
-	}, {
-		Key:        "task-res",
-		Value:      "task-bar",
-		ResultType: result.TaskRunResultType,
-	}}
-	want := []result.RunResult{{
-		Key:        "task-res",
-		Value:      "task-bar",
-		ResultType: result.TaskRunResultType,
-	}}
-	got := getTaskResultsFromSidecarLogs(sidecarLogResults)
-	if d := cmp.Diff(want, got); d != "" {
-		t.Error(diff.PrintWantGot(d))
 	}
 }
 
@@ -4879,4 +4817,53 @@ func Test_getFailureMessage_consistent_with_reason(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestExtractStartedAtTimeFromResults(t *testing.T) {
+	t.Run("present", func(t *testing.T) {
+		results := []result.RunResult{{Key: "StartedAt", Value: "2026-01-02T15:04:05.000Z"}}
+		got, err := extractStartedAtTimeFromResults(results)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if got == nil {
+			t.Fatal("expected a time, got nil")
+		}
+	})
+	t.Run("missing returns ErrResultNotFound", func(t *testing.T) {
+		_, err := extractStartedAtTimeFromResults([]result.RunResult{{Key: "Other", Value: "x"}})
+		if !errors.Is(err, ErrResultNotFound) {
+			t.Fatalf("expected ErrResultNotFound, got %v", err)
+		}
+	})
+	t.Run("unparseable value returns a non-sentinel error", func(t *testing.T) {
+		_, err := extractStartedAtTimeFromResults([]result.RunResult{{Key: "StartedAt", Value: "not-a-time"}})
+		if err == nil || errors.Is(err, ErrResultNotFound) {
+			t.Fatalf("expected a parse error distinct from ErrResultNotFound, got %v", err)
+		}
+	})
+}
+
+func TestExtractExitCodeFromResults(t *testing.T) {
+	t.Run("present", func(t *testing.T) {
+		got, err := extractExitCodeFromResults([]result.RunResult{{Key: "ExitCode", Value: "0"}})
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if got == nil || *got != 0 {
+			t.Fatalf("expected exit code 0, got %v", got)
+		}
+	})
+	t.Run("missing returns ErrResultNotFound", func(t *testing.T) {
+		_, err := extractExitCodeFromResults([]result.RunResult{{Key: "Other", Value: "x"}})
+		if !errors.Is(err, ErrResultNotFound) {
+			t.Fatalf("expected ErrResultNotFound, got %v", err)
+		}
+	})
+	t.Run("unparseable value returns a non-sentinel error", func(t *testing.T) {
+		_, err := extractExitCodeFromResults([]result.RunResult{{Key: "ExitCode", Value: "NaN"}})
+		if err == nil || errors.Is(err, ErrResultNotFound) {
+			t.Fatalf("expected a parse error distinct from ErrResultNotFound, got %v", err)
+		}
+	})
 }
